@@ -25,5 +25,5 @@ applySubstitutions (Substitutions subs) term = foldr replaceTerm term subs
 -- >>> applySubstitutions (Substitutions [(O "x", W "y")]) (O "z")
 -- z
 
--- >>> applySubstitutions (Substitutions [("X", "Y"), ("z", "fst" :@ "a")]) ("X" :@ "z")
--- Y (fst (a))
+-- >>> applySubstitutions (Substitutions [("X", "Y" :@ "z"), ("z", "fst" :@ "a")]) ("X" :@ "z")
+-- Y (z) (fst (a))
