@@ -12,9 +12,9 @@ unify :: [Id] -> (Substitutions, (Term, Term)) -> Maybe Substitutions
 unify bvs (th, (O x, O y)) = unifyIdent x y th
 unify bvs (th, (x :.: s', y :.: t')) = unifyAbstraction x y s' t' bvs th
 unify bvs (th, (f :@ x, g :@ y)) = case (f, g) of
-  (W _, W _) -> unifyFlexFlex f g x y bvs th
-  (W _, _) -> unifyFlexRigid f g x y bvs th
-  (_, W _) -> unifyFlexRigid g f y x bvs th
+  (W _, W _) -> unifyFlexFlex f g (toRTerm x) (toRTerm y) bvs th
+  (W _, _) -> unifyFlexRigid f (toRTerm g) x y bvs th
+  (_, W _) -> unifyFlexRigid g (toRTerm f) y x bvs th
   _ -> unifyFunction f g x y bvs th
 unify _ _ = Nothing
 
@@ -37,15 +37,15 @@ unifyFunction f g x y bvs th =
     else Nothing
 
 -- Helper function to unify flexible and rigid terms
-unifyFlexRigid :: Term -> Term -> Term -> Term -> [Id] -> Substitutions -> Maybe Substitutions
+unifyFlexRigid :: Term -> RTerm -> Term -> Term -> [Id] -> Substitutions -> Maybe Substitutions
 unifyFlexRigid _ _ _ _ _ _ = error "unifyFlexRigid not implemented"
 
 -- Helper function to unify flexible and flexible terms
-unifyFlexFlex :: Term -> Term -> Term -> Term -> [Id] -> Substitutions -> Maybe Substitutions
+unifyFlexFlex :: Term -> Term -> RTerm -> RTerm -> [Id] -> Substitutions -> Maybe Substitutions
 unifyFlexFlex _ _ _ _ _ _ = error "unifyFlexFlex not implemented"
 
 -- >>> unify [] (Substitutions [], ("x", "x"))
--- Just (Substitutions [])
+-- Just []
 
 -- >>> unify [] (Substitutions [], ("x", "y"))
 -- Nothing
@@ -54,10 +54,10 @@ unifyFlexFlex _ _ _ _ _ _ = error "unifyFlexFlex not implemented"
 -- Nothing
 
 -- >>> unify [] (Substitutions [], ("x" :.: "y", "x" :.: "y"))
--- Just (Substitutions [])
+-- Just []
 
 -- >>> unify [] (Substitutions [], ("Fst" :@ "x", "Fst" :@ "y"))
 -- Nothing
 
 -- >>> unify [] (Substitutions [], ("Cons" :@ "x" :@ "y", "Cons" :@ "x" :@ "y"))
--- Just (Substitutions [])
+-- Just []
