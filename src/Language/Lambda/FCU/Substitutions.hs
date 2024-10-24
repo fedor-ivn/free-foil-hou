@@ -3,7 +3,7 @@
 
 module Language.Lambda.FCU.Substitutions where
 
-import Language.Lambda.FCU.Terms (Term (..), Id)
+import Language.Lambda.FCU.Terms (Id, Term (..))
 
 newtype Substitutions = Substitutions [(Id, Term)]
   deriving (Show)
