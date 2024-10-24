@@ -9,15 +9,14 @@ import Language.Lambda.FCU.Substitutions (Substitutions (..), applySubstitutions
 
 ------- Unification ----- bvs (th (s,t)) = Q for all, (subs, S)
 unify :: [Id] -> (Substitutions, (Term, Term)) -> Maybe Substitutions
-unify bvs (th, (s, t)) = case (s, t) of
-    (O x, O y) -> unifyIdent x y th
-    (x :.: s', y :.: t') -> unifyAbstraction x y s' t' bvs th
-    (f :@ x, g :@ y) 
-        | not (isMeta f) && not (isMeta g) -> unifyFunction f g x y bvs th
-        | isMeta f && not (isMeta g) -> unifyFlexRigid f g x y bvs th
-        | not (isMeta f) && isMeta g -> unifyFlexRigid g f y x bvs th
-        | isMeta f && isMeta g -> unifyFlexFlex f g x y bvs th
-    _ -> Nothing
+unify bvs (th, (O x, O y)) = unifyIdent x y th
+unify bvs (th, (x :.: s', y :.: t')) = unifyAbstraction x y s' t' bvs th
+unify bvs (th, (f :@ x, g :@ y)) = case (f, g) of
+    (W _, W _) -> unifyFlexFlex f g x y bvs th
+    (W _, _) -> unifyFlexRigid f g x y bvs th
+    (_, W _) -> unifyFlexRigid g f y x bvs th
+    _ -> unifyFunction f g x y bvs th
+unify _ _ = Nothing
 
 
 -- Helper function to unify identical vars
