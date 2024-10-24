@@ -6,7 +6,21 @@ module Language.Lambda.FCU.Substitutions where
 import Language.Lambda.FCU.Terms (Id, Term (..))
 
 newtype Substitutions = Substitutions [(Id, Term)]
-  deriving (Show)
+  deriving (Eq)
+
+instance Show Substitutions where
+  show :: Substitutions -> String
+  show = ppSubstitutions
+
+ppSubstitutions :: Substitutions -> String
+ppSubstitutions (Substitutions subs) =
+  "[" ++ unwords ["(" ++ x ++ " -> " ++ show y ++ ")" | (x, y) <- subs] ++ "]"
+
+-- >>>(Substitutions [("x", "Y")])
+-- [(x -> Y)]
+
+-- >>> (Substitutions [("x", "Y"), ("z", "Z")])
+-- [(x -> Y) (z -> Z)]
 
 -- theta S -> new S
 replaceTerm :: (Id, Term) -> Term -> Term
