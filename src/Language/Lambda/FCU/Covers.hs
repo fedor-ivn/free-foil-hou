@@ -45,7 +45,7 @@ coverTest1 =
     }
 
 -- >>> runCoverTest coverTest1
--- Just ((Constructor "Cons" :@ O "x2") :@ O "x1")
+-- Just Cons (x2) (x1)
 
 coverTest2 :: CoverTest
 coverTest2 =
@@ -57,4 +57,4 @@ coverTest2 =
     }
 
 -- >>> runCoverTest coverTest2
--- Just ((Constructor "Cons" :@ ((Constructor "Cons" :@ O "x3") :@ O "x2")) :@ O "x1")
+-- Just Cons (Cons (x3) (x2)) (x1)
