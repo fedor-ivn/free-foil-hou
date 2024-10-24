@@ -42,3 +42,19 @@ ppTerm (x :.: y) = "λ" ++ x ++ " . (" ++ ppTerm y ++ ")"
 
 -- >>> "x" :.: ("Cons" :@ "x" :@ "y") :: Term
 -- λx . (Cons (x) (y))
+
+isMeta :: Term -> Bool
+isMeta (W _) = True
+isMeta _ = False
+
+-- >>> isMeta "x"
+-- False
+
+-- >>> isMeta "X"
+-- True
+
+-- >>> isMeta "Cons"
+-- False
+
+-- >>> isMeta ("x" :.: ("Cons" :@ "x" :@ "y"))
+-- False
