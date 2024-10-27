@@ -335,6 +335,25 @@ someMetavariables = fmap (\x -> Metavariable ("M" <> show x)) (integers 0)
 someVariables :: Stream Variable
 someVariables = fmap (\x -> Variable ("v" <> show x)) (integers 0)
 
+-- >>> t = Base "t"
+-- >>> _M = Metavariable "M"
+-- >>> a = Variable "a"
+-- >>> b = Variable "b"
+-- >>> c = Variable "c"
+-- >>> show' = fmap (\(x, _, _) -> x)
+--
+-- >>> show' $ match (Term [(a, t)] _M [] t) (var a t) someVariables someMetavariables
+-- []
+-- >>> show' $ match (var _M t) (var a t) someVariables someMetavariables
+-- [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [], returnType = Base "t"}]
+-- >>> show' $ match (var _M t) (apply a [var (AVar b) t] t) someVariables someMetavariables
+-- [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AMetavar (Metavariable "M0")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}]
+-- >>> show' $ match (apply _M [var (AVar b) t] t) (var a t) someVariables someMetavariables
+-- [NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "a")}, arguments = [], returnType = Base "t"}]
+-- >>> show' $ match (apply _M [var (AVar b) t] t) (Term [(b, t)] a [var (AVar c) t] t) someVariables someMetavariables
+-- [NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AMetavar (Metavariable "M0")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}], returnType = Base "t"}]
+-- >>> show' $ match (apply _M [apply (AVar b) [var (AVar a) (Function t t)] t] t) (apply a [apply (AVar b) [var (AMetavar _M) (Function t t)] t] t) someVariables someMetavariables
+-- [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [], returnType = Function (Base "t") (Base "t")},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AMetavar (Metavariable "M0")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}], returnType = Base "t"}]
 match
   :: FlexibleTerm
   -> RigidTerm
@@ -359,41 +378,45 @@ match flexible rigid variables metavariables
         | n > 0 -> [imitateWithExtendedBinder head]
         | otherwise -> imitateDirectly head
 
-  imitateWithExtendedBinder head = (term, variables', metavariables')
+  imitateWithExtendedBinder head =
+    makeSubstitution binderTypes head argumentTypes (returnType rigid)
    where
-    term = Term binder' (AVar head) arguments' (returnType rigid)
-    (variables', wsBinder) = zipWithList variables (typeOfTerm <$> arguments flexible)
-    vsBinder = drop (length wsBinder) (binder (heading rigid))
-    binder' = wsBinder <> vsBinder
-    parameters =
-      binder' <&> \(parameter, returnType) ->
-        var (AVar parameter) returnType
-
-    (metavariables', hs) = zipWithList metavariables (typeOfTerm <$> arguments rigid)
-    arguments' =
-      hs <&> \(h, returnType) ->
-        apply (AMetavar h) parameters returnType
+    binderTypes = ws <> vs
+    ws = typeOfTerm <$> arguments flexible
+    vs = snd <$> drop (length ws) (binder (heading rigid))
+    argumentTypes = typeOfTerm <$> arguments rigid
 
   imitateDirectly head = do
     k <- [max 0 (p_flexible - p_rigid) .. p_flexible]
-    let (takenFlexibleArguments, remainingFlexibleArguments) =
+
+    let (takenFlexible, remainingFlexible) =
           splitAt k (typeOfTerm <$> arguments flexible)
-    let (variables', binder') = zipWithList variables takenFlexibleArguments
-    let parameters =
-          binder' <&> \(parameter, returnType) ->
-            var (AVar parameter) returnType
-
-    let (takenRigidArguments, remainingRigidArguments) =
+    let (takenRigid, remainingRigid) =
           splitAt (p_rigid - p_flexible + k) (typeOfTerm <$> arguments rigid)
-    let (metavariables', hs) = zipWithList metavariables takenRigidArguments
-    let arguments' =
-          hs <&> \(h, returnType) ->
-            apply (AMetavar h) parameters returnType
+    let returnType' = foldr Function (returnType rigid) remainingRigid
 
-    let returnType' = foldr Function (returnType rigid) remainingRigidArguments
-    let term = Term binder' (AVar head) arguments' returnType'
-    if remainingFlexibleArguments == remainingRigidArguments
+    if remainingFlexible == remainingRigid
       then
-        return (term, variables', metavariables')
+        return (makeSubstitution takenFlexible head takenRigid returnType')
       else
         []
+
+  makeSubstitution
+    :: [Type]
+    -> Variable
+    -> [Type]
+    -> Type
+    -> (NormalTerm, Stream Variable, Stream Metavariable)
+  makeSubstitution binderTypes head argumentTypes returnType =
+    (term, variables', metavariables')
+   where
+    term = Term binder (AVar head) arguments returnType
+    (variables', binder) = zipWithList variables binderTypes
+    propagatedBinder =
+      binder <&> \(parameter, parameterType) ->
+        var (AVar parameter) parameterType
+
+    (metavariables', hs) = zipWithList metavariables argumentTypes
+    arguments =
+      hs <&> \(h, argumentType) ->
+        apply (AMetavar h) propagatedBinder argumentType
