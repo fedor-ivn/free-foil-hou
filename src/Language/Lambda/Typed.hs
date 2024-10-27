@@ -257,6 +257,52 @@ typeOfHead NormalTerm{arguments = [], returnType} = returnType
 typeOfHead NormalTerm{arguments = (argument : arguments), ..} =
   Function (typeOfTerm argument) (typeOfHead NormalTerm{arguments, ..})
 
+-- >>> t = Base "t"
+-- >>> _M = AMetavar (Metavariable "M")
+-- >>> (a, a') = (AVar a', Variable "a")
+-- >>> (b, b') = (AVar b', Variable "b")
+-- >>> (x, x') = (AVar x', Variable "x")
+--
+-- >>> substituteHead (Term [(x', t)] x [] t) (var _M t)
+-- NormalTerm {heading = Heading {binder = [(Variable "x",Base "t")], head = AVar (Variable "x")}, arguments = [], returnType = Base "t"}
+-- >>> substituteHead (var x t) (Term [(a', t)] _M [] t)
+-- NormalTerm {heading = Heading {binder = [(Variable "a",Base "t")], head = AVar (Variable "x")}, arguments = [], returnType = Base "t"}
+-- >>> substituteHead (Term [(a', t)] a [] t) (Term [(b', t)] _M [var x t] t)
+-- NormalTerm {heading = Heading {binder = [(Variable "b",Base "t")], head = AVar (Variable "x")}, arguments = [], returnType = Base "t"}
+substituteHead :: NormalTerm -> NormalTerm' head -> NormalTerm
+substituteHead
+  (Term innerBinder head arguments returnType)
+  (Term outerBinder _ [] _) =
+    Term (outerBinder <> innerBinder) head arguments returnType
+substituteHead
+  (Term [] head innerArguments _)
+  (Term outerBinder _ outerArguments returnType) =
+    Term outerBinder head (innerArguments <> outerArguments) returnType
+substituteHead
+  (Term ((parameter, _) : innerBinder) innerHead innerArguments innerReturnType)
+  (Term outerBinder outerHead (argument : outerArguments) outerReturnType) =
+    substituteHead
+      (substitute (AVar parameter) argument withoutParameter)
+      (Term outerBinder outerHead outerArguments outerReturnType)
+   where
+    withoutParameter = Term innerBinder innerHead innerArguments innerReturnType
+
+-- >>> t = Base "t"
+-- >>> _M = AMetavar (Metavariable "M")
+-- >>> a = AVar (Variable "a")
+-- >>> (x, x') = (AVar x', Variable "x")
+--
+-- >>> substitute _M (var a (Function t (Function t t))) (apply _M [var x t, var x t] t)
+-- NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "x")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [], head = AVar (Variable "x")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}
+-- >>> substitute _M (var a t) (apply x [var _M t, var _M t] t)
+-- NormalTerm {heading = Heading {binder = [], head = AVar (Variable "x")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}
+-- >>> substitute _M (Term [(x', t)] x [] t) (apply _M [var a t] t)
+-- NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [], returnType = Base "t"}
+substitute :: Atom -> NormalTerm -> NormalTerm -> NormalTerm
+substitute expected substitution outer@(Term binder head arguments returnType)
+  | head == expected = substitute expected substitution (substituteHead substitution outer)
+  | otherwise = Term binder head (substitute expected substitution <$> arguments) returnType
+
 newtype DisagreementSet = DisagreementSet [(NormalTerm, NormalTerm)]
   deriving (Eq, Show)
 
