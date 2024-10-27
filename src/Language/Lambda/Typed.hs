@@ -349,12 +349,15 @@ match flexible rigid variables metavariables
   n_rigid = length (binder (heading rigid))
   n = n_rigid - n_flexible
 
+  p_flexible = length (arguments flexible)
+  p_rigid = length (arguments rigid)
+
   imitate =
     case imitatableHead (heading rigid) n_flexible of
       Nothing -> []
       Just head
         | n > 0 -> [imitateWithExtendedBinder head]
-        | otherwise -> _todo
+        | otherwise -> imitateDirectly head
 
   imitateWithExtendedBinder head = (term, variables', metavariables')
    where
@@ -366,7 +369,31 @@ match flexible rigid variables metavariables
       binder' <&> \(parameter, returnType) ->
         var (AVar parameter) returnType
 
-    (metavariables', hs) = zipWithList metavariables (returnType <$> arguments rigid)
+    (metavariables', hs) = zipWithList metavariables (typeOfTerm <$> arguments rigid)
     arguments' =
       hs <&> \(h, returnType) ->
         apply (AMetavar h) parameters returnType
+
+  imitateDirectly head = do
+    k <- [max 0 (p_flexible - p_rigid) .. p_flexible]
+    let (takenFlexibleArguments, remainingFlexibleArguments) =
+          splitAt k (typeOfTerm <$> arguments flexible)
+    let (variables', binder') = zipWithList variables takenFlexibleArguments
+    let parameters =
+          binder' <&> \(parameter, returnType) ->
+            var (AVar parameter) returnType
+
+    let (takenRigidArguments, remainingRigidArguments) =
+          splitAt (p_rigid - p_flexible + k) (typeOfTerm <$> arguments rigid)
+    let (metavariables', hs) = zipWithList metavariables takenRigidArguments
+    let arguments' =
+          hs <&> \(h, returnType) ->
+            apply (AMetavar h) parameters returnType
+
+    let returnType' = foldr Function (returnType rigid) remainingRigidArguments
+    let term = Term binder' (AVar head) arguments' returnType'
+    if remainingFlexibleArguments == remainingRigidArguments
+      then
+        return (term, variables', metavariables')
+      else
+        []
