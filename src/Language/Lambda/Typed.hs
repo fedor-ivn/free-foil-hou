@@ -22,12 +22,12 @@ module Language.Lambda.Typed (
   pattern Flexible,
   asNormalTerm,
   DisagreementSet (..),
-  Node (..),
   simplify,
   match,
 ) where
 
 import Data.Functor ((<&>))
+import Data.Maybe (maybeToList)
 import Prelude hiding (head)
 
 data Type
@@ -306,15 +306,55 @@ substitute expected substitution outer@(Term binder head arguments returnType)
 newtype DisagreementSet = DisagreementSet [(NormalTerm, NormalTerm)]
   deriving (Eq, Show)
 
-data Node
-  = Failure
-  | Nonterminal DisagreementSet
-  | Success
+newtype Substitutions = Substitutions [(Metavariable, NormalTerm)]
   deriving (Eq, Show)
 
--- Does not return 'Success' -- it's better be done when searching for a pair
--- with a rigid term.
+addSubstitution :: Metavariable -> NormalTerm -> Substitutions -> Substitutions
+addSubstitution head substitution (Substitutions substitutions) =
+  Substitutions ((head, substitution) : substitutions')
+ where
+  substitutions' = fmap (substitute (AMetavar head) substitution) <$> substitutions
+
+-- >>> _F = AMetavar (Metavariable "F")
+-- >>> _X = AMetavar (Metavariable "X")
+-- >>> a = AVar (Variable "a")
+-- >>> b = AVar (Variable "b")
+-- >>> t = Base "t"
 --
+-- >>> left = apply _F [apply _F [var _X t] t] t
+-- >>> right = apply a [apply a [var b t] t] t
+-- >>> solve (DisagreementSet [(left, right)]) someVariables someMetavariables
+-- [(Substitutions [(Metavariable "X",NormalTerm {heading = Heading {binder = [], head = AVar (Variable "b")}, arguments = [], returnType = Base "t"}),(Metavariable "F",NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [], returnType = Function (Base "t") (Base "t")})],DisagreementSet []),(Substitutions [(Metavariable "M1",NormalTerm {heading = Heading {binder = [(Variable "v2",Base "t")], head = AVar (Variable "b")}, arguments = [], returnType = Base "t"}),(Metavariable "M0",NormalTerm {heading = Heading {binder = [(Variable "v1",Base "t")], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "b")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}),(Metavariable "F",NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "b")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}], returnType = Base "t"})],DisagreementSet [])]
+solve
+  :: DisagreementSet
+  -> Stream Variable
+  -> Stream Metavariable
+  -> [(Substitutions, DisagreementSet)]
+solve = go (Substitutions [])
+ where
+  go substitutions set variables metavariables = do
+    set' <- maybeToList (simplify set)
+    case pickPair set' of
+      Nothing -> return (substitutions, set')
+      Just (flexible, rigid, DisagreementSet rest) -> do
+        (substitution, variables', metavariables') <-
+          match flexible rigid variables metavariables
+        let metavar = head (heading flexible)
+        let substitutions' = addSubstitution metavar substitution substitutions
+        let left = substitute (AMetavar metavar) substitution (Flexible flexible)
+        let right = substitute (AMetavar metavar) substitution (Rigid rigid)
+        go substitutions' (DisagreementSet ((left, right) : rest)) variables' metavariables'
+
+pickPair :: DisagreementSet -> Maybe (FlexibleTerm, RigidTerm, DisagreementSet)
+pickPair (DisagreementSet set) = go id set
+ where
+  go _ [] = Nothing
+  go previous ((Flexible flexible, Rigid rigid) : rest) =
+    Just (flexible, rigid, DisagreementSet (previous rest))
+  go previous ((Rigid rigid, Flexible flexible) : rest) =
+    Just (flexible, rigid, DisagreementSet (previous rest))
+  go previous (pair : rest) = go (previous . (pair :)) rest
+
 -- >>> a = Variable "a"
 -- >>> b = Variable "b"
 -- >>> c = Variable "c"
@@ -331,25 +371,23 @@ data Node
 -- >>> left = NormalTerm (Heading [] (AVar a)) [NormalTerm (Heading [(u, t)] (AVar b)) [meta x t, var u t] t, var c t] t
 -- >>> right = NormalTerm (Heading [] (AVar a)) [NormalTerm (Heading [(v, t)] (AVar b)) [meta y t, var v t] t, NormalTerm (Heading [] (AMetavar f)) [var c t] t] t
 -- >>> simplified = simplify (DisagreementSet [(left, right)])
--- >>> expected = Nonterminal (DisagreementSet [(NormalTerm (Heading [(u, t)] (AMetavar x)) [] t, NormalTerm (Heading [(v, t)] (AMetavar y)) [] t), (NormalTerm (Heading [] (AMetavar f)) [var c t] t, var c t)])
+-- >>> expected = Just (DisagreementSet [(NormalTerm (Heading [(u, t)] (AMetavar x)) [] t, NormalTerm (Heading [(v, t)] (AMetavar y)) [] t), (var c t, NormalTerm (Heading [] (AMetavar f)) [var c t] t)])
 -- >>> simplified == expected
 -- True
 --
 -- >>> left = NormalTerm (Heading [] (AVar a)) [NormalTerm (Heading [(u, t)] (AVar b)) [meta x t, var u t] t] t
 -- >>> right = NormalTerm (Heading [] (AVar a)) [NormalTerm (Heading [(v, t)] (AVar b)) [meta y t, var v t] t] t
 -- >>> simplified = simplify (DisagreementSet [(left, right)])
--- >>> expected = Nonterminal (DisagreementSet [(NormalTerm (Heading [(u, t)] (AMetavar x)) [] t, NormalTerm (Heading [(v, t)] (AMetavar y)) [] t)])
+-- >>> expected = Just (DisagreementSet [(NormalTerm (Heading [(u, t)] (AMetavar x)) [] t, NormalTerm (Heading [(v, t)] (AMetavar y)) [] t)])
 -- >>> simplified == expected
 -- True
 --
 -- >>> left = NormalTerm (Heading [(u, t), (v, t)] (AVar a)) [var u t, NormalTerm (Heading [(w, t)] (AVar v)) [] t] t
 -- >>> right = NormalTerm (Heading [(v, t), (w, t)] (AVar a)) [var v t, NormalTerm (Heading [(u, t)] (AVar v)) [] t] t
 -- >>> simplify (DisagreementSet [(left, right)])
--- Failure
-simplify :: DisagreementSet -> Node
-simplify (DisagreementSet set) = case simplifyRigidPairs set of
-  Nothing -> Failure
-  Just set' -> Nonterminal (DisagreementSet (putRigidOnRight <$> set'))
+-- Nothing
+simplify :: DisagreementSet -> Maybe DisagreementSet
+simplify (DisagreementSet set) = DisagreementSet <$> simplifyRigidPairs set
  where
   simplifyRigidPairs = foldr simplifyRigidPair (Just [])
   simplifyRigidPair (Rigid left, Rigid right) rest
@@ -359,10 +397,6 @@ simplify (DisagreementSet set) = case simplifyRigidPairs set of
         return (newPairs <> rest')
     | otherwise = Nothing
   simplifyRigidPair pair rest = (pair :) <$> rest
-
-  -- TODO: is this really needed here?
-  putRigidOnRight (left@(Rigid _), right) = (right, left)
-  putRigidOnRight (left, right) = (left, right)
 
 data Stream a = Stream a (Stream a) deriving (Eq, Show, Functor)
 
