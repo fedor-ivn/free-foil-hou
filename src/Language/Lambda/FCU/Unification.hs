@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Lambda.FCU.Unification where
+module Language.Lambda.FCU.Unification (unify) where
 
 import Language.Lambda.FCU.RTerms (RTerm (..), toRTerm)
 import Language.Lambda.FCU.Substitutions (Substitutions (..))
