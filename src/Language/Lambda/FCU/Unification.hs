@@ -5,6 +5,7 @@ module Language.Lambda.FCU.Unification (unify) where
 import Language.Lambda.FCU.RTerms (RTerm (..), toRTerm)
 import Language.Lambda.FCU.Substitutions (Substitutions (..))
 import Language.Lambda.FCU.Terms (Id, Term (..))
+import Foreign.C (errnoToIOError)
 
 ------- Unification ----- bvs (th (s,t)) = Q for all, (subs, S)
 unify :: [Id] -> (Substitutions, (Term, Term)) -> Maybe Substitutions
@@ -12,8 +13,8 @@ unify _ (th, (O x, O y)) = unifyIdent x y th
 unify bvs (th, (x :.: s', y :.: t')) = unifyAbstraction x y s' t' bvs th
 unify bvs (th, (f :@ x, g :@ y)) = case (f, g) of
   (W _, W _) -> unifyFlexFlex f g (toRTerm x) (toRTerm y) bvs th
-  (W _, _) -> unifyFlexRigid f (toRTerm g) x y bvs th
-  (_, W _) -> unifyFlexRigid g (toRTerm f) y x bvs th
+  (W _, _) -> unifyFlexRigid bvs (f, toRTerm x, g, y, th)
+  (_, W _) -> unifyFlexRigid bvs (g, toRTerm y, f, x, th)
   _ -> unifyFunction f g x y bvs th
 unify _ _ = Nothing
 
@@ -36,8 +37,13 @@ unifyFunction f g x y bvs th =
     else Nothing
 
 -- Helper function to unify flexible and rigid terms
-unifyFlexRigid :: Term -> RTerm -> Term -> Term -> [Id] -> Substitutions -> Maybe Substitutions
-unifyFlexRigid _ _ _ _ _ _ = error "unifyFlexRigid not implemented"
+unifyFlexRigid :: [Id] -> (Term, RTerm, Term, Term, Substitutions) -> Maybe Substitutions
+unifyFlexRigid bvs (_F, ym, f, x, th)
+  | occ _F th x = error "Occurances check failed"
+  | otherwise = error "unifyFlexRigid not implemented"
+
+occ :: Term -> Substitutions -> Term -> Bool
+occ _ _ _ = error "occ not implemented"
 
 -- Helper function to unify flexible and flexible terms
 unifyFlexFlex :: Term -> Term -> RTerm -> RTerm -> [Id] -> Substitutions -> Maybe Substitutions
