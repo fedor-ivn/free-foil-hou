@@ -22,3 +22,18 @@ toTerm (RApp f b) = toTerm f :@ toTerm b
 
 -- >>> toRTerm ("Cons" :@ "x" :@ "y")
 -- RApp (RApp (RConstructor "Cons") (RO "x")) (RO "y")
+
+-- >>> toRTerm ("Cons" :@ "x" :@ "y" :@ "z")
+-- RApp (RApp (RApp (RConstructor "Cons") (RO "x")) (RO "y")) (RO "z")
+
+-- >>> toRTerm ("Cons" :@ "x" :@ ("Cons" :@ "y"))
+-- RApp (RApp (RConstructor "Cons") (RO "x")) (RApp (RConstructor "Cons") (RO "y"))
+
+-- >>> toRTerm ("Cons" :@ "X" :@ "Y")
+-- Metavars are not allowed in Restricted Terms
+
+-- >>> toRTerm ("Cons" :@ "x" :@ "Fst")
+-- Constructor terms should have > 0 arguments
+
+-- >>> toTerm (RApp (RApp (RConstructor "Cons") (RO "x")) (RO "y"))
+-- Cons (x) (y)
