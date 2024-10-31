@@ -1,7 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE InstanceSigs #-}
 
-module Language.Lambda.FCU.Substitutions where
+module Language.Lambda.FCU.Substitutions (
+  Substitutions(..),
+  ppSubstitutions,
+  replaceTerm,
+  applySubstitutions
+) where
 
 import Language.Lambda.FCU.Terms (Id, Term (..))
 
