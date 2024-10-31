@@ -2,14 +2,13 @@
 
 module Language.Lambda.FCU.Unification where
 
-import Data.Maybe (isJust)
-import Language.Lambda.FCU.RTerms (RTerm (..), toRTerm, toTerm)
-import Language.Lambda.FCU.Substitutions (Substitutions (..), applySubstitutions)
+import Language.Lambda.FCU.RTerms (RTerm (..), toRTerm)
+import Language.Lambda.FCU.Substitutions (Substitutions (..))
 import Language.Lambda.FCU.Terms (Id, Term (..))
 
 ------- Unification ----- bvs (th (s,t)) = Q for all, (subs, S)
 unify :: [Id] -> (Substitutions, (Term, Term)) -> Maybe Substitutions
-unify bvs (th, (O x, O y)) = unifyIdent x y th
+unify _ (th, (O x, O y)) = unifyIdent x y th
 unify bvs (th, (x :.: s', y :.: t')) = unifyAbstraction x y s' t' bvs th
 unify bvs (th, (f :@ x, g :@ y)) = case (f, g) of
   (W _, W _) -> unifyFlexFlex f g (toRTerm x) (toRTerm y) bvs th

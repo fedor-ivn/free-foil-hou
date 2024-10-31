@@ -26,6 +26,7 @@ coverExists :: [RTerm] -> RTerm -> Bool
 coverExists params r = isJust (findCover params r)
 
 -- Cons x y, [y, x]
+
 -- >>> findCover [RO "y", RO "x"] (RApp (RApp (RConstructor "Cons") (RO "x")) (RO "y"))
 -- Just (RApp (RApp (RConstructor "Cons") (RO "x2")) (RO "x1"))
 
