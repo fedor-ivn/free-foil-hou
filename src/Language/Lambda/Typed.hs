@@ -529,11 +529,11 @@ someVariables = fmap (\x -> Variable ("v" <> show x)) (integers 0)
 -- >>> show' $ match (apply _M [var (AVar b) t] t) (var a t) someVariables someMetavariables
 -- [λv0: t. a :: t,λv0: t. v0 :: t]
 -- >>> show' $ match (apply _M [var (AVar b) t] t) (Term [(b, t)] a [var (AVar c) t] t) someVariables someMetavariables
--- [λv0: t, v1: t. a (M0 (v0 :: t) (v1 :: t) :: t) :: t,λv0: t. v0 :: t,λv0: t, v1: t. v0 :: t,λv0: t, v1: t. v1 :: t]
+-- [λv0: t, v1: t. a (M0 (v0 :: t) (v1 :: t) :: t) :: t,λv0: t. v0 :: t,λv0: t, v1: t. v0 :: t]
 -- >>> show' $ match (apply _M [apply (AVar b) [var (AVar a) (Function t t)] t] t) (apply a [apply (AVar b) [var (AMetavar _M) (Function t t)] t] t) someVariables someMetavariables
 -- [a :: t -> t,λv0: t. a (M0 (v0 :: t) :: t) :: t,λv0: t. v0 :: t]
 -- >>> show' $ match (var _M (Function t (Function t t))) (Term [(a, t), (b, t)] a [] t) someVariables someMetavariables
--- [λv0: t, v1: t. v0 :: t,λv0: t, v1: t. v0 :: t,λv0: t, v1: t. v1 :: t]
+-- [λv0: t, v1: t. v0 :: t]
 match
   :: FlexibleTerm
   -> RigidTerm
@@ -594,7 +594,7 @@ match flexible rigid variables metavariables
     let wholeBinderTypes = ws <> vs
 
     n_substitution <- [1 .. p_flexible + n]
-    projectOn <- [0 .. max n_substitution p_flexible - 1]
+    projectOn <- [0 .. min n_substitution p_flexible - 1]
 
     let binderTypes = take n_substitution wholeBinderTypes
     let projectedType = binderTypes !! projectOn
