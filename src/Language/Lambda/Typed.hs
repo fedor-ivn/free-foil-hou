@@ -468,19 +468,6 @@ solve initialSet v m = go' [(Context (Substitutions []) v m, initialSet)]
     let substitutions' = addSubstitution unknown substitution substitutions
     return (Context substitutions' variables' metavariables', set'')
 
--- go substitutions set variables metavariables = do
---   set' <- maybeToList (simplify set)
---   case pickPair set' of
---     Nothing -> return (substitutions, set')
---     Just (flexible, rigid, DisagreementSet rest) -> do
---       (substitution, variables', metavariables') <-
---         match flexible rigid variables metavariables
---       let metavar = head (heading flexible)
---       let substitutions' = addSubstitution metavar substitution substitutions
---       let left = substitute (AMetavar metavar) substitution (Flexible flexible)
---       let right = substitute (AMetavar metavar) substitution (Rigid rigid)
---       go substitutions' (DisagreementSet ((left, right) : rest)) variables' metavariables'
-
 data Context = Context Substitutions (Stream Variable) (Stream Metavariable)
 
 simplifySets :: [(c, DisagreementSet)] -> [(c, DisagreementSet)]
@@ -596,15 +583,15 @@ match flexible rigid variables metavariables
   | n < 0 = []
   | otherwise = imitate <> project
  where
-  n_flexible = length (binder (heading flexible))
-  n_rigid = length (binder (heading rigid))
-  n = n_rigid - n_flexible
+  nFlexible = length (binder (heading flexible))
+  nRigid = length (binder (heading rigid))
+  n = nRigid - nFlexible
 
-  p_flexible = length (arguments flexible)
-  p_rigid = length (arguments rigid)
+  pFlexible = length (arguments flexible)
+  pRigid = length (arguments rigid)
 
   imitate =
-    case imitatableHead (heading rigid) n_flexible of
+    case imitatableHead (heading rigid) nFlexible of
       Nothing -> []
       Just head
         | n > 0 -> [imitateWithExtendedBinder head]
@@ -615,23 +602,23 @@ match flexible rigid variables metavariables
    where
     binderTypes = ws <> vs
     ws = typeOfTerm <$> arguments flexible
-    vs = snd <$> drop n_flexible (binder (heading rigid))
+    vs = snd <$> drop nFlexible (binder (heading rigid))
     argumentTypes = typeOfTerm <$> arguments rigid
     head'
       | Right constant <- head = const constant
-      | Left offset <- head = (!! (length ws + offset))
+      | Left offset <- head = (!! (pFlexible + offset))
 
   imitateDirectly head = do
     head' <- case head of
       Right head' -> return head'
       -- A bound argument? In my direct imitation?
       Left _ -> []
-    k <- [max 0 (p_flexible - p_rigid) .. p_flexible]
+    k <- [max 0 (pFlexible - pRigid) .. pFlexible]
 
     let (takenFlexible, remainingFlexible) =
           splitAt k (typeOfTerm <$> arguments flexible)
     let (takenRigid, remainingRigid) =
-          splitAt (p_rigid - p_flexible + k) (typeOfTerm <$> arguments rigid)
+          splitAt (pRigid - pFlexible + k) (typeOfTerm <$> arguments rigid)
     let returnType' = foldr Function (returnType rigid) remainingRigid
 
     if remainingFlexible == remainingRigid
@@ -642,15 +629,15 @@ match flexible rigid variables metavariables
 
   project = do
     let ws = typeOfTerm <$> arguments flexible
-    let vs = snd <$> drop n_flexible (binder (heading rigid))
+    let vs = snd <$> drop nFlexible (binder (heading rigid))
     let wholeBinderTypes = ws <> vs
 
-    n_substitution <- [1 .. p_flexible + n]
-    projectOn <- [0 .. min n_substitution p_flexible - 1]
+    nSubstitution <- [1 .. pFlexible + n]
+    projectOn <- [0 .. min nSubstitution pFlexible - 1]
 
-    let binderTypes = take n_substitution wholeBinderTypes
+    let binderTypes = take nSubstitution wholeBinderTypes
     let projectedType = binderTypes !! projectOn
-    let returnType' = dropParameters n_substitution (typeOfHead flexible)
+    let returnType' = dropParameters nSubstitution (typeOfHead flexible)
 
     case getExtraParameters returnType' projectedType of
       Nothing -> []
