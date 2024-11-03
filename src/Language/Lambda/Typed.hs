@@ -35,6 +35,31 @@ data Type
   | Function Type Type
   deriving (Eq, Show)
 
+dropParameters :: Int -> Type -> Type
+dropParameters _ typ@(Base _) = typ
+dropParameters n typ@(Function _ rest)
+  | n <= 0 = typ
+  | otherwise = dropParameters (n - 1) rest
+
+takeParameters :: Int -> Type -> [Type]
+takeParameters _ (Base _) = []
+takeParameters n (Function parameter rest)
+  | n <= 0 = []
+  | otherwise = parameter : takeParameters (n - 1) rest
+
+countParameters :: Type -> Int
+countParameters (Base _) = 0
+countParameters (Function _ rest) = 1 + countParameters rest
+
+getExtraParameters :: Type -> Type -> Maybe [Type]
+getExtraParameters returnType wholeType
+  | remainingType == returnType = Just extraParameters
+  | otherwise = Nothing
+ where
+  extraParametersCount = countParameters wholeType - countParameters returnType
+  extraParameters = takeParameters extraParametersCount wholeType
+  remainingType = dropParameters extraParametersCount wholeType
+
 newtype Variable = Variable String deriving (Eq, Show)
 
 newtype Metavariable = Metavariable String deriving (Eq, Show)
@@ -431,7 +456,7 @@ someVariables = fmap (\x -> Variable ("v" <> show x)) (integers 0)
 -- >>> show' $ match (apply _M [var (AVar b) t] t) (var a t) someVariables someMetavariables
 -- [NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "a")}, arguments = [], returnType = Base "t"}]
 -- >>> show' $ match (apply _M [var (AVar b) t] t) (Term [(b, t)] a [var (AVar c) t] t) someVariables someMetavariables
--- [NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AMetavar (Metavariable "M0")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}], returnType = Base "t"}]
+-- [NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t"),(Variable "v1",Base "t")], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AMetavar (Metavariable "M0")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [], head = AVar (Variable "v1")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}], returnType = Base "t"},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"}]
 -- >>> show' $ match (apply _M [apply (AVar b) [var (AVar a) (Function t t)] t] t) (apply a [apply (AVar b) [var (AMetavar _M) (Function t t)] t] t) someVariables someMetavariables
 -- [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [], returnType = Function (Base "t") (Base "t")},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AMetavar (Metavariable "M0")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}], returnType = Base "t"}]
 match
@@ -442,7 +467,7 @@ match
   -> [(NormalTerm, Stream Variable, Stream Metavariable)]
 match flexible rigid variables metavariables
   | n < 0 = []
-  | otherwise = imitate
+  | otherwise = imitate <> project
  where
   n_flexible = length (binder (heading flexible))
   n_rigid = length (binder (heading rigid))
@@ -459,11 +484,11 @@ match flexible rigid variables metavariables
         | otherwise -> imitateDirectly head
 
   imitateWithExtendedBinder head =
-    makeSubstitution binderTypes head argumentTypes (returnType rigid)
+    makeSubstitution binderTypes (const head) argumentTypes (returnType rigid)
    where
     binderTypes = ws <> vs
     ws = typeOfTerm <$> arguments flexible
-    vs = snd <$> drop (length ws) (binder (heading rigid))
+    vs = snd <$> drop n_flexible (binder (heading rigid))
     argumentTypes = typeOfTerm <$> arguments rigid
 
   imitateDirectly head = do
@@ -477,20 +502,37 @@ match flexible rigid variables metavariables
 
     if remainingFlexible == remainingRigid
       then
-        return (makeSubstitution takenFlexible head takenRigid returnType')
+        return (makeSubstitution takenFlexible (const head) takenRigid returnType')
       else
         []
 
+  project = do
+    let ws = typeOfTerm <$> arguments flexible
+    let vs = snd <$> drop n_flexible (binder (heading rigid))
+    let wholeBinderTypes = ws <> vs
+
+    n_substitution <- [1 .. p_flexible + n]
+    projectOn <- [0 .. max n_substitution p_flexible - 1]
+
+    let binderTypes = take n_substitution wholeBinderTypes
+    let projectedType = binderTypes !! projectOn
+    let returnType' = dropParameters n_substitution (typeOfHead flexible)
+
+    case getExtraParameters returnType' projectedType of
+      Nothing -> []
+      Just extraParameters ->
+        [makeSubstitution binderTypes (!! projectOn) extraParameters returnType']
+
   makeSubstitution
     :: [Type]
-    -> Variable
+    -> ([Variable] -> Variable)
     -> [Type]
     -> Type
     -> (NormalTerm, Stream Variable, Stream Metavariable)
   makeSubstitution binderTypes head argumentTypes returnType =
     (term, variables', metavariables')
    where
-    term = Term binder (AVar head) arguments returnType
+    term = Term binder (AVar (head (fst <$> binder))) arguments returnType
     (variables', binder) = zipWithList variables binderTypes
     propagatedBinder =
       binder <&> \(parameter, parameterType) ->
