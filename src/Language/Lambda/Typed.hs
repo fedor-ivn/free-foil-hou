@@ -150,11 +150,27 @@ areAlphaEquivalent
           (Heading rightBinder rightHead)
 areAlphaEquivalent _ _ = False
 
-imitatableHead :: Heading Variable -> Int -> Maybe Variable
-imitatableHead (Heading [] head) _ = Just head
+-- >>> x = Variable "x"
+-- >>> y = Variable "y"
+-- >>> t = Base "t"
+--
+-- >>> imitatableHead (Heading [] x) 0
+-- Just (Right (Variable "x"))
+-- >>> imitatableHead (Heading [(y, t)] x) 0
+-- Just (Right (Variable "x"))
+-- >>> imitatableHead (Heading [(y, t)] y) 0
+-- Just (Left 0)
+-- >>> imitatableHead (Heading [(x, t), (y, t)] y) 0
+-- Just (Left 1)
+-- >>> imitatableHead (Heading [(x, t), (y, t)] y) 1
+-- Just (Left 0)
+-- >>> imitatableHead (Heading [(y, t)] y) 1
+-- Nothing
+imitatableHead :: Heading Variable -> Int -> Maybe (Either Int Variable)
+imitatableHead (Heading [] head) _ = Just (Right head)
 imitatableHead (Heading ((variable, _) : binder) head) n
+  | variable == head && n <= 0 = Just (Left (-n))
   | variable == head = Nothing
-  | n <= 0 = Just head
   | otherwise = imitatableHead (Heading binder head) (n - 1)
 
 data NormalTerm' head = NormalTerm
@@ -454,11 +470,13 @@ someVariables = fmap (\x -> Variable ("v" <> show x)) (integers 0)
 -- >>> show' $ match (var _M t) (apply a [var (AVar b) t] t) someVariables someMetavariables
 -- [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AMetavar (Metavariable "M0")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}]
 -- >>> show' $ match (apply _M [var (AVar b) t] t) (var a t) someVariables someMetavariables
--- [NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "a")}, arguments = [], returnType = Base "t"}]
+-- [NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "a")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"}]
 -- >>> show' $ match (apply _M [var (AVar b) t] t) (Term [(b, t)] a [var (AVar c) t] t) someVariables someMetavariables
--- [NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t"),(Variable "v1",Base "t")], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AMetavar (Metavariable "M0")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [], head = AVar (Variable "v1")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}], returnType = Base "t"},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"}]
+-- [NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t"),(Variable "v1",Base "t")], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AMetavar (Metavariable "M0")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [], head = AVar (Variable "v1")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}], returnType = Base "t"},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t"),(Variable "v1",Base "t")], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t"),(Variable "v1",Base "t")], head = AVar (Variable "v1")}, arguments = [], returnType = Base "t"}]
 -- >>> show' $ match (apply _M [apply (AVar b) [var (AVar a) (Function t t)] t] t) (apply a [apply (AVar b) [var (AMetavar _M) (Function t t)] t] t) someVariables someMetavariables
--- [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [], returnType = Function (Base "t") (Base "t")},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AMetavar (Metavariable "M0")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}], returnType = Base "t"}]
+-- [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [], returnType = Function (Base "t") (Base "t")},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AMetavar (Metavariable "M0")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}], returnType = Base "t"},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"}]
+-- >>> show' $ match (var _M (Function t (Function t t))) (Term [(a, t), (b, t)] a [] t) someVariables someMetavariables
+-- [NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t"),(Variable "v1",Base "t")], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t"),(Variable "v1",Base "t")], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t"),(Variable "v1",Base "t")], head = AVar (Variable "v1")}, arguments = [], returnType = Base "t"}]
 match
   :: FlexibleTerm
   -> RigidTerm
@@ -484,14 +502,21 @@ match flexible rigid variables metavariables
         | otherwise -> imitateDirectly head
 
   imitateWithExtendedBinder head =
-    makeSubstitution binderTypes (const head) argumentTypes (returnType rigid)
+    makeSubstitution binderTypes head' argumentTypes (returnType rigid)
    where
     binderTypes = ws <> vs
     ws = typeOfTerm <$> arguments flexible
     vs = snd <$> drop n_flexible (binder (heading rigid))
     argumentTypes = typeOfTerm <$> arguments rigid
+    head'
+      | Right constant <- head = const constant
+      | Left offset <- head = (!! (length ws + offset))
 
   imitateDirectly head = do
+    head' <- case head of
+      Right head' -> return head'
+      -- A bound argument? In my direct imitation?
+      Left _ -> []
     k <- [max 0 (p_flexible - p_rigid) .. p_flexible]
 
     let (takenFlexible, remainingFlexible) =
@@ -502,7 +527,7 @@ match flexible rigid variables metavariables
 
     if remainingFlexible == remainingRigid
       then
-        return (makeSubstitution takenFlexible (const head) takenRigid returnType')
+        return (makeSubstitution takenFlexible (const head') takenRigid returnType')
       else
         []
 
