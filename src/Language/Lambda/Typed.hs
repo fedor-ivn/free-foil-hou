@@ -26,9 +26,9 @@ module Language.Lambda.Typed (
   solve,
 ) where
 
+import Data.Bifunctor (bimap)
 import Data.Functor ((<&>))
 import Data.List (intercalate)
-import Data.Maybe (maybeToList)
 import Prelude hiding (head)
 
 data Type
@@ -387,6 +387,15 @@ substitute
 newtype DisagreementSet = DisagreementSet [(NormalTerm, NormalTerm)]
   deriving (Eq)
 
+addToSet :: NormalTerm -> NormalTerm -> DisagreementSet -> DisagreementSet
+addToSet left right (DisagreementSet set) = DisagreementSet ((left, right) : set)
+
+substituteInSet :: Atom -> NormalTerm -> DisagreementSet -> DisagreementSet
+substituteInSet head substitution (DisagreementSet set) =
+  DisagreementSet (bimap go go <$> set)
+ where
+  go = substitute head substitution
+
 instance Show DisagreementSet where
   show (DisagreementSet []) = "{}"
   show (DisagreementSet set) = "{ " <> set' <> " }"
@@ -431,26 +440,64 @@ addSubstitution head substitution (Substitutions substitutions) =
 -- >>> ex = Term [(d', Function t t), (e', t), (f', t)] a [apply d [var e t] t, var f t] t
 -- >>> right = Term [(u', tc)] u [Term [(v', t)] _W [] t, apply _X [ex] t, apply _X [var _F tc] t] t
 -- >>> solve (DisagreementSet [(left, right)]) someVariables someMetavariables
--- [({ M1 => λv1: (t -> t) -> t -> t -> t. a (M3 (v1 :: (t -> t) -> t -> t -> t) :: t) (M4 (v1 :: (t -> t) -> t -> t -> t) :: t) :: t; X => λv0: (t -> t) -> t -> t -> t. v0 (M0 (v0 :: (t -> t) -> t -> t -> t) :: t -> t) (M1 (v0 :: (t -> t) -> t -> t -> t) :: t) (M2 (v0 :: (t -> t) -> t -> t -> t) :: t) :: t },{ λv0: (t -> t) -> t -> t -> t. M3 (v0 :: (t -> t) -> t -> t -> t) :: t = λu: (t -> t) -> t -> t -> t. M0 (λd: t -> t, e: t, f: t. a (d (e :: t) :: t) (f :: t) :: t) (a (M3 (λd: t -> t, e: t, f: t. a (d (e :: t) :: t) (f :: t) :: t) :: t) (M4 (λd: t -> t, e: t, f: t. a (d (e :: t) :: t) (f :: t) :: t) :: t) :: t) :: t; λv0: (t -> t) -> t -> t -> t. M4 (v0 :: (t -> t) -> t -> t -> t) :: t = λu: (t -> t) -> t -> t -> t. M2 (λd: t -> t, e: t, f: t. a (d (e :: t) :: t) (f :: t) :: t) :: t; λv0: (t -> t) -> t -> t -> t. M0 (v0 :: (t -> t) -> t -> t -> t) :: t -> t = λu: (t -> t) -> t -> t -> t, v: t. W :: t; λv0: (t -> t) -> t -> t -> t. M2 (v0 :: (t -> t) -> t -> t -> t) :: t = λu: (t -> t) -> t -> t -> t. F (M0 (F :: (t -> t) -> t -> t -> t) :: t -> t) (M1 (F :: (t -> t) -> t -> t -> t) :: t) (M2 (F :: (t -> t) -> t -> t -> t) :: t) :: t })]
+-- [({ M1 => λv1: (t -> t) -> t -> t -> t. a (M3 (v1 :: (t -> t) -> t -> t -> t) :: t) (M4 (v1 :: (t -> t) -> t -> t -> t) :: t) :: t; X => λv0: (t -> t) -> t -> t -> t. v0 (M0 (v0 :: (t -> t) -> t -> t -> t) :: t -> t) (M1 (v0 :: (t -> t) -> t -> t -> t) :: t) (M2 (v0 :: (t -> t) -> t -> t -> t) :: t) :: t },{ λv0: (t -> t) -> t -> t -> t. M3 (v0 :: (t -> t) -> t -> t -> t) :: t = λu: (t -> t) -> t -> t -> t. M0 (λd: t -> t, e: t, f: t. a (d (e :: t) :: t) (f :: t) :: t) (a (M3 (λd: t -> t, e: t, f: t. a (d (e :: t) :: t) (f :: t) :: t) :: t) (M4 (λd: t -> t, e: t, f: t. a (d (e :: t) :: t) (f :: t) :: t) :: t) :: t) :: t; λv0: (t -> t) -> t -> t -> t. M4 (v0 :: (t -> t) -> t -> t -> t) :: t = λu: (t -> t) -> t -> t -> t. M2 (λd: t -> t, e: t, f: t. a (d (e :: t) :: t) (f :: t) :: t) :: t; λv0: (t -> t) -> t -> t -> t. M0 (v0 :: (t -> t) -> t -> t -> t) :: t -> t = λu: (t -> t) -> t -> t -> t, v: t. W :: t; λv0: (t -> t) -> t -> t -> t. M2 (v0 :: (t -> t) -> t -> t -> t) :: t = λu: (t -> t) -> t -> t -> t. F (M0 (F :: (t -> t) -> t -> t -> t) :: t -> t) (a (M3 (F :: (t -> t) -> t -> t -> t) :: t) (M4 (F :: (t -> t) -> t -> t -> t) :: t) :: t) (M2 (F :: (t -> t) -> t -> t -> t) :: t) :: t })]
+--
+-- >>> left = apply a [var _X t, apply _F [var b (Function t t)] t] t
+-- >>> right = apply a [apply _F [Term [(u', t)] _X [] t] t, apply b [var _X t] t] t
+-- >>> take 1 $ solve (DisagreementSet [(left, right)]) someVariables someMetavariables
+-- [({ F => λv0: t -> t. v0 (M0 (v0 :: t -> t) :: t) :: t },{ M0 (b :: t -> t) :: t = X :: t; X :: t = X :: t })]
 solve
   :: DisagreementSet
   -> Stream Variable
   -> Stream Metavariable
   -> [(Substitutions, DisagreementSet)]
-solve = go (Substitutions [])
+solve initialSet v m = go' [(Context (Substitutions []) v m, initialSet)]
  where
-  go substitutions set variables metavariables = do
-    set' <- maybeToList (simplify set)
-    case pickPair set' of
-      Nothing -> return (substitutions, set')
-      Just (flexible, rigid, DisagreementSet rest) -> do
-        (substitution, variables', metavariables') <-
-          match flexible rigid variables metavariables
-        let metavar = head (heading flexible)
-        let substitutions' = addSubstitution metavar substitution substitutions
-        let left = substitute (AMetavar metavar) substitution (Flexible flexible)
-        let right = substitute (AMetavar metavar) substitution (Rigid rigid)
-        go substitutions' (DisagreementSet ((left, right) : rest)) variables' metavariables'
+  go' [] = []
+  go' sets = (extractSubstitutions <$> solved) <> go' (goSolve unsolved)
+   where
+    (solved, unsolved) = pickPairs (simplifySets sets)
+    extractSubstitutions (Context substitutions _ _, set) = (substitutions, set)
+  goSolve problems = do
+    (Context substitutions variables metavariables, (flexible, rigid, rest)) <- problems
+    (substitution, variables', metavariables') <- match flexible rigid variables metavariables
+
+    let unknown = head (heading flexible)
+    let set' = addToSet (Flexible flexible) (Rigid rigid) rest
+    let set'' = substituteInSet (AMetavar unknown) substitution set'
+    let substitutions' = addSubstitution unknown substitution substitutions
+    return (Context substitutions' variables' metavariables', set'')
+
+-- go substitutions set variables metavariables = do
+--   set' <- maybeToList (simplify set)
+--   case pickPair set' of
+--     Nothing -> return (substitutions, set')
+--     Just (flexible, rigid, DisagreementSet rest) -> do
+--       (substitution, variables', metavariables') <-
+--         match flexible rigid variables metavariables
+--       let metavar = head (heading flexible)
+--       let substitutions' = addSubstitution metavar substitution substitutions
+--       let left = substitute (AMetavar metavar) substitution (Flexible flexible)
+--       let right = substitute (AMetavar metavar) substitution (Rigid rigid)
+--       go substitutions' (DisagreementSet ((left, right) : rest)) variables' metavariables'
+
+data Context = Context Substitutions (Stream Variable) (Stream Metavariable)
+
+simplifySets :: [(c, DisagreementSet)] -> [(c, DisagreementSet)]
+simplifySets [] = []
+simplifySets ((s, set) : rest) = case simplify set of
+  Nothing -> simplifySets rest
+  Just set' -> (s, set') : simplifySets rest
+
+type Solved c = (c, DisagreementSet)
+type Solvable c = (c, (FlexibleTerm, RigidTerm, DisagreementSet))
+pickPairs :: [(c, DisagreementSet)] -> ([Solved c], [Solvable c])
+pickPairs = go id id
+ where
+  go solved unsolved [] = (solved [], unsolved [])
+  go solved unsolved ((s, set) : rest) = case pickPair set of
+    Nothing -> go (solved . ((s, set) :)) unsolved rest
+    Just problem -> go solved (unsolved . ((s, problem) :)) rest
 
 pickPair :: DisagreementSet -> Maybe (FlexibleTerm, RigidTerm, DisagreementSet)
 pickPair (DisagreementSet set) = go id set
