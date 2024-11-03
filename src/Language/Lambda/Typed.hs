@@ -27,13 +27,22 @@ module Language.Lambda.Typed (
 ) where
 
 import Data.Functor ((<&>))
+import Data.List (intercalate)
 import Data.Maybe (maybeToList)
 import Prelude hiding (head)
 
 data Type
   = Base String
   | Function Type Type
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show Type where
+  show (Base typ) = typ
+  show (Function parameter returnType) = parameter' <> " -> " <> show returnType
+   where
+    parameter'
+      | Base _ <- parameter = show parameter
+      | Function _ _ <- parameter = "(" <> show parameter <> ")"
 
 dropParameters :: Int -> Type -> Type
 dropParameters _ typ@(Base _) = typ
@@ -60,14 +69,24 @@ getExtraParameters returnType wholeType
   extraParameters = takeParameters extraParametersCount wholeType
   remainingType = dropParameters extraParametersCount wholeType
 
-newtype Variable = Variable String deriving (Eq, Show)
+newtype Variable = Variable String deriving (Eq)
 
-newtype Metavariable = Metavariable String deriving (Eq, Show)
+instance Show Variable where
+  show (Variable variable) = variable
+
+newtype Metavariable = Metavariable String deriving (Eq)
+
+instance Show Metavariable where
+  show (Metavariable metavariable) = metavariable
 
 data Atom
   = AVar Variable
   | AMetavar Metavariable
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show Atom where
+  show (AVar variable) = show variable
+  show (AMetavar metavariable) = show metavariable
 
 data Expression
   = Atom Atom
@@ -87,13 +106,13 @@ pattern Metavar variable = Atom (AMetavar variable)
 -- >>> y = Variable "y"
 --
 -- >>> typeOf (const (Just t)) (Var x)
--- Just (Base "t")
+-- Just t
 -- >>> typeOf (const Nothing) (Lambda x t (Var x))
--- Just (Function (Base "t") (Base "t"))
+-- Just t -> t
 -- >>> typeOf (const (Just u)) (Lambda x t (Var y))
--- Just (Function (Base "t") (Base "u"))
+-- Just t -> u
 -- >>> typeOf (const (Just t)) (Application (Lambda x t (Var x)) (Var x))
--- Just (Base "t")
+-- Just t
 -- >>> typeOf (const (Just u)) (Application (Lambda x t (Var x)) (Var x))
 -- Nothing
 typeOf :: (Atom -> Maybe Type) -> Expression -> Maybe Type
@@ -116,7 +135,15 @@ data Heading head = Heading
   { binder :: [(Variable, Type)]
   , head :: head
   }
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance (Show head) => Show (Heading head) where
+  show (Heading binder head) = binder' <> show head
+   where
+    binder'
+      | null binder = ""
+      | otherwise = "λ" <> intercalate ", " (fmap showParameter binder) <> ". "
+    showParameter (variable, typ) = show variable <> ": " <> show typ
 
 -- Ignores types of parameters (at least for now).
 --
@@ -178,7 +205,15 @@ data NormalTerm' head = NormalTerm
   , arguments :: [NormalTerm]
   , returnType :: Type
   }
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance (Show head) => Show (NormalTerm' head) where
+  show (NormalTerm heading arguments returnType) =
+    show heading <> arguments' <> " :: " <> show returnType
+   where
+    arguments'
+      | null arguments = ""
+      | otherwise = " " <> unwords (fmap (\argument -> "(" <> show argument <> ")") arguments)
 
 type NormalTerm = NormalTerm' Atom
 type RigidTerm = NormalTerm' Variable
@@ -218,22 +253,22 @@ pattern Flexible flexible <- (termKind -> Left flexible)
 -- >>> typeOfAtom var = if var == AVar x then Just (Function t (Function t t)) else Just t
 --
 -- >>> asNormalTerm typeOfAtom (Var x)
--- Just (NormalTerm {heading = Heading {binder = [], head = AVar (Variable "x")}, arguments = [], returnType = Function (Base "t") (Function (Base "t") (Base "t"))})
+-- Just x :: t -> t -> t
 --
 -- >>> asNormalTerm typeOfAtom (Application (Var x) (Var y))
--- Just (NormalTerm {heading = Heading {binder = [], head = AVar (Variable "x")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "y")}, arguments = [], returnType = Base "t"}], returnType = Function (Base "t") (Base "t")})
+-- Just x (y :: t) :: t -> t
 --
 -- >>> asNormalTerm typeOfAtom (Application (Application (Var x) (Var y)) (Var z))
--- Just (NormalTerm {heading = Heading {binder = [], head = AVar (Variable "x")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "y")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [], head = AVar (Variable "z")}, arguments = [], returnType = Base "t"}], returnType = Base "t"})
+-- Just x (y :: t) (z :: t) :: t
 --
 -- >>> asNormalTerm typeOfAtom (Lambda z t (Var x))
--- Just (NormalTerm {heading = Heading {binder = [(Variable "z",Base "t")], head = AVar (Variable "x")}, arguments = [], returnType = Function (Base "t") (Function (Base "t") (Base "t"))})
+-- Just λz: t. x :: t -> t -> t
 --
 -- >>> asNormalTerm typeOfAtom (Lambda y t (Lambda z t (Var x)))
--- Just (NormalTerm {heading = Heading {binder = [(Variable "y",Base "t"),(Variable "z",Base "t")], head = AVar (Variable "x")}, arguments = [], returnType = Function (Base "t") (Function (Base "t") (Base "t"))})
+-- Just λy: t, z: t. x :: t -> t -> t
 --
 -- >>> asNormalTerm typeOfAtom (Lambda z t (Application (Var x) (Var y)))
--- Just (NormalTerm {heading = Heading {binder = [(Variable "z",Base "t")], head = AVar (Variable "x")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "y")}, arguments = [], returnType = Base "t"}], returnType = Function (Base "t") (Base "t")})
+-- Just λz: t. x (y :: t) :: t -> t
 --
 -- >>> asNormalTerm typeOfAtom (Application (Lambda x t (Var x)) (Var y))
 -- Nothing
@@ -272,11 +307,11 @@ scopedArguments (NormalTerm (Heading scope _) arguments _) =
 -- >>> u = Base "u"
 --
 -- >>> typeOfTerm (NormalTerm (Heading [(x, t)] y) [] u)
--- Function (Base "t") (Base "u")
+-- t -> u
 -- >>> typeOfTerm (NormalTerm (Heading [(x, t), (y, u)] y) [] u)
--- Function (Base "t") (Function (Base "u") (Base "u"))
+-- t -> u -> u
 -- >>> typeOfTerm (NormalTerm (Heading [(x, t)] y) [NormalTerm (Heading [] (AVar x)) [] u] u)
--- Function (Base "t") (Base "u")
+-- t -> u
 typeOfTerm :: NormalTerm' head -> Type
 typeOfTerm NormalTerm{heading = Heading [] _, returnType} = returnType
 typeOfTerm NormalTerm{heading = Heading ((_, parameterType) : binder) head, ..} =
@@ -288,11 +323,11 @@ typeOfTerm NormalTerm{heading = Heading ((_, parameterType) : binder) head, ..} 
 -- >>> u = Base "u"
 --
 -- >>> typeOfHead (NormalTerm (Heading [(x, t)] y) [] u)
--- Base "u"
+-- u
 -- >>> typeOfHead (NormalTerm (Heading [(x, t), (y, u)] y) [] u)
--- Base "u"
+-- u
 -- >>> typeOfHead (NormalTerm (Heading [(x, t)] y) [NormalTerm (Heading [] (AVar x)) [] u] u)
--- Function (Base "u") (Base "u")
+-- u -> u
 typeOfHead :: NormalTerm' head -> Type
 typeOfHead NormalTerm{arguments = [], returnType} = returnType
 typeOfHead NormalTerm{arguments = (argument : arguments), ..} =
@@ -305,11 +340,11 @@ typeOfHead NormalTerm{arguments = (argument : arguments), ..} =
 -- >>> (x, x') = (AVar x', Variable "x")
 --
 -- >>> substituteHead (Term [(x', t)] x [] t) (var _M t)
--- NormalTerm {heading = Heading {binder = [(Variable "x",Base "t")], head = AVar (Variable "x")}, arguments = [], returnType = Base "t"}
+-- λx: t. x :: t
 -- >>> substituteHead (var x t) (Term [(a', t)] _M [] t)
--- NormalTerm {heading = Heading {binder = [(Variable "a",Base "t")], head = AVar (Variable "x")}, arguments = [], returnType = Base "t"}
+-- λa: t. x :: t
 -- >>> substituteHead (Term [(a', t)] a [] t) (Term [(b', t)] _M [var x t] t)
--- NormalTerm {heading = Heading {binder = [(Variable "b",Base "t")], head = AVar (Variable "x")}, arguments = [], returnType = Base "t"}
+-- λb: t. x :: t
 substituteHead :: NormalTerm -> NormalTerm' head -> NormalTerm
 substituteHead
   (NormalTerm (Heading innerBinder head) arguments returnType)
@@ -334,11 +369,11 @@ substituteHead
 -- >>> (x, x') = (AVar x', Variable "x")
 --
 -- >>> substitute _M (var a (Function t (Function t t))) (apply _M [var x t, var x t] t)
--- NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "x")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [], head = AVar (Variable "x")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}
+-- a (x :: t) (x :: t) :: t
 -- >>> substitute _M (var a t) (apply x [var _M t, var _M t] t)
--- NormalTerm {heading = Heading {binder = [], head = AVar (Variable "x")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}
+-- x (a :: t) (a :: t) :: t
 -- >>> substitute _M (Term [(x', t)] x [] t) (apply _M [var a t] t)
--- NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [], returnType = Base "t"}
+-- a :: t
 substitute :: Atom -> NormalTerm -> NormalTerm -> NormalTerm
 substitute
   expected
@@ -350,10 +385,24 @@ substitute
         Term binder head (substitute expected substitution <$> arguments) returnType
 
 newtype DisagreementSet = DisagreementSet [(NormalTerm, NormalTerm)]
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show DisagreementSet where
+  show (DisagreementSet []) = "{}"
+  show (DisagreementSet set) = "{ " <> set' <> " }"
+   where
+    set' = intercalate "; " (showPair <$> set)
+    showPair (left, right) = show left <> " = " <> show right
 
 newtype Substitutions = Substitutions [(Metavariable, NormalTerm)]
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show Substitutions where
+  show (Substitutions []) = "{}"
+  show (Substitutions substitutions) = "{ " <> substitutions' <> " }"
+   where
+    substitutions' = intercalate "; " (showSubstitution <$> substitutions)
+    showSubstitution (left, right) = show left <> " => " <> show right
 
 addSubstitution :: Metavariable -> NormalTerm -> Substitutions -> Substitutions
 addSubstitution head substitution (Substitutions substitutions) =
@@ -363,14 +412,21 @@ addSubstitution head substitution (Substitutions substitutions) =
 
 -- >>> _F = AMetavar (Metavariable "F")
 -- >>> _X = AMetavar (Metavariable "X")
--- >>> a = AVar (Variable "a")
--- >>> b = AVar (Variable "b")
+-- >>> _W = AMetavar (Metavariable "W")
+-- >>> (a', a) = (Variable "a", AVar a')
+-- >>> (b', b) = (Variable "b", AVar b')
+-- >>> (c', c) = (Variable "c", AVar c')
+-- >>> (d', d) = (Variable "d", AVar d')
+-- >>> (e', e) = (Variable "e", AVar e')
+-- >>> (f', f) = (Variable "f", AVar f')
+-- >>> (u', u) = (Variable "u", AVar u')
+-- >>> (v', v) = (Variable "v", AVar v')
 -- >>> t = Base "t"
 --
 -- >>> left = apply _F [apply _F [var _X t] t] t
 -- >>> right = apply a [apply a [var b t] t] t
 -- >>> solve (DisagreementSet [(left, right)]) someVariables someMetavariables
--- [(Substitutions [(Metavariable "X",NormalTerm {heading = Heading {binder = [], head = AVar (Variable "b")}, arguments = [], returnType = Base "t"}),(Metavariable "F",NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [], returnType = Function (Base "t") (Base "t")})],DisagreementSet []),(Substitutions [(Metavariable "M1",NormalTerm {heading = Heading {binder = [(Variable "v2",Base "t")], head = AVar (Variable "b")}, arguments = [], returnType = Base "t"}),(Metavariable "M0",NormalTerm {heading = Heading {binder = [(Variable "v1",Base "t")], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "b")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}),(Metavariable "F",NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "b")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}], returnType = Base "t"})],DisagreementSet [])]
+-- [({ X => b :: t; F => a :: t -> t },{}),({ M1 => λv2: t. b :: t; M0 => λv1: t. a (b :: t) :: t; F => λv0: t. a (a (b :: t) :: t) :: t },{}),({ X => b :: t; M0 => λv1: t. v1 :: t; F => λv0: t. a (v0 :: t) :: t },{}),({ M1 => b :: t; M0 => a (b :: t) :: t; X => a (a (b :: t) :: t) :: t; F => λv0: t. v0 :: t },{})]
 solve
   :: DisagreementSet
   -> Stream Variable
@@ -416,17 +472,13 @@ pickPair (DisagreementSet set) = go id set
 --
 -- >>> left = NormalTerm (Heading [] (AVar a)) [NormalTerm (Heading [(u, t)] (AVar b)) [meta x t, var u t] t, var c t] t
 -- >>> right = NormalTerm (Heading [] (AVar a)) [NormalTerm (Heading [(v, t)] (AVar b)) [meta y t, var v t] t, NormalTerm (Heading [] (AMetavar f)) [var c t] t] t
--- >>> simplified = simplify (DisagreementSet [(left, right)])
--- >>> expected = Just (DisagreementSet [(NormalTerm (Heading [(u, t)] (AMetavar x)) [] t, NormalTerm (Heading [(v, t)] (AMetavar y)) [] t), (var c t, NormalTerm (Heading [] (AMetavar f)) [var c t] t)])
--- >>> simplified == expected
--- True
+-- >>> simplify (DisagreementSet [(left, right)])
+-- Just { λu: t. X :: t = λv: t. Y :: t; c :: t = F (c :: t) :: t }
 --
 -- >>> left = NormalTerm (Heading [] (AVar a)) [NormalTerm (Heading [(u, t)] (AVar b)) [meta x t, var u t] t] t
 -- >>> right = NormalTerm (Heading [] (AVar a)) [NormalTerm (Heading [(v, t)] (AVar b)) [meta y t, var v t] t] t
--- >>> simplified = simplify (DisagreementSet [(left, right)])
--- >>> expected = Just (DisagreementSet [(NormalTerm (Heading [(u, t)] (AMetavar x)) [] t, NormalTerm (Heading [(v, t)] (AMetavar y)) [] t)])
--- >>> simplified == expected
--- True
+-- >>> simplify (DisagreementSet [(left, right)])
+-- Just { λu: t. X :: t = λv: t. Y :: t }
 --
 -- >>> left = NormalTerm (Heading [(u, t), (v, t)] (AVar a)) [var u t, NormalTerm (Heading [(w, t)] (AVar v)) [] t] t
 -- >>> right = NormalTerm (Heading [(v, t), (w, t)] (AVar a)) [var v t, NormalTerm (Heading [(u, t)] (AVar v)) [] t] t
@@ -471,17 +523,17 @@ someVariables = fmap (\x -> Variable ("v" <> show x)) (integers 0)
 -- >>> show' $ match (Term [(a, t)] _M [] t) (var a t) someVariables someMetavariables
 -- []
 -- >>> show' $ match (var _M t) (var a t) someVariables someMetavariables
--- [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [], returnType = Base "t"}]
+-- [a :: t]
 -- >>> show' $ match (var _M t) (apply a [var (AVar b) t] t) someVariables someMetavariables
--- [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AMetavar (Metavariable "M0")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}]
+-- [a (M0 :: t) :: t]
 -- >>> show' $ match (apply _M [var (AVar b) t] t) (var a t) someVariables someMetavariables
--- [NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "a")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"}]
+-- [λv0: t. a :: t,λv0: t. v0 :: t]
 -- >>> show' $ match (apply _M [var (AVar b) t] t) (Term [(b, t)] a [var (AVar c) t] t) someVariables someMetavariables
--- [NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t"),(Variable "v1",Base "t")], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AMetavar (Metavariable "M0")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [], head = AVar (Variable "v1")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}], returnType = Base "t"},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t"),(Variable "v1",Base "t")], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t"),(Variable "v1",Base "t")], head = AVar (Variable "v1")}, arguments = [], returnType = Base "t"}]
+-- [λv0: t, v1: t. a (M0 (v0 :: t) (v1 :: t) :: t) :: t,λv0: t. v0 :: t,λv0: t, v1: t. v0 :: t,λv0: t, v1: t. v1 :: t]
 -- >>> show' $ match (apply _M [apply (AVar b) [var (AVar a) (Function t t)] t] t) (apply a [apply (AVar b) [var (AMetavar _M) (Function t t)] t] t) someVariables someMetavariables
--- [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [], returnType = Function (Base "t") (Base "t")},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "a")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AMetavar (Metavariable "M0")}, arguments = [NormalTerm {heading = Heading {binder = [], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"}], returnType = Base "t"}], returnType = Base "t"},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t")], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"}]
+-- [a :: t -> t,λv0: t. a (M0 (v0 :: t) :: t) :: t,λv0: t. v0 :: t]
 -- >>> show' $ match (var _M (Function t (Function t t))) (Term [(a, t), (b, t)] a [] t) someVariables someMetavariables
--- [NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t"),(Variable "v1",Base "t")], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t"),(Variable "v1",Base "t")], head = AVar (Variable "v0")}, arguments = [], returnType = Base "t"},NormalTerm {heading = Heading {binder = [(Variable "v0",Base "t"),(Variable "v1",Base "t")], head = AVar (Variable "v1")}, arguments = [], returnType = Base "t"}]
+-- [λv0: t, v1: t. v0 :: t,λv0: t, v1: t. v0 :: t,λv0: t, v1: t. v1 :: t]
 match
   :: FlexibleTerm
   -> RigidTerm
