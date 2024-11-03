@@ -18,12 +18,12 @@ module Language.Lambda.Typed (
   NormalTerm,
   RigidTerm,
   FlexibleTerm,
-  pattern Rigid,
-  pattern Flexible,
   asNormalTerm,
   DisagreementSet (..),
-  simplify,
-  match,
+  Stream (..),
+  someVariables,
+  someMetavariables,
+  solve,
 ) where
 
 import Data.Functor ((<&>))
@@ -241,12 +241,12 @@ pattern Flexible flexible <- (termKind -> Left flexible)
 -- >>> asNormalTerm typeOfAtom (Lambda x t (Application (Lambda z t (Var z)) (Var y)))
 -- Nothing
 asNormalTerm :: (Atom -> Maybe Type) -> Expression -> Maybe NormalTerm
-asNormalTerm typeOfAtom (Lambda variable typ body) = do
-  let typeOfAtom' var
-        | var == AVar variable = Just typ
-        | otherwise = typeOfAtom var
+asNormalTerm typeOfAtom (Lambda parameter typ body) = do
+  let typeOfAtom' variable
+        | variable == AVar parameter = Just typ
+        | otherwise = typeOfAtom variable
   NormalTerm{heading = (Heading binder head), ..} <- asNormalTerm typeOfAtom' body
-  Just (NormalTerm{heading = Heading ((variable, typ) : binder) head, ..})
+  Just (NormalTerm{heading = Heading ((parameter, typ) : binder) head, ..})
 asNormalTerm typeOfAtom other = do
   returnType <- typeOf typeOfAtom other
   (heading, arguments) <- extractBody other
@@ -312,16 +312,16 @@ typeOfHead NormalTerm{arguments = (argument : arguments), ..} =
 -- NormalTerm {heading = Heading {binder = [(Variable "b",Base "t")], head = AVar (Variable "x")}, arguments = [], returnType = Base "t"}
 substituteHead :: NormalTerm -> NormalTerm' head -> NormalTerm
 substituteHead
-  (Term innerBinder head arguments returnType)
-  (Term outerBinder _ [] _) =
+  (NormalTerm (Heading innerBinder head) arguments returnType)
+  (NormalTerm (Heading outerBinder _) [] _) =
     Term (outerBinder <> innerBinder) head arguments returnType
 substituteHead
-  (Term [] head innerArguments _)
-  (Term outerBinder _ outerArguments returnType) =
+  (NormalTerm (Heading [] head) innerArguments _)
+  (NormalTerm (Heading outerBinder _) outerArguments returnType) =
     Term outerBinder head (innerArguments <> outerArguments) returnType
 substituteHead
-  (Term ((parameter, _) : innerBinder) innerHead innerArguments innerReturnType)
-  (Term outerBinder outerHead (argument : outerArguments) outerReturnType) =
+  (NormalTerm (Heading ((parameter, _) : innerBinder) innerHead) innerArguments innerReturnType)
+  (NormalTerm (Heading outerBinder outerHead) (argument : outerArguments) outerReturnType) =
     substituteHead
       (substitute (AVar parameter) argument withoutParameter)
       (Term outerBinder outerHead outerArguments outerReturnType)
@@ -340,9 +340,14 @@ substituteHead
 -- >>> substitute _M (Term [(x', t)] x [] t) (apply _M [var a t] t)
 -- NormalTerm {heading = Heading {binder = [], head = AVar (Variable "a")}, arguments = [], returnType = Base "t"}
 substitute :: Atom -> NormalTerm -> NormalTerm -> NormalTerm
-substitute expected substitution outer@(Term binder head arguments returnType)
-  | head == expected = substitute expected substitution (substituteHead substitution outer)
-  | otherwise = Term binder head (substitute expected substitution <$> arguments) returnType
+substitute
+  expected
+  substitution
+  outer@(NormalTerm (Heading binder head) arguments returnType)
+    | head == expected =
+        substitute expected substitution (substituteHead substitution outer)
+    | otherwise =
+        Term binder head (substitute expected substitution <$> arguments) returnType
 
 newtype DisagreementSet = DisagreementSet [(NormalTerm, NormalTerm)]
   deriving (Eq, Show)
