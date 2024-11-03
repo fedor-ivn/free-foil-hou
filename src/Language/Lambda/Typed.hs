@@ -406,9 +406,7 @@ instance Show Substitutions where
 
 addSubstitution :: Metavariable -> NormalTerm -> Substitutions -> Substitutions
 addSubstitution head substitution (Substitutions substitutions) =
-  Substitutions ((head, substitution) : substitutions')
- where
-  substitutions' = fmap (substitute (AMetavar head) substitution) <$> substitutions
+  Substitutions ((head, substitution) : substitutions)
 
 -- >>> _F = AMetavar (Metavariable "F")
 -- >>> _X = AMetavar (Metavariable "X")
@@ -426,7 +424,14 @@ addSubstitution head substitution (Substitutions substitutions) =
 -- >>> left = apply _F [apply _F [var _X t] t] t
 -- >>> right = apply a [apply a [var b t] t] t
 -- >>> solve (DisagreementSet [(left, right)]) someVariables someMetavariables
--- [({ X => b :: t; F => a :: t -> t },{}),({ M1 => λv2: t. b :: t; M0 => λv1: t. a (b :: t) :: t; F => λv0: t. a (a (b :: t) :: t) :: t },{}),({ X => b :: t; M0 => λv1: t. v1 :: t; F => λv0: t. a (v0 :: t) :: t },{}),({ M1 => b :: t; M0 => a (b :: t) :: t; X => a (a (b :: t) :: t) :: t; F => λv0: t. v0 :: t },{})]
+-- [({ X => b :: t; F => a :: t -> t },{}),({ M1 => λv2: t. b :: t; M0 => λv1: t. a (M1 (v1 :: t) :: t) :: t; F => λv0: t. a (M0 (v0 :: t) :: t) :: t },{}),({ X => b :: t; M0 => λv1: t. v1 :: t; F => λv0: t. a (M0 (v0 :: t) :: t) :: t },{}),({ M1 => b :: t; M0 => a (M1 :: t) :: t; X => a (M0 :: t) :: t; F => λv0: t. v0 :: t },{})]
+--
+-- >>> tc = Function (Function t t) (Function t (Function t t))
+-- >>> left = var _X (Function tc t)
+-- >>> ex = Term [(d', Function t t), (e', t), (f', t)] a [apply d [var e t] t, var f t] t
+-- >>> right = Term [(u', tc)] u [Term [(v', t)] _W [] t, apply _X [ex] t, apply _X [var _F tc] t] t
+-- >>> solve (DisagreementSet [(left, right)]) someVariables someMetavariables
+-- [({ M1 => λv1: (t -> t) -> t -> t -> t. a (M3 (v1 :: (t -> t) -> t -> t -> t) :: t) (M4 (v1 :: (t -> t) -> t -> t -> t) :: t) :: t; X => λv0: (t -> t) -> t -> t -> t. v0 (M0 (v0 :: (t -> t) -> t -> t -> t) :: t -> t) (M1 (v0 :: (t -> t) -> t -> t -> t) :: t) (M2 (v0 :: (t -> t) -> t -> t -> t) :: t) :: t },{ λv0: (t -> t) -> t -> t -> t. M3 (v0 :: (t -> t) -> t -> t -> t) :: t = λu: (t -> t) -> t -> t -> t. M0 (λd: t -> t, e: t, f: t. a (d (e :: t) :: t) (f :: t) :: t) (a (M3 (λd: t -> t, e: t, f: t. a (d (e :: t) :: t) (f :: t) :: t) :: t) (M4 (λd: t -> t, e: t, f: t. a (d (e :: t) :: t) (f :: t) :: t) :: t) :: t) :: t; λv0: (t -> t) -> t -> t -> t. M4 (v0 :: (t -> t) -> t -> t -> t) :: t = λu: (t -> t) -> t -> t -> t. M2 (λd: t -> t, e: t, f: t. a (d (e :: t) :: t) (f :: t) :: t) :: t; λv0: (t -> t) -> t -> t -> t. M0 (v0 :: (t -> t) -> t -> t -> t) :: t -> t = λu: (t -> t) -> t -> t -> t, v: t. W :: t; λv0: (t -> t) -> t -> t -> t. M2 (v0 :: (t -> t) -> t -> t -> t) :: t = λu: (t -> t) -> t -> t -> t. F (M0 (F :: (t -> t) -> t -> t -> t) :: t -> t) (M1 (F :: (t -> t) -> t -> t -> t) :: t) (M2 (F :: (t -> t) -> t -> t -> t) :: t) :: t })]
 solve
   :: DisagreementSet
   -> Stream Variable
