@@ -19,7 +19,7 @@ instance Show Substitutions where
 
 ppSubstitutions :: Substitutions -> String
 ppSubstitutions (Substitutions subs) =
-  "[" ++ unwords ["(" ++ x ++ " -> " ++ show y ++ ")" | (x, y) <- subs] ++ "]"
+  "[" ++ unwords ["(" ++ x ++ " |-> " ++ show y ++ ")" | (x, y) <- subs] ++ "]"
 
 -- >>>(Substitutions [("x", "Y")])
 -- [(x -> Y)]
