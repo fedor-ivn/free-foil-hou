@@ -4,6 +4,7 @@ module Language.Lambda.FCU.Unification
   ( unify
   ) where
 
+import           Language.Lambda.FCU.OccurCheck    (occ)
 import           Language.Lambda.FCU.RTerms        (RTerm (..), toRTerm)
 import           Language.Lambda.FCU.Substitutions (Substitutions (..))
 import           Language.Lambda.FCU.Terms         (Id, Term (..))
@@ -55,9 +56,6 @@ unifyFlexRigid ::
 unifyFlexRigid bvs (_F, ym, f, x, th)
   | occ _F th x = error "Occurances check failed"
   | otherwise = error "unifyFlexRigid not implemented"
-
-occ :: Term -> Substitutions -> Term -> Bool
-occ _ _ _ = error "occ not implemented"
 
 -- Helper function to unify flexible and flexible terms
 unifyFlexFlex ::
