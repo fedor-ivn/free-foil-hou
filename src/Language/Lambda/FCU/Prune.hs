@@ -29,16 +29,17 @@ prune tn (rho, u) = case strip (devar rho u) of
 replaceQ :: Id -> [(Id, Term)] -> [Term] -> [Term] -> Term -> (Id, Term)
 replaceQ _W rho tn sm q = if coverExists (map toRTerm tn) (toRTerm (devar rho q))
     then (_W, substitution)
-    else error ("Not unifiable " ++ show q)
+    else error "Cover does not exist, not unifiable"
     where
-        lambdaVars = ["z" ++ show i | i <- [1 ..]]
-        bodyVars = [O ("z" ++ show i) | i <- [1 ..], i/= indexQ]
         indexQ = case elemIndex q sm of
             Just idx -> idx
-            Nothing -> error ("q not found in sm " ++ show sm ++ show q)
+            Nothing -> error "q not found in sm"
+        lambdaVars = ["z" ++ show i | i <- [1 ..]]
+        bodyVars = [O ("z" ++ show i) | i <- [1 ..], i/= (indexQ + 1)]
         lambdaArgs = take (length sm) lambdaVars
+        bodyArgs = take (length sm - 1) bodyVars
         newTerm = W (_W ++ "'")
-        body = foldl1 (:@) (newTerm : [z | (i, z) <- zip [0..] bodyVars, i /= indexQ])
+        body = foldl (:@) newTerm bodyArgs
         substitution = foldr (:.:) body lambdaArgs
 
 termsDiff :: [Term] -> [Term] -> [Term]
@@ -47,5 +48,5 @@ termsDiff tn = filter (`notElem` tn)
 -- >>> prune ["x", "y"] ([], "Cons" :@ "x" :@ "y")
 -- []
 
--- >>> prune ["Snd" :@ "x", "q", "y"] ([], "Cons" :@ ("X" :@ "x" :@ "q") :@ "y")
--- Not unifiable x
+-- >>> prune ["x", "q", "y"] ([], "X" :@ ("Snd" :@ "x") :@ "q")
+-- [("X",λz1 . (λz2 . (X' (z2))))]
