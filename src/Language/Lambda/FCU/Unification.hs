@@ -5,7 +5,6 @@ module Language.Lambda.FCU.Unification (unify) where
 import Language.Lambda.FCU.RTerms (RTerm (..), toRTerm)
 import Language.Lambda.FCU.Substitutions (Substitutions (..))
 import Language.Lambda.FCU.Terms (Id, Term (..))
-import Foreign.C (errnoToIOError)
 
 ------- Unification ----- bvs (th (s,t)) = Q for all, (subs, S)
 unify :: [Id] -> (Substitutions, (Term, Term)) -> Maybe Substitutions
