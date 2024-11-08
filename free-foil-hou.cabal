@@ -30,20 +30,20 @@ custom-setup
 
 library
   exposed-modules:
+      Data.SOAS
       Language.Lambda.Impl
       Language.Lambda.Syntax.Abs
       Language.Lambda.Syntax.Layout
       Language.Lambda.Syntax.Lex
       Language.Lambda.Syntax.Par
       Language.Lambda.Syntax.Print
-      Runner.Impl
   other-modules:
       Paths_free_foil_hou
   autogen-modules:
       Paths_free_foil_hou
   hs-source-dirs:
       src
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-tools:
       alex >=3.2.4
     , happy >=1.19.9
@@ -68,7 +68,7 @@ executable free-foil-hou-exe
       Paths_free_foil_hou
   hs-source-dirs:
       app
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-tools:
       alex >=3.2.4
     , happy >=1.19.9
@@ -95,7 +95,7 @@ test-suite free-foil-hou-test
       Paths_free_foil_hou
   hs-source-dirs:
       test
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-tools:
       alex >=3.2.4
     , happy >=1.19.9
