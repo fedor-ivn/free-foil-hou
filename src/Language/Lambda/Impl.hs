@@ -189,11 +189,11 @@ newtype MetaSubsts sig metavar metavar' = MetaSubsts
 -- x = g
 -- (\z. z a) g
 
--- >>> subst = "X [x0, x1] ↦ x1 x0" :: MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent
+-- >>> subst = "X [x0: t, x1: t -> u] ↦ x1 x0" :: MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent
 -- >>> term = "λg: t. λa: u. λw: v. X[g, λz: u -> t. z a]"
 -- >>> nfMetaTermWithEmptyScope $ applyMetaSubsts id Foil.emptyScope (MetaSubsts [subst]) term
 -- λ x0 : t . λ x1 : u . λ x2 : v . x0 x1
--- >>> subst = "X [x, y] ↦ (λ z: t. y z) x" :: MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent
+-- >>> subst = "X [x: t, y: t -> u] ↦ (λ z: t. y z) x" :: MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent
 -- >>> term = "λg: t. λa: u. λw: v. X[g, λz: u -> t. z a]"
 -- >>> nfMetaTermWithEmptyScope $ applyMetaSubsts id Foil.emptyScope (MetaSubsts [subst]) term
 -- λ x0 : t . λ x1 : u . λ x2 : v . x0 x1
@@ -416,14 +416,14 @@ instance IsString (MetaTerm Raw.MetaVarIdent Foil.VoidS) where
   fromString :: String -> MetaTerm Raw.MetaVarIdent VoidS
   fromString = toMetaTerm . unsafeParseTerm
 
--- >>> "X [ x, y, z ] ↦ λy:t.(λx:t.λy:u.X[x, y X[y, x]])y" :: MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent
--- X [x0, x1, x2] ↦ λ x3 : t . (λ x4 : t . λ x5 : u . X [x4, x5 X [x5, x4]]) x3
+-- >>> "X [ x: t, y: u, z: v ] ↦ λy:t.(λx:t.λy:u.X[x, y X[y, x]])y" :: MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent
+-- TODO: no type
 instance Show (MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent) where
   show :: MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent -> String
   show = Raw.printTree . fromMetaSubst
 
--- >>> "X [ x, y ] ↦ λ x : t. y" :: MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent
--- X [x0, x1] ↦ λ x2 : t . x1
+-- >>> "X [ x: a, y: u ] ↦ λ x : t. y" :: MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent
+-- TODO: no type
 instance IsString (MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent) where
   fromString :: String -> MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent
   fromString = unsafeParseMetaSubst
@@ -445,7 +445,7 @@ unsafeParseMetaSubst :: String -> MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVar
 unsafeParseMetaSubst = either error id . parseMetaSubst
 
 -- >>> "∀ m: t, n: u. Y[m, X[n, m]] = (λ x: t. m (x n)) m" :: UnificationConstraint
--- syntax error at line 1, column 4 before `:'
+-- TODO: no type
 instance IsString UnificationConstraint where
   fromString :: String -> UnificationConstraint
   fromString = unsafeParseUnificationConstraint
