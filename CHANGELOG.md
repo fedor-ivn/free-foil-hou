@@ -1,4 +1,4 @@
-# Changelog for `free-foil-experiments`
+# Changelog for `free-foil-hou`
 
 All notable changes to this project will be documented in this file.
 

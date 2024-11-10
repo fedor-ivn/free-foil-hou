@@ -35,7 +35,11 @@ data ScopedTerm = AScopedTerm Term
 data Pattern = APattern VarIdent
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 
-data MetaSubst = MetaSubst MetaVarIdent [VarIdent] ScopedTerm
+data MetaSubst = AMetaSubst MetaVarIdent [VarIdent] ScopedTerm
+  deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
+
+data UnificationConstraint
+    = AUnificationConstraint [VarIdent] ScopedTerm ScopedTerm
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 
 data Type = Fun Type Type | Base VarIdent

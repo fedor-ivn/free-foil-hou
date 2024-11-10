@@ -4,14 +4,11 @@ cabal-version: 2.2
 --
 -- see: https://github.com/sol/hpack
 
-name:           free-foil-experiments
+name:           free-foil-hou
 version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/githubuser/free-foil-experiments#readme>
-homepage:       https://github.com/githubuser/free-foil-experiments#readme
-bug-reports:    https://github.com/githubuser/free-foil-experiments/issues
-author:         Author name here
-maintainer:     example@example.com
-copyright:      2024 Author name here
+description:    Please see the README on GitHub at <https://github.com/fedor-ivn/free-foil-hou#readme>
+homepage:       https://github.com/fedor-ivn/free-foil-hou#readme
+bug-reports:    https://github.com/fedor-ivn/free-foil-hou/issues
 license:        BSD-3-Clause
 license-file:   LICENSE
 build-type:     Custom
@@ -22,7 +19,7 @@ extra-source-files:
 
 source-repository head
   type: git
-  location: https://github.com/githubuser/free-foil-experiments
+  location: https://github.com/fedor-ivn/free-foil-hou
 
 custom-setup
   setup-depends:
@@ -41,9 +38,9 @@ library
       Language.Lambda.Syntax.Print
       Language.Lambda.Typed
   other-modules:
-      Paths_free_foil_experiments
+      Paths_free_foil_hou
   autogen-modules:
-      Paths_free_foil_experiments
+      Paths_free_foil_hou
   hs-source-dirs:
       src
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
@@ -58,14 +55,17 @@ library
     , bifunctors
     , containers
     , free-foil >=0.1.0
+    , kind-generics-th
+    , text
+    , tomland
   default-language: Haskell2010
 
-executable free-foil-experiments-exe
+executable free-foil-hou-exe
   main-is: Main.hs
   other-modules:
-      Paths_free_foil_experiments
+      Paths_free_foil_hou
   autogen-modules:
-      Paths_free_foil_experiments
+      Paths_free_foil_hou
   hs-source-dirs:
       app
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
@@ -80,16 +80,19 @@ executable free-foil-experiments-exe
     , bifunctors
     , containers
     , free-foil >=0.1.0
-    , free-foil-experiments
+    , free-foil-hou
+    , kind-generics-th
+    , text
+    , tomland
   default-language: Haskell2010
 
-test-suite free-foil-experiments-test
+test-suite free-foil-hou-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
-      Paths_free_foil_experiments
+      Paths_free_foil_hou
   autogen-modules:
-      Paths_free_foil_experiments
+      Paths_free_foil_hou
   hs-source-dirs:
       test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
@@ -104,5 +107,8 @@ test-suite free-foil-experiments-test
     , bifunctors
     , containers
     , free-foil >=0.1.0
-    , free-foil-experiments
+    , free-foil-hou
+    , kind-generics-th
+    , text
+    , tomland
   default-language: Haskell2010

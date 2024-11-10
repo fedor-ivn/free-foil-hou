@@ -49,7 +49,11 @@ transPattern x = case x of
 
 transMetaSubst :: Language.Lambda.Syntax.Abs.MetaSubst -> Result
 transMetaSubst x = case x of
-  Language.Lambda.Syntax.Abs.MetaSubst metavarident varidents scopedterm -> failure x
+  Language.Lambda.Syntax.Abs.AMetaSubst metavarident varidents scopedterm -> failure x
+
+transUnificationConstraint :: Language.Lambda.Syntax.Abs.UnificationConstraint -> Result
+transUnificationConstraint x = case x of
+  Language.Lambda.Syntax.Abs.AUnificationConstraint varidents scopedterm1 scopedterm2 -> failure x
 
 transType :: Language.Lambda.Syntax.Abs.Type -> Result
 transType x = case x of

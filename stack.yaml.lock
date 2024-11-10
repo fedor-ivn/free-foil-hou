@@ -5,12 +5,25 @@
 
 packages:
 - completed:
-    hackage: free-foil-0.1.0@sha256:c762b0f0373b08d0c67c73384573d3a8f652278bab0ab380cc9f7c9bd35f372f,3134
+    commit: 540b7a7f96915e78fa7014398c0eb97a08af23dc
+    git: https://github.com/fizruk/free-foil.git
+    name: free-foil
     pantry-tree:
-      sha256: 2baf3c3cbe18a4a618ef839d534907b306151b2d7da4bf1ba8da93030c157779
-      size: 1688
+      sha256: 5e5883319fe5a47b25a67a08684e9d778be978e77315dd4a943ac743522a61e3
+      size: 1820
+    subdir: haskell/free-foil
+    version: 0.1.0
   original:
-    hackage: free-foil-0.1.0
+    commit: 540b7a7f96915e78fa7014398c0eb97a08af23dc
+    git: https://github.com/fizruk/free-foil.git
+    subdir: haskell/free-foil
+- completed:
+    hackage: kind-generics-th-0.2.3.3@sha256:fc5f3aee46725e048a0159d73612a5d86c30017cd24ebab764347b65cffbd1d4,1519
+    pantry-tree:
+      sha256: 5dd528fca535a2b51cd45883520bc2fd86aca078436132bee42fa21218a21a2a
+      size: 328
+  original:
+    hackage: kind-generics-th-0.2.3.3@sha256:fc5f3aee46725e048a0159d73612a5d86c30017cd24ebab764347b65cffbd1d4,1519
 snapshots:
 - completed:
     sha256: 60372fd94e0c083c6484f17181fd5634e530550a14be00a4c032862c514bd802

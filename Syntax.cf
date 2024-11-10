@@ -13,22 +13,22 @@ CommandCompute. Command ::= "compute" Term ;
 terminator Command ";" ;
 
 -- Terms in the lambda calculus
-Lam.    Term ::= "λ" Pattern ":" Type "." ScopedTerm ;
-Let.    Term ::= "let" Pattern "=" Term "in" ScopedTerm ;
-App.    Term1 ::= Term1 Term2 ;  -- x y z  =  (x y) z  ≠  x (y z)
-Var.    Term2 ::= VarIdent ;
-MetaVar.   Term2 ::= MetaVarIdent "[" [Term] "]";
-_.      Term ::= Term1 ;
-_.      Term1 ::= Term2 ;
-_.      Term2 ::= "(" Term ")" ;
+Lam.     Term  ::= "λ" Pattern ":" Type "." ScopedTerm ;
+Let.     Term  ::= "let" Pattern "=" Term "in" ScopedTerm ;
+App.     Term1 ::= Term1 Term2 ;  -- x y z  =  (x y) z  ≠  x (y z)
+Var.     Term2 ::= VarIdent ;
+MetaVar. Term2 ::= MetaVarIdent "[" [Term] "]";
+_.       Term  ::= Term1 ;
+_.       Term1 ::= Term2 ;
+_.       Term2 ::= "(" Term ")" ;
 
 separator Term "," ;
 
 AScopedTerm. ScopedTerm ::= Term ;
 APattern. Pattern ::= VarIdent ;
 
-MetaSubst. MetaSubst ::= MetaVarIdent "[" [VarIdent] "]" "↦" ScopedTerm ;
--- MetaSubst. MetaSubst ::= MetaVarIdent "[" [Pattern] "]" "↦" ScopedTerm ;
+AMetaSubst. MetaSubst ::= MetaVarIdent "[" [VarIdent] "]" "↦" ScopedTerm ;
+AUnificationConstraint. UnificationConstraint ::= "∀" [VarIdent] "." ScopedTerm "=" ScopedTerm ;
 
 separator VarIdent "," ;
 
