@@ -58,8 +58,12 @@ All other symbols are terminals.
   |  |  **|**  | //Term// ``,`` //[Term]//
   | //ScopedTerm// | -> | //Term//
   | //Pattern// | -> | //VarIdent//
-  | //MetaSubst// | -> | //MetaVarIdent// ``[`` //[VarIdent]// ``]`` ``↦`` //ScopedTerm//
-  | //UnificationConstraint// | -> | ``∀`` //[VarIdent]// ``.`` //ScopedTerm// ``=`` //ScopedTerm//
+  | //Binder// | -> | //VarIdent// ``:`` //Type//
+  | //[Binder]// | -> | **eps**
+  |  |  **|**  | //Binder//
+  |  |  **|**  | //Binder// ``,`` //[Binder]//
+  | //MetaSubst// | -> | //MetaVarIdent// ``[`` //[Binder]// ``]`` ``↦`` //ScopedTerm//
+  | //UnificationConstraint// | -> | ``∀`` //[Binder]// ``.`` //ScopedTerm// ``=`` //ScopedTerm//
   | //[VarIdent]// | -> | **eps**
   |  |  **|**  | //VarIdent//
   |  |  **|**  | //VarIdent// ``,`` //[VarIdent]//

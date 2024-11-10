@@ -47,13 +47,17 @@ transPattern :: Language.Lambda.Syntax.Abs.Pattern -> Result
 transPattern x = case x of
   Language.Lambda.Syntax.Abs.APattern varident -> failure x
 
+transBinder :: Language.Lambda.Syntax.Abs.Binder -> Result
+transBinder x = case x of
+  Language.Lambda.Syntax.Abs.ABinder varident type_ -> failure x
+
 transMetaSubst :: Language.Lambda.Syntax.Abs.MetaSubst -> Result
 transMetaSubst x = case x of
-  Language.Lambda.Syntax.Abs.AMetaSubst metavarident varidents scopedterm -> failure x
+  Language.Lambda.Syntax.Abs.AMetaSubst metavarident binders scopedterm -> failure x
 
 transUnificationConstraint :: Language.Lambda.Syntax.Abs.UnificationConstraint -> Result
 transUnificationConstraint x = case x of
-  Language.Lambda.Syntax.Abs.AUnificationConstraint varidents scopedterm1 scopedterm2 -> failure x
+  Language.Lambda.Syntax.Abs.AUnificationConstraint binders scopedterm1 scopedterm2 -> failure x
 
 transType :: Language.Lambda.Syntax.Abs.Type -> Result
 transType x = case x of

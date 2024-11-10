@@ -287,7 +287,7 @@ toMetaSubst (Raw.AMetaSubst metavar vars term) =
 
 withMetaSubstVars
   :: (Distinct n)
-  => [Raw.VarIdent]
+  => [Raw.Binder]
   -> Scope n
   -> Map Raw.VarIdent (Foil.Name n)
   -> NameBinderList i n
@@ -300,7 +300,7 @@ withMetaSubstVars
      )
   -> r
 withMetaSubstVars [] scope env binderList cont = cont scope env binderList
-withMetaSubstVars (ident : idents) scope env binderList cont =
+withMetaSubstVars (Raw.ABinder ident _type : idents) scope env binderList cont =
   withFresh scope $ \binder ->
     let scope' = Foil.extendScope binder scope
         name = Foil.nameOf binder
@@ -318,11 +318,11 @@ fromMetaSubst (MetaSubst (metavar, MetaAbs binderList term)) =
       idents = toVarIdentList binderList
    in Raw.AMetaSubst metavar idents term'
 
-toVarIdentList :: NameBinderList i n -> [Raw.VarIdent]
+toVarIdentList :: NameBinderList i n -> [Raw.Binder]
 toVarIdentList NameBinderListEmpty = []
 toVarIdentList (NameBinderListCons x xs) =
   let ident = Raw.VarIdent $ "x" ++ show (Foil.nameOf x)
-   in ident : toVarIdentList xs
+   in Raw.ABinder ident (error "TODO: no type") : toVarIdentList xs
 
 data UnificationConstraint where
   UnificationConstraint
@@ -444,8 +444,8 @@ parseMetaSubst input =
 unsafeParseMetaSubst :: String -> MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent
 unsafeParseMetaSubst = either error id . parseMetaSubst
 
--- >>> "∀ m, n. Y[m, X[n, m]] = (λ x: t. m (x n)) m" :: UnificationConstraint
--- ∀ x0, x1 . Y [x0, X [x1, x0]] = (λ x2 : t . x0 (x2 x1)) x0
+-- >>> "∀ m: t, n: u. Y[m, X[n, m]] = (λ x: t. m (x n)) m" :: UnificationConstraint
+-- syntax error at line 1, column 4 before `:'
 instance IsString UnificationConstraint where
   fromString :: String -> UnificationConstraint
   fromString = unsafeParseUnificationConstraint

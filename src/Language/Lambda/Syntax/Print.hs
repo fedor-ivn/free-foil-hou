@@ -174,13 +174,22 @@ instance Print Language.Lambda.Syntax.Abs.Pattern where
   prt i = \case
     Language.Lambda.Syntax.Abs.APattern varident -> prPrec i 0 (concatD [prt 0 varident])
 
+instance Print Language.Lambda.Syntax.Abs.Binder where
+  prt i = \case
+    Language.Lambda.Syntax.Abs.ABinder varident type_ -> prPrec i 0 (concatD [prt 0 varident, doc (showString ":"), prt 0 type_])
+
+instance Print [Language.Lambda.Syntax.Abs.Binder] where
+  prt _ [] = concatD []
+  prt _ [x] = concatD [prt 0 x]
+  prt _ (x:xs) = concatD [prt 0 x, doc (showString ","), prt 0 xs]
+
 instance Print Language.Lambda.Syntax.Abs.MetaSubst where
   prt i = \case
-    Language.Lambda.Syntax.Abs.AMetaSubst metavarident varidents scopedterm -> prPrec i 0 (concatD [prt 0 metavarident, doc (showString "["), prt 0 varidents, doc (showString "]"), doc (showString "\8614"), prt 0 scopedterm])
+    Language.Lambda.Syntax.Abs.AMetaSubst metavarident binders scopedterm -> prPrec i 0 (concatD [prt 0 metavarident, doc (showString "["), prt 0 binders, doc (showString "]"), doc (showString "\8614"), prt 0 scopedterm])
 
 instance Print Language.Lambda.Syntax.Abs.UnificationConstraint where
   prt i = \case
-    Language.Lambda.Syntax.Abs.AUnificationConstraint varidents scopedterm1 scopedterm2 -> prPrec i 0 (concatD [doc (showString "\8704"), prt 0 varidents, doc (showString "."), prt 0 scopedterm1, doc (showString "="), prt 0 scopedterm2])
+    Language.Lambda.Syntax.Abs.AUnificationConstraint binders scopedterm1 scopedterm2 -> prPrec i 0 (concatD [doc (showString "\8704"), prt 0 binders, doc (showString "."), prt 0 scopedterm1, doc (showString "="), prt 0 scopedterm2])
 
 instance Print [Language.Lambda.Syntax.Abs.VarIdent] where
   prt _ [] = concatD []
