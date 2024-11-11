@@ -318,18 +318,18 @@ withMetaSubstVars (Raw.ABinder ident type_ : idents) scope env binderList binder
 fromMetaSubst :: MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent -> Raw.MetaSubst
 fromMetaSubst (MetaSubst (metavar, MetaAbs binderList binderTypes term)) =
   let term' = Raw.AScopedTerm $ fromTerm $ fromMetaTerm term
-      idents = toVarIdentList binderList binderTypes
-  in Raw.AMetaSubst metavar idents term'
+      idents = toBinders binderList binderTypes
+   in Raw.AMetaSubst metavar idents term'
 
-toVarIdentList :: Foil.Distinct i => NameBinderList i n -> Foil.NameMap n Raw.Type -> [Raw.Binder]
-toVarIdentList NameBinderListEmpty _binderTypes = []
-toVarIdentList (NameBinderListCons x xs) binderTypes =
-  case (Foil.assertDistinct x, Foil.assertExt x) of
-    (Foil.Distinct, Foil.Ext) ->
-      case (Foil.assertDistinct xs, Foil.assertExt xs) of
-        (Foil.Distinct, Foil.Ext) ->
-          let ident = Raw.VarIdent $ "x" ++ show (Foil.nameOf x)
-          in Raw.ABinder ident (Foil.lookupName (Foil.sink (Foil.nameOf x)) binderTypes) : toVarIdentList xs binderTypes
+toBinders :: (Foil.Distinct i) => NameBinderList i n -> Foil.NameMap n Raw.Type -> [Raw.Binder]
+toBinders NameBinderListEmpty _binderTypes = []
+toBinders (NameBinderListCons x xs) binderTypes
+  | Foil.Distinct <- Foil.assertDistinct x
+  , Foil.Distinct <- Foil.assertDistinct xs
+  , Foil.Ext <- Foil.assertExt xs =
+      let ident = Raw.VarIdent $ "x" ++ show (Foil.nameOf x)
+          typ = Foil.lookupName (Foil.sink (Foil.nameOf x)) binderTypes
+       in Raw.ABinder ident typ : toBinders xs binderTypes
 
 data UnificationConstraint where
   UnificationConstraint
@@ -350,7 +350,7 @@ toUnificationConstraint (Raw.AUnificationConstraint vars lhs rhs) =
 fromUnificationConstraint :: UnificationConstraint -> Raw.UnificationConstraint
 fromUnificationConstraint (UnificationConstraint _ binders binderTypes lhs rhs) =
   let fromMetaTerm' = Raw.AScopedTerm . fromTerm . fromMetaTerm
-   in Raw.AUnificationConstraint (toVarIdentList binders binderTypes) (fromMetaTerm' lhs) (fromMetaTerm' rhs)
+   in Raw.AUnificationConstraint (toBinders binders binderTypes) (fromMetaTerm' lhs) (fromMetaTerm' rhs)
 
 -- ** Conversion helpers for 'MetaTerm'
 
@@ -425,13 +425,13 @@ instance IsString (MetaTerm Raw.MetaVarIdent Foil.VoidS) where
   fromString = toMetaTerm . unsafeParseTerm
 
 -- >>> "X [ x: t, y: u, z: v ] ↦ λy:t.(λx:t.λy:u.X[x, y X[y, x]])y" :: MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent
--- TODO: no type
+-- X [x0 : t, x1 : u, x2 : v] ↦ λ x3 : t . (λ x4 : t . λ x5 : u . X [x4, x5 X [x5, x4]]) x3
 instance Show (MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent) where
   show :: MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent -> String
   show = Raw.printTree . fromMetaSubst
 
 -- >>> "X [ x: a, y: u ] ↦ λ x : t. y" :: MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent
--- TODO: no type
+-- X [x0 : a, x1 : u] ↦ λ x2 : t . x1
 instance IsString (MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent) where
   fromString :: String -> MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent
   fromString = unsafeParseMetaSubst
@@ -453,7 +453,7 @@ unsafeParseMetaSubst :: String -> MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVar
 unsafeParseMetaSubst = either error id . parseMetaSubst
 
 -- >>> "∀ m: t, n: u. Y[m, X[n, m]] = (λ x: t. m (x n)) m" :: UnificationConstraint
--- TODO: no type
+-- ∀ x0 : t, x1 : u . Y [x0, X [x1, x0]] = (λ x2 : t . x0 (x2 x1)) x0
 instance IsString UnificationConstraint where
   fromString :: String -> UnificationConstraint
   fromString = unsafeParseUnificationConstraint
