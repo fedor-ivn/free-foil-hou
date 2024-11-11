@@ -175,7 +175,7 @@ type SOAS metavar sig n = AST' (Sum sig (MetaAppSig metavar)) n
 type MetaTerm metavar n = SOAS metavar TermSig n
 
 data MetaAbs sig where
-  MetaAbs :: NameBinderList Foil.VoidS n -> AST' sig n -> MetaAbs sig
+  MetaAbs :: NameBinderList Foil.VoidS n -> Foil.NameMap n Raw.Type -> AST' sig n -> MetaAbs sig
 
 newtype MetaSubst sig metavar metavar' = MetaSubst {getMetaSubst :: (metavar, MetaAbs (Sum sig (MetaAppSig metavar')))}
 
@@ -212,7 +212,7 @@ applyMetaSubsts rename scope substs = \case
   Node (R2 (MetaAppSig metavar args)) ->
     let args' = map apply args
      in case lookup metavar (getMetaSubst <$> getSubsts substs) of
-          Just (MetaAbs names body) ->
+          Just (MetaAbs names _types body) ->
             let substs' =
                   nameMapToSubsts $
                     toNameMap Foil.emptyNameMap names args'
@@ -281,9 +281,9 @@ nameMapToSubsts nameMap =
 
 toMetaSubst :: Raw.MetaSubst -> MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent
 toMetaSubst (Raw.AMetaSubst metavar vars term) =
-  withMetaSubstVars vars Foil.emptyScope Map.empty NameBinderListEmpty $ \scope env binderList ->
+  withMetaSubstVars vars Foil.emptyScope Map.empty NameBinderListEmpty Foil.emptyNameMap $ \scope env binderList binderTypes ->
     let term' = toTerm scope env (getTermFromScopedTerm term)
-     in MetaSubst (metavar, MetaAbs binderList (toMetaTerm term'))
+     in MetaSubst (metavar, MetaAbs binderList binderTypes (toMetaTerm term'))
 
 withMetaSubstVars
   :: (Distinct n)
@@ -291,58 +291,66 @@ withMetaSubstVars
   -> Scope n
   -> Map Raw.VarIdent (Foil.Name n)
   -> NameBinderList i n
+  -> Foil.NameMap n Raw.Type
   -> ( forall l
         . (Distinct l)
        => Scope l
        -> Map Raw.VarIdent (Foil.Name l)
        -> NameBinderList i l
+       -> Foil.NameMap l Raw.Type
        -> r
      )
   -> r
-withMetaSubstVars [] scope env binderList cont = cont scope env binderList
-withMetaSubstVars (Raw.ABinder ident _type : idents) scope env binderList cont =
+withMetaSubstVars [] scope env binderList binderTypes cont = cont scope env binderList binderTypes
+withMetaSubstVars (Raw.ABinder ident type_ : idents) scope env binderList binderTypes cont =
   withFresh scope $ \binder ->
     let scope' = Foil.extendScope binder scope
         name = Foil.nameOf binder
         env' = Map.insert ident name (Foil.sink <$> env)
         binderList' = push binder binderList
-     in withMetaSubstVars idents scope' env' binderList' cont
+        binderTypes' = Foil.addNameBinder binder type_ binderTypes
+     in withMetaSubstVars idents scope' env' binderList' binderTypes' cont
  where
   push :: Foil.NameBinder i l -> NameBinderList n i -> NameBinderList n l
   push x NameBinderListEmpty = NameBinderListCons x NameBinderListEmpty
   push x (NameBinderListCons y ys) = NameBinderListCons y (push x ys)
 
 fromMetaSubst :: MetaSubst TermSig Raw.MetaVarIdent Raw.MetaVarIdent -> Raw.MetaSubst
-fromMetaSubst (MetaSubst (metavar, MetaAbs binderList term)) =
+fromMetaSubst (MetaSubst (metavar, MetaAbs binderList binderTypes term)) =
   let term' = Raw.AScopedTerm $ fromTerm $ fromMetaTerm term
-      idents = toVarIdentList binderList
-   in Raw.AMetaSubst metavar idents term'
+      idents = toVarIdentList binderList binderTypes
+  in Raw.AMetaSubst metavar idents term'
 
-toVarIdentList :: NameBinderList i n -> [Raw.Binder]
-toVarIdentList NameBinderListEmpty = []
-toVarIdentList (NameBinderListCons x xs) =
-  let ident = Raw.VarIdent $ "x" ++ show (Foil.nameOf x)
-   in Raw.ABinder ident (error "TODO: no type") : toVarIdentList xs
+toVarIdentList :: Foil.Distinct i => NameBinderList i n -> Foil.NameMap n Raw.Type -> [Raw.Binder]
+toVarIdentList NameBinderListEmpty _binderTypes = []
+toVarIdentList (NameBinderListCons x xs) binderTypes =
+  case (Foil.assertDistinct x, Foil.assertExt x) of
+    (Foil.Distinct, Foil.Ext) ->
+      case (Foil.assertDistinct xs, Foil.assertExt xs) of
+        (Foil.Distinct, Foil.Ext) ->
+          let ident = Raw.VarIdent $ "x" ++ show (Foil.nameOf x)
+          in Raw.ABinder ident (Foil.lookupName (Foil.sink (Foil.nameOf x)) binderTypes) : toVarIdentList xs binderTypes
 
 data UnificationConstraint where
   UnificationConstraint
     :: (Distinct n)
     => Scope n
     -> NameBinderList Foil.VoidS n
+    -> Foil.NameMap n Raw.Type
     -> MetaTerm Raw.MetaVarIdent n
     -> MetaTerm Raw.MetaVarIdent n
     -> UnificationConstraint
 
 toUnificationConstraint :: Raw.UnificationConstraint -> UnificationConstraint
 toUnificationConstraint (Raw.AUnificationConstraint vars lhs rhs) =
-  withMetaSubstVars vars Foil.emptyScope Map.empty NameBinderListEmpty $ \scope env binders ->
+  withMetaSubstVars vars Foil.emptyScope Map.empty NameBinderListEmpty Foil.emptyNameMap $ \scope env binders binderTypes ->
     let toMetaTerm' = toMetaTerm . toTerm scope env . getTermFromScopedTerm
-     in UnificationConstraint scope binders (toMetaTerm' lhs) (toMetaTerm' rhs)
+     in UnificationConstraint scope binders binderTypes (toMetaTerm' lhs) (toMetaTerm' rhs)
 
 fromUnificationConstraint :: UnificationConstraint -> Raw.UnificationConstraint
-fromUnificationConstraint (UnificationConstraint _ binders lhs rhs) =
+fromUnificationConstraint (UnificationConstraint _ binders binderTypes lhs rhs) =
   let fromMetaTerm' = Raw.AScopedTerm . fromTerm . fromMetaTerm
-   in Raw.AUnificationConstraint (toVarIdentList binders) (fromMetaTerm' lhs) (fromMetaTerm' rhs)
+   in Raw.AUnificationConstraint (toVarIdentList binders binderTypes) (fromMetaTerm' lhs) (fromMetaTerm' rhs)
 
 -- ** Conversion helpers for 'MetaTerm'
 
@@ -572,12 +580,12 @@ solveUnificationConstraint
   :: MetaSubsts TermSig Raw.MetaVarIdent Raw.MetaVarIdent
   -> UnificationConstraint
   -> UnificationConstraint
-solveUnificationConstraint substs (UnificationConstraint scope binders lhs rhs) =
+solveUnificationConstraint substs (UnificationConstraint scope binders binderTypes lhs rhs) =
   let solve = nfMetaTerm scope . applyMetaSubsts id scope substs
-   in UnificationConstraint scope binders (solve lhs) (solve rhs)
+   in UnificationConstraint scope binders binderTypes (solve lhs) (solve rhs)
 
 isSolved :: UnificationConstraint -> Bool
-isSolved (UnificationConstraint scope _ lhs rhs) = alphaEquiv scope lhs rhs
+isSolved (UnificationConstraint scope _binders _binderTypes lhs rhs) = alphaEquiv scope lhs rhs
 
 -- Data types
 data Config = Config
