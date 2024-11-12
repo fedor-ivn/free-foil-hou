@@ -36,7 +36,7 @@ library
       Language.Lambda.Syntax.Lex
       Language.Lambda.Syntax.Par
       Language.Lambda.Syntax.Print
-      Runner.Impl
+      Language.Lambda.Typed
   other-modules:
       Paths_free_foil_hou
   autogen-modules:

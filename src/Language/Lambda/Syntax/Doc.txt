@@ -28,9 +28,9 @@ The reserved words used in Syntax are the following:
   | ``compute`` | ``in`` | ``let`` | ``λ``
 
 The symbols used in Syntax are the following:
-  | ; | . | = | [
-  | ] | ( | ) | ,
-  | ↦ | ∀ |  |
+  | ; | : | . | =
+  | [ | ] | ( | )
+  | , | ↦ | ∀ | ->
 
 ===Comments===
 Single-line comments begin with --.There are no multiple-line comments in the grammar.
@@ -45,7 +45,7 @@ All other symbols are terminals.
   | //Command// | -> | ``compute`` //Term//
   | //[Command]// | -> | **eps**
   |  |  **|**  | //Command// ``;`` //[Command]//
-  | //Term// | -> | ``λ`` //Pattern// ``.`` //ScopedTerm//
+  | //Term// | -> | ``λ`` //Pattern// ``:`` //Type// ``.`` //ScopedTerm//
   |  |  **|**  | ``let`` //Pattern// ``=`` //Term// ``in`` //ScopedTerm//
   |  |  **|**  | //Term1//
   | //Term1// | -> | //Term1// //Term2//
@@ -58,11 +58,19 @@ All other symbols are terminals.
   |  |  **|**  | //Term// ``,`` //[Term]//
   | //ScopedTerm// | -> | //Term//
   | //Pattern// | -> | //VarIdent//
-  | //MetaSubst// | -> | //MetaVarIdent// ``[`` //[VarIdent]// ``]`` ``↦`` //ScopedTerm//
-  | //UnificationConstraint// | -> | ``∀`` //[VarIdent]// ``.`` //ScopedTerm// ``=`` //ScopedTerm//
+  | //Binder// | -> | //VarIdent// ``:`` //Type//
+  | //[Binder]// | -> | **eps**
+  |  |  **|**  | //Binder//
+  |  |  **|**  | //Binder// ``,`` //[Binder]//
+  | //MetaSubst// | -> | //MetaVarIdent// ``[`` //[Binder]// ``]`` ``↦`` //ScopedTerm//
+  | //UnificationConstraint// | -> | ``∀`` //[Binder]// ``.`` //ScopedTerm// ``=`` //ScopedTerm//
   | //[VarIdent]// | -> | **eps**
   |  |  **|**  | //VarIdent//
   |  |  **|**  | //VarIdent// ``,`` //[VarIdent]//
+  | //Type// | -> | //Type1// ``->`` //Type//
+  |  |  **|**  | //Type1//
+  | //Type1// | -> | //VarIdent//
+  |  |  **|**  | ``(`` //Type// ``)``
 
 
 
