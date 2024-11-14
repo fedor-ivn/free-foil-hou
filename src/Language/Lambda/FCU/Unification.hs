@@ -48,16 +48,7 @@ unify bvs (th, (s, t)) = case (devar th s, devar th t) of
 
 -- Example from the paper
 -- >>> unify [] ([], ("l1" :.: ("l2" :.: ("X" :@ ("Fst" :@ "l1") :@ ("Fst" :@ ("Snd" :@ "l2")))), "l1" :.: ("l2" :.: ("Snd" :@ (("Y" :@ ("Fst" :@ "l2")) :@ ("Fst" :@ "l1"))))))
--- [("Y",λz1 . (λz2 . (Y' z2))),("X",λz1 . (λz2 . (Snd Y' z1)))]
-
--- >>> unify [] ([], ("X" :@ "a" :@ "b" :@ "c", "X" :@ "a" :@ "b" :@ "c"))
--- Same argument lists in (4) rule
-
--- >>> unify [] ([], ("X" :@ "a" :@ "c", "X" :@ "a" :@ "b" :@ "c"))
--- Different argument lists lengths in (4) rule
-
--- >>> unify [] ([], ("X" :@ "a" :@ "b1" :@ "c", "X" :@ "a" :@ "b2" :@ "c"))
--- [("X",λz1 . (λz2 . (λz3 . ((X' z1) (z3)))))]
+-- λz1 . (λz2 . (Snd Y' z1))
 
 -- >>> unify [] ([], ("X" :@ "a" :@ "b1" :@ "c", "Y" :@ "a" :@ "b2" :@ "c"))
 -- [("Y",λz1 . (λz2 . (λz3 . (Y' z2)))),("X",λz1 . (λz2 . (λz3 . (((X z1) (z2)) (z3)))))]

@@ -1,6 +1,6 @@
 cabal-version: 2.2
 
--- This file has been generated from package.yaml by hpack version 0.37.0.
+-- This file has been generated from package.yaml by hpack version 0.38.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -31,6 +31,15 @@ custom-setup
 library
   exposed-modules:
       Data.SOAS
+      Language.Lambda.FCU.Covers
+      Language.Lambda.FCU.Discharge
+      Language.Lambda.FCU.Prune
+      Language.Lambda.FCU.Restrictions
+      Language.Lambda.FCU.RTerms
+      Language.Lambda.FCU.Strip
+      Language.Lambda.FCU.Substitutions
+      Language.Lambda.FCU.Terms
+      Language.Lambda.FCU.Unification
       Language.Lambda.Impl
       Language.Lambda.Syntax.Abs
       Language.Lambda.Syntax.Layout
@@ -45,11 +54,10 @@ library
   hs-source-dirs:
       src
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
-  build-tools:
-      alex >=3.2.4
-    , happy >=1.19.9
   build-tool-depends:
       BNFC:bnfc >=2.9.4.1
+    , alex:alex >=3.2.4
+    , happy:happy >=1.19.9
   build-depends:
       array >=0.5.3.0
     , base >=4.7 && <5
@@ -71,11 +79,10 @@ executable free-foil-hou-exe
   hs-source-dirs:
       app
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
-  build-tools:
-      alex >=3.2.4
-    , happy >=1.19.9
   build-tool-depends:
       BNFC:bnfc >=2.9.4.1
+    , alex:alex >=3.2.4
+    , happy:happy >=1.19.9
   build-depends:
       array >=0.5.3.0
     , base >=4.7 && <5
@@ -99,11 +106,10 @@ test-suite doctests
   hs-source-dirs:
       test/doctests
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wall
-  build-tools:
-      alex >=3.2.4
-    , happy >=1.19.9
   build-tool-depends:
       BNFC:bnfc >=2.9.4.1
+    , alex:alex >=3.2.4
+    , happy:happy >=1.19.9
   build-depends:
       array >=0.5.3.0
     , base >=4.7 && <5
@@ -128,11 +134,10 @@ test-suite spec
   hs-source-dirs:
       test/hspec
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
-  build-tools:
-      alex >=3.2.4
-    , happy >=1.19.9
   build-tool-depends:
       BNFC:bnfc >=2.9.4.1
+    , alex:alex >=3.2.4
+    , happy:happy >=1.19.9
   build-depends:
       QuickCheck
     , array >=0.5.3.0
