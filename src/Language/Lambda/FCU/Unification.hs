@@ -28,6 +28,31 @@ devar _ t@(Constructor _) = t
 -- >>> devar [("X", "Y" :@ "z")] ("X" :@ "z")
 -- (Y z) z
 
+
+betaReduceOnce :: Term -> Term
+betaReduceOnce ((x :.: t1) :@ t2) = betaReduceOnce (devar [(x, t2)] t1)
+betaReduceOnce (t1 :@ t2) = betaReduceOnce t1 :@ betaReduceOnce t2
+betaReduceOnce (x :.: t) = x :.: betaReduceOnce t
+betaReduceOnce t = t
+
+-- >>> betaReduceOnce ("x" :.: "y" :@ "z")
+-- y
+
+-- >>> betaReduceOnce ("x" :.: "y" :@ "z" :@ "w")
+-- y w
+
+-- >>> betaReduceOnce (("x" :.: "x" :@ "z") :@ "w")
+-- z w
+
+-- λz1 . (λz2 . (Snd ((λz1 . (λz2 . (Y' z2))) (Fst l2)) (z1)))
+
+betaReduce :: Term -> Term
+betaReduce t = case betaReduceOnce t of
+  t' -> if t == t' then t else betaReduce t'
+
+-- >>> betaReduce ("z1" :.: ("z2" :.: ("Snd" :@ (("k1" :.: ("k2" :.: ("Y" :@ "k2" ))) :@ ("Fst" :@ "l2") :@ "z1"))))
+-- λz1 . (λz2 . (Snd Y z1))
+
 strip :: Term -> (Term, [Term])
 strip (t1 :@ t2) =
   let (h, rest) = strip t1
@@ -77,7 +102,7 @@ abst (x : xs, t) = x :.: abst (xs, t)
 hnf :: ([Id], [Char], [Id]) -> Term
 hnf (vars, base, args) =
   foldr
-    (\x acc -> x :.: acc)
+    (:.:)
     (foldl (\acc x -> acc :@ O x) (Constructor base) args)
     vars
 
@@ -92,7 +117,7 @@ discharge th t = case lookup t th of
   Just y -> O y
   Nothing -> case t of
     (x :.: t1) -> x :.: discharge th t1
-    (t1 :@ t2) -> (discharge th t1) :@ (discharge th t2)
+    (t1 :@ t2) -> discharge th t1 :@ discharge th t2
     t -> t
 
 -- >>> discharge [("Cons" :@ "x" :@ "y", "z")] ("Cons" :@ "x" :@ "y")
@@ -115,9 +140,9 @@ subset sm tn = all (`elem` tn) sm
 -- False
 
 eqsel :: [Id] -> [Term] -> [Term] -> [Id]
-eqsel vsm tn sm = 
-    [v | (v, t) <- zip vsm tn, not (t `elem` sm)]
-  
+eqsel vsm tn sm =
+    [v | (v, t) <- zip vsm tn, t `notElem` sm]
+
 -- >>> eqsel ["z1", "z2"] ["x", "y", "z"] ["x", "y", "z"]  
 -- []
 
@@ -142,6 +167,7 @@ prune tn (rho, u) = case strip (devar rho u) of
       else
         let vsm = mkvars sm
          in (_W, hnf (vsm, _W ++ "'", eqsel vsm tn sm)) : rho
+  _ -> error "Prune: unexpected case"
 
 -- >>> prune ["x", "y"] ([], "Cons" :@ "x" :@ "y")
 -- []
@@ -154,7 +180,7 @@ prune tn (rho, u) = case strip (devar rho u) of
 
 ------- Unification ----- bvs (th (s,t)) = Q, (theta, S)
 unify :: [(Char, Id)] -> ([(Id, Term)], (Term, Term)) -> [(Id, Term)]
-unify bvs (th, (s, t)) = case ((devar th s), (devar th t)) of
+unify bvs (th, (s, t)) = case (devar th s, devar th t) of
   (x :.: s, x' :.: t) ->
     let renamed = if x == x' then t else rename x' x t
         newBvs = ('B', x) : bvs
@@ -187,7 +213,7 @@ unify bvs (th, (s, t)) = case ((devar th s), (devar th t)) of
 
 -- Example from the paper
 -- >>> unify [] ([], ("l1" :.: ("l2" :.: ("X" :@ ("Fst" :@ "l1") :@ ("Fst" :@ ("Snd" :@ "l2")))), "l1" :.: ("l2" :.: ("Snd" :@ (("Y" :@ ("Fst" :@ "l2")) :@ ("Fst" :@ "l1"))))))
--- [("Y",λz1 . (λz2 . (Y' z2))),("X",λz1 . (λz2 . (Snd ((λz1 . (λz2 . (Y' z2))) (Fst l2)) (z1))))]
+-- λz1 . (λz2 . (Snd Y' z1))
 
 
 cases :: [(Char, Id)] -> ([(Id, Term)], (Term, Term)) -> [(Id, Term)]
@@ -201,7 +227,7 @@ cases bvs (th, (s, t)) = case (strip s, strip t) of
 caseFlexRigid :: [(Char, Id)] -> (Id, [Term], Term, [(Id, Term)]) -> [(Id, Term)]
 caseFlexRigid bvs (_F, tn, s, rho) -- s is rigid
   | occ _F rho s = error "Restriction fail at flexrigid case"
-  | otherwise = 
+  | otherwise =
       let zn = mkvars tn
           pruningResult = prune tn (rho, s)
           pruned = devar pruningResult s
@@ -215,11 +241,11 @@ caseRigidRigid :: [(Char, Id)] -> (Term, [Term], Term, [Term], [(Id, Term)]) -> 
 caseRigidRigid bvs (a, sn, b, tm, th) = case (a, b) of
   (O x, O y) -> applicableCase bvs (x, y, sn, tm, th)
   (Constructor x, Constructor y) -> applicableCase bvs (x, y, sn, tm, th)
-  otherwise -> error (show a ++ " and " ++ show b ++ " are not unifiable")
+  _ -> error (show a ++ " and " ++ show b ++ " are not unifiable")
   where
     applicableCase :: [(Char, Id)] -> (Id, Id, [Term], [Term], [(Id, Term)]) -> [(Id, Term)]
     applicableCase bvs (x, y, sn, tm, th) =
-      if (x == y && length sn == length tm)
+      if x == y && length sn == length tm
         then foldl (\th' (s, t) -> unify bvs (th', (s, t))) th (zip sn tm)
         else error "Different function heads or argument lists lengths in (2) rule"
 
