@@ -165,9 +165,15 @@ unify bvs (th, (s, t)) = case ((devar th s), (devar th t)) of
 -- >>> unify [] ([], ("X" :@ "y", "Cons" :@ "x"))
 -- [("X",λz1 . (Cons x))]
 
+-- >>> unify [] ([], ("X" :@ "y", "Cons" :@ "x" :@ "y"))
+-- [("X",λz1 . ((Cons x) z1))]
+
+-- >>> unify [] ([], ("X" :@ "y" :@ "x", "Cons" :@ "x" :@ ("Cons" :@ "z" :@ "x")))
+-- [("X",λz1 . (λz2 . ((Cons z2) (Cons z) z2)))]
+
 cases :: [(Char, Id)] -> ([(Id, Term)], (Term, Term)) -> [(Id, Term)]
 cases bvs (th, (s, t)) = case (strip s, strip t) of
-  ((W _F, sn), (W _G, zm)) -> error "FlexFlex case"
+  ((W _F, sn), (W _G, zm)) -> caseFlexFlex bvs (_F,sn,_G,zm,th)
   ((W _F, sn), (Constructor _, _)) -> caseFlexRigid bvs (_F, sn, t, th)
   ((Constructor _, _), (W _F, sn)) -> caseFlexRigid bvs (_F, sn, s, th)
   ((a, []), (b, [])) -> if a == b then th else error "Different terms, not unifiable"
@@ -193,3 +199,7 @@ caseRigidRigid bvs (a, sn, b, tm, th) = case (a, b) of
       if (x == y && length sn == length tm)
         then foldl (\th' (s, t) -> unify bvs (th', (s, t))) th (zip sn tm)
         else error "Different function heads or argument lists lengths in (2) rule"
+
+
+caseFlexFlex :: [(Char, Id)] -> (Id, [Term], Id, [Term], [(Id, Term)]) -> [(Id, Term)]
+caseFlexFlex bvs (_F, sn, _G, tm, th) = error "FlexFlex case not implemented"
