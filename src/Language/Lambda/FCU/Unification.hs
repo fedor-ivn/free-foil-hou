@@ -12,9 +12,11 @@ devar :: [(Id, Term)] -> Term -> Term
 devar th (O x) = case lookup x th of
   Just t -> devar th t
   Nothing -> O x
+devar th (W x) = case lookup x th of
+  Just t -> devar th t
+  Nothing -> W x
 devar th (s :@ t) = devar th s :@ devar th t
 devar th (x :.: t) = x :.: devar th t
-devar _ t@(W _) = t
 devar _ t@(Constructor _) = t
 
 -- >>> devar [("x", "Y")] (O "x")
@@ -22,6 +24,9 @@ devar _ t@(Constructor _) = t
 
 -- >>> devar [("x", "Y")] (O "z")
 -- z
+
+-- >>> devar [("X", "Y" :@ "z")] ("X" :@ "z")
+-- (Y z) z
 
 strip :: Term -> (Term, [Term])
 strip (t1 :@ t2) =
@@ -33,7 +38,7 @@ strip t = (t, [])
 -- (X,[y,z])
 
 --- >>> strip ("Cons" :@ "x" :@ ("y" :@ ("z" :.: "z")))
--- (Cons,[x,y (λz . (z))])
+-- (Cons,[x,y λz . (z)])
 
 rename :: Id -> Id -> Term -> Term
 rename x x' (O y) = if x == y then O x' else O y
@@ -48,7 +53,7 @@ rename _ _ t = t
 -- λx . (z)
 
 occ :: Id -> [(Id, Term)] -> Term -> Bool
-occ _ _ _ = error "occ not implemented"
+occ _ _ _ = False
 
 mkvars :: [Term] -> [Id]
 mkvars sn = ["z" ++ show i | i <- [1 .. length sn]]
@@ -115,12 +120,13 @@ eqsel vsm tn sm =
 
 prune :: [Term] -> ([(Id, Term)], Term) -> [(Id, Term)]
 prune tn (rho, u) = case strip (devar rho u) of
+  (_, []) -> rho
   (x :.: t', _) -> prune (O x : tn) (rho, t')
   (Constructor _, rr) -> foldlN (prune tn) (rho, rr)
   (O x, rr) ->
     if O x `elem` tn
       then foldlN (prune tn) (rho, rr)
-      else error "Not unifiable"
+      else error (show (O x) ++ " not in " ++ show tn)
   (W _W, sm) ->
     if sm `subset` tn -- all sm appear in lhs
       then rho
@@ -129,17 +135,42 @@ prune tn (rho, u) = case strip (devar rho u) of
          in (_W, hnf (vsm, _W ++ "'", eqsel vsm tn sm)) : rho
 
 
+-- >>> prune ["x", "y"] ([], "Cons" :@ "x" :@ "y")
+-- []
+
+-- >>> prune ["x", "q", "y"] ([], "X" :@ ("Snd" :@ "x") :@ "q")
+-- [("X",λz1 . (λz2 . (X' z1)))]
+
+-- >>> prune ["y"] ([("X", "z1" :.: ("Cons" :@ "x"))], "Cons" :@ "x")
+-- [("X",λz1 . (Cons x))]
+
 ------- Unification ----- bvs (th (s,t)) = Q, (theta, S)
 unify :: [(Char, Id)] -> ([(Id, Term)], (Term, Term)) -> [(Id, Term)]
 unify bvs (th, (s, t)) = case ((devar th s), (devar th t)) of
   (x :.: s, x' :.: t) -> unify (('B', x) : bvs) (th, (s, if x == x' then t else rename x x' t))
   (s, t) -> cases bvs (th, (s, t))
 
+-- >>> unify [] ([], ("x", "x"))
+-- []
+
+-- >>> unify [] ([], ("x", "y"))
+-- Different terms, not unifiable
+
+-- >>> unify [] ([], ("Cons" :@ "y" :@ "z", "Cons" :@ "y" :@ "z"))
+-- []
+
+-- >>> unify [] ([], ("Cons" :@ "y" :@ "z", "Cons" :@ "y" :@ "w"))
+-- Different terms, not unifiable
+
+-- >>> unify [] ([], ("X" :@ "y", "Cons" :@ "x"))
+-- [("X",λz1 . (Cons x))]
+
 cases :: [(Char, Id)] -> ([(Id, Term)], (Term, Term)) -> [(Id, Term)]
 cases bvs (th, (s, t)) = case (strip s, strip t) of
   ((W _F, sn), (W _G, zm)) -> error "FlexFlex case"
-  ((W _F, sn), _) -> caseFlexRigid bvs (_F, sn, t, th)
-  (_, (W _F, sn)) -> caseFlexRigid bvs (_F, sn, s, th)
+  ((W _F, sn), (Constructor _, _)) -> caseFlexRigid bvs (_F, sn, t, th)
+  ((Constructor _, _), (W _F, sn)) -> caseFlexRigid bvs (_F, sn, s, th)
+  ((a, []), (b, [])) -> if a == b then th else error "Different terms, not unifiable"
   ((a, sn), (b, tm)) -> caseRigidRigid bvs (a, sn, b, tm, th)
 
 caseFlexRigid :: [(Char, Id)] -> (Id, [Term], Term, [(Id, Term)]) -> [(Id, Term)]
