@@ -1,81 +1,164 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Language.Lambda.FCU.Unification
-  ( unify
-  ) where
+  ( unify,
+  )
+where
 
-import           Language.Lambda.FCU.OccurCheck    (occ)
-import           Language.Lambda.FCU.RTerms        (RTerm (..), toRTerm)
-import           Language.Lambda.FCU.Substitutions (Substitutions (..))
-import           Language.Lambda.FCU.Terms         (Id, Term (..))
+import Language.Lambda.FCU.RTerms (RTerm (..), toRTerm)
+import Language.Lambda.FCU.Terms (Id, Term (..))
 
-------- Unification ----- bvs (th (s,t)) = Q for all, (subs, S)
-unify :: [Id] -> (Substitutions, (Term, Term)) -> Maybe Substitutions
-unify _ (th, (O x, O y)) = unifyIdent x y th
-unify bvs (th, (x :.: s', y :.: t')) = unifyAbstraction x y s' t' bvs th
-unify bvs (th, (f :@ x, g :@ y)) =
-  case (f, g) of
-    (W _, W _) -> unifyFlexFlex f g (toRTerm x) (toRTerm y) bvs th
-    (W _, _)   -> unifyFlexRigid bvs (f, toRTerm x, g, y, th)
-    (_, W _)   -> unifyFlexRigid bvs (g, toRTerm y, f, x, th)
-    _          -> unifyFunction f g x y bvs th
-unify _ _ = Nothing
+devar :: [(Id, Term)] -> Term -> Term
+devar th (O x) = case lookup x th of
+  Just t -> devar th t
+  Nothing -> O x
+devar th (s :@ t) = devar th s :@ devar th t
+devar th (x :.: t) = x :.: devar th t
+devar _ t@(W _) = t
+devar _ t@(Constructor _) = t
 
--- Helper function to unify identical vars
-unifyIdent :: Id -> Id -> Substitutions -> Maybe Substitutions
-unifyIdent x y th =
-  if x == y
-    then Just th
-    else Nothing
+-- >>> devar [("x", "Y")] (O "x")
+-- Y
 
--- Helper function to unify abstractions
-unifyAbstraction ::
-     Id -> Id -> Term -> Term -> [Id] -> Substitutions -> Maybe Substitutions
-unifyAbstraction x y s' t' bvs th =
-  if x == y
-    then unify (bvs ++ [x]) (th, (s', t'))
-    else Nothing
+-- >>> devar [("x", "Y")] (O "z")
+-- z
 
--- Helper function to unify functions
-unifyFunction ::
-     Term
-  -> Term
-  -> Term
-  -> Term
-  -> [Id]
-  -> Substitutions
-  -> Maybe Substitutions
-unifyFunction f g x y bvs th =
-  if f == g
-    then unify bvs (th, (x, y))
-    else Nothing
+strip :: Term -> (Term, [Term])
+strip (t1 :@ t2) =
+  let (h, rest) = strip t1
+   in (h, rest ++ [t2])
+strip t = (t, [])
 
--- Helper function to unify flexible and rigid terms
-unifyFlexRigid ::
-     [Id] -> (Term, RTerm, Term, Term, Substitutions) -> Maybe Substitutions
-unifyFlexRigid bvs (_F, ym, f, x, th)
-  | occ _F th x = error "Occurances check failed"
-  | otherwise = error "unifyFlexRigid not implemented"
+--- >>> strip ("X" :@ "y" :@ "z")
+-- (X,[y,z])
 
--- Helper function to unify flexible and flexible terms
-unifyFlexFlex ::
-     Term
-  -> Term
-  -> RTerm
-  -> RTerm
-  -> [Id]
-  -> Substitutions
-  -> Maybe Substitutions
-unifyFlexFlex _ _ _ _ _ _ = error "unifyFlexFlex not implemented"
--- >>> unify [] (Substitutions [], ("x", "x"))
--- Just []
--- >>> unify [] (Substitutions [], ("x", "y"))
--- Nothing
--- >>> unify [] (Substitutions [], ("x" :.: "y", "z" :.: "z"))
--- Nothing
--- >>> unify [] (Substitutions [], ("x" :.: "y", "x" :.: "y"))
--- Just []
--- >>> unify [] (Substitutions [], ("Fst" :@ "x", "Fst" :@ "y"))
--- Nothing
--- >>> unify [] (Substitutions [], ("Cons" :@ "x" :@ "y", "Cons" :@ "x" :@ "y"))
--- Just []
+--- >>> strip ("Cons" :@ "x" :@ ("y" :@ ("z" :.: "z")))
+-- (Cons,[x,y (λz . (z))])
+
+rename :: Id -> Id -> Term -> Term
+rename x x' (O y) = if x == y then O x' else O y
+rename x x' (s :@ t) = rename x x' s :@ rename x x' t
+rename x x' (y :.: t) = y :.: rename x x' t
+rename _ _ t = t
+
+-- >>> rename "x" "y" ("x" :@ "z")
+-- y (z)
+
+-- >>> rename "x" "y" ("x" :.: "z")
+-- λx . (z)
+
+occ :: Id -> [(Id, Term)] -> Term -> Bool
+occ _ _ _ = error "occ not implemented"
+
+mkvars :: [Term] -> [Id]
+mkvars sn = ["z" ++ show i | i <- [1 .. length sn]]
+
+-- >>> mkvars ["x", "y", "z"]
+-- ["z1","z2","z3"]
+
+-- >>> mkvars ["x" :@ "y", "z" :.: "z"]
+-- ["z1","z2"]
+
+abst :: ([Id], Term) -> Term
+abst ([], t) = t
+abst (x : xs, t) = x :.: abst (xs, t)
+
+-- >>> abst (["x", "y"], "z")
+-- λx . (λy . (z))
+
+-- >>> abst (mkvars ["x" :@ "y", "z" :.: "z"], "z" :@ "w")
+-- λz1 . (λz2 . (z w))
+
+hnf :: ([Id], [Char], [Id]) -> Term
+hnf (vars, base, args) = 
+  foldr (\x acc -> x :.: acc)
+    (foldl (\acc x -> acc :@ O x) (Constructor base) args)
+    vars
+
+-- >>> hnf (["z1", "z2"], "X", ["z1", "z2", "z3"])
+-- λz1 . (λz2 . (((X z1) z2) z3))
+
+-- >>> hnf (mkvars ["x" :@ "y", "z" :.: "z"], "X", mkvars ["x" :@ "y", "z" :.: "z"])
+-- λz1 . (λz2 . ((X z1) z2))
+
+discharge :: [(Term, Id)] -> Term -> Term
+discharge th t = case lookup t th of
+  Just y -> O y
+  Nothing -> case t of
+    (x :.: t1) -> x :.: discharge th t1
+    (t1 :@ t2) -> (discharge th t1) :@ (discharge th t2)
+    t -> t
+
+-- >>> discharge [("Cons" :@ "x" :@ "y", "z")] ("Cons" :@ "x" :@ "y")
+-- z
+
+-- >>> discharge [("Fst" :@ "x", "z")] ("Cons" :@ ("Fst" :@ "x") :@ "w")
+-- (Cons z) w
+
+foldlN :: (([(Id, Term)], Term) -> [(Id, Term)]) -> ([(Id, Term)], [Term]) -> [(Id, Term)]
+foldlN _ (rho, []) = rho
+foldlN f (rho, t : ts) = foldlN f (f (rho, t), ts)
+
+subset :: [Term] -> [Term] -> Bool
+subset sm tn = all (`elem` tn) sm
+
+-- >>> subset ["x", "y"] ["x", "y", "z"]
+-- True
+
+-- >>> subset ["x", "y", "z"] ["x", "y"]
+-- False
+
+eqsel :: [Id] -> [Term] -> [Term] -> [Id]
+eqsel vsm tn sm =
+  let indices = [i | (i, (t1, t2)) <- zip [0 ..] (zip tn sm), t1 /= t2]
+   in [v | (i, v) <- zip [0 ..] vsm, i `elem` indices]
+
+prune :: [Term] -> ([(Id, Term)], Term) -> [(Id, Term)]
+prune tn (rho, u) = case strip (devar rho u) of
+  (x :.: t', _) -> prune (O x : tn) (rho, t')
+  (Constructor _, rr) -> foldlN (prune tn) (rho, rr)
+  (O x, rr) ->
+    if O x `elem` tn
+      then foldlN (prune tn) (rho, rr)
+      else error "Not unifiable"
+  (W _W, sm) ->
+    if sm `subset` tn -- all sm appear in lhs
+      then rho
+      else
+        let vsm = mkvars sm
+         in (_W, hnf (vsm, _W ++ "'", eqsel vsm tn sm)) : rho
+
+
+------- Unification ----- bvs (th (s,t)) = Q, (theta, S)
+unify :: [(Char, Id)] -> ([(Id, Term)], (Term, Term)) -> [(Id, Term)]
+unify bvs (th, (s, t)) = case ((devar th s), (devar th t)) of
+  (x :.: s, x' :.: t) -> unify (('B', x) : bvs) (th, (s, if x == x' then t else rename x x' t))
+  (s, t) -> cases bvs (th, (s, t))
+
+cases :: [(Char, Id)] -> ([(Id, Term)], (Term, Term)) -> [(Id, Term)]
+cases bvs (th, (s, t)) = case (strip s, strip t) of
+  ((W _F, sn), (W _G, zm)) -> error "FlexFlex case"
+  ((W _F, sn), _) -> caseFlexRigid bvs (_F, sn, t, th)
+  (_, (W _F, sn)) -> caseFlexRigid bvs (_F, sn, s, th)
+  ((a, sn), (b, tm)) -> caseRigidRigid bvs (a, sn, b, tm, th)
+
+caseFlexRigid :: [(Char, Id)] -> (Id, [Term], Term, [(Id, Term)]) -> [(Id, Term)]
+caseFlexRigid bvs (_F, tn, s, rho) -- s is rigid
+  | occ _F rho s = error "Restriction fail at flexrigid case"
+  | otherwise =
+      let zn = mkvars tn
+          discharged = discharge (zip tn zn) s
+          theta = (_F, abst (zn, discharged))
+       in prune tn (theta : rho, discharged)
+
+caseRigidRigid :: [(Char, Id)] -> (Term, [Term], Term, [Term], [(Id, Term)]) -> [(Id, Term)]
+caseRigidRigid bvs (a, sn, b, tm, th) = case (a, b) of
+  (O x, O y) -> applicableCase bvs (x, y, sn, tm, th)
+  (Constructor x, Constructor y) -> applicableCase bvs (x, y, sn, tm, th)
+  otherwise -> error "Unexpected case in (2) rule"
+  where
+    applicableCase :: [(Char, Id)] -> (Id, Id, [Term], [Term], [(Id, Term)]) -> [(Id, Term)]
+    applicableCase bvs (x, y, sn, tm, th) =
+      if (x == y && length sn == length tm)
+        then foldl (\th' (s, t) -> unify bvs (th', (s, t))) th (zip sn tm)
+        else error "Different function heads or argument lists lengths in (2) rule"
