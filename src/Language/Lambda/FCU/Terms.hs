@@ -36,8 +36,8 @@ ppTerm (O x)           = x
 ppTerm (Constructor x) = x
 ppTerm (x :.: y)       = "λ" ++ x ++ " . (" ++ ppTerm y ++ ")"
 ppTerm (f :@ x)        = case f of
-  _ :.: _ -> "(" ++ ppTerm f ++ ") " ++ ppTerm x
-  _ :@ _  -> "(" ++ ppTerm f ++ ") " ++ ppTerm x
+  _ :.: _ -> "(" ++ ppTerm f ++ ") " ++ "(" ++ ppTerm x ++ ")"
+  _ :@ _  -> "(" ++ ppTerm f ++ ") " ++ "(" ++ ppTerm x ++ ")"
   _       -> ppTerm f ++ " " ++ ppTerm x
 
 -- >>> "x" :: Term
