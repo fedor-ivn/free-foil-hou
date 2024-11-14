@@ -19,6 +19,7 @@ data Term
   deriving (Eq)
 
 instance IsString Term where
+  fromString :: String -> Term
   fromString s@(c:_)
     | isUpper c && length s == 1 = W s
     | isUpper c = Constructor s
@@ -26,14 +27,18 @@ instance IsString Term where
   fromString _ = error "empty atoms are not allowed"
 
 instance Show Term where
+  show :: Term -> String
   show = ppTerm
 
 ppTerm :: Term -> String
 ppTerm (W x)           = x
 ppTerm (O x)           = x
 ppTerm (Constructor x) = x
-ppTerm (f :@ x)        = ppTerm f ++ " (" ++ ppTerm x ++ ")"
 ppTerm (x :.: y)       = "λ" ++ x ++ " . (" ++ ppTerm y ++ ")"
+ppTerm (f :@ x)        = case f of
+  _ :.: _ -> "(" ++ ppTerm f ++ ") " ++ ppTerm x
+  _ :@ _  -> "(" ++ ppTerm f ++ ") " ++ ppTerm x
+  _       -> ppTerm f ++ " " ++ ppTerm x
 
 -- >>> "x" :: Term
 -- x
@@ -42,7 +47,7 @@ ppTerm (x :.: y)       = "λ" ++ x ++ " . (" ++ ppTerm y ++ ")"
 -- >>> "Cons" :: Term
 -- Cons
 -- >>> "x" :.: ("Cons" :@ "x" :@ "y") :: Term
--- λx . (Cons (x) (y))
+-- λx . ((Cons x) y)
 isMeta :: Term -> Bool
 isMeta (W _) = True
 isMeta _     = False
