@@ -622,10 +622,8 @@ match flexible rigid variables metavariables
     let returnType' = foldr Function (returnType rigid) remainingRigid
 
     if remainingFlexible == remainingRigid
-      then
-        return (makeSubstitution takenFlexible (const head') takenRigid returnType')
-      else
-        []
+      then return (makeSubstitution takenFlexible (const head') takenRigid returnType')
+      else []
 
   project = do
     let ws = typeOfTerm <$> arguments flexible

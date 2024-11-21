@@ -1,4 +1,4 @@
-resolver: nightly-2024-06-18
+resolver: nightly-2024-10-21
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -21,11 +21,11 @@ packages:
 #   commit: e7b331f14bcffb8367cd58fbfc8b40ec7642100a
 #
 extra-deps:
-- git: https://github.com/fizruk/free-foil.git
-  commit: 540b7a7f96915e78fa7014398c0eb97a08af23dc
-  subdirs:
-  - haskell/free-foil
-- kind-generics-th-0.2.3.3@sha256:fc5f3aee46725e048a0159d73612a5d86c30017cd24ebab764347b65cffbd1d4,1519
+  - git: https://github.com/fizruk/free-foil.git
+    commit: b57f37331ff4817b1a29337230711e2a4914fe64
+    subdirs:
+      - haskell/free-foil
+  - kind-generics-th-0.2.3.3@sha256:fc5f3aee46725e048a0159d73612a5d86c30017cd24ebab764347b65cffbd1d4,1519
 
 # kind-generics-th has an outdated upper bound on template-haskell :(
 allow-newer: true

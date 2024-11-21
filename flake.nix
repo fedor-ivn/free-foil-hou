@@ -7,9 +7,13 @@
   outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
+        inherit (pkgs.lib) optional optionals;
         pkgs = import nixpkgs { inherit system; };
       in with pkgs; {
         devShells.default = mkShell {
+          buildInputs = optional stdenv.isDarwin (
+            [darwin.Libsystem]
+          );
           packages = [
             haskell.compiler.ghc982
             stack
