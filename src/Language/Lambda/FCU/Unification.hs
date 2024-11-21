@@ -84,4 +84,17 @@ caseRigidRigid bvs (a, sn, b, tm, th) = case (a, b) of
         else error "Different function heads or argument lists lengths in (2) rule"
 
 caseFlexFlex :: [(Char, Id)] -> (Id, [Term], Id, [Term], [(Id, Term)]) -> [(Id, Term)]
-caseFlexFlex bvs (_F, sn, _G, tm, th) = error "FlexFlex case not implemented"
+caseFlexFlex bvs (_F, sn, _G, tm, th)
+  | not (argumentRestriction sn) = error "Argument restriction fail at flexflex case"
+  | not (argumentRestriction tm) = error "Argument restriction fail at flexflex case"
+  | not (localRestriction sn) = error "Local restriction fail at flexflex case"
+  | not (localRestriction tm) = error "Local restriction fail at flexflex case"
+  | _F == _G = caseFlexFlexSame bvs (_F, sn, tm, th)
+  | otherwise = error "Not implemented yet"
+
+
+caseFlexFlexSame :: [(Char, Id)] -> (Id, [Term], [Term], [(Id, Term)]) -> [(Id, Term)]
+caseFlexFlexSame bvs (_F, sn, tn, th)
+  | length sn /= length tn = error "Different argument lists lengths in (4) rule"
+  | sn == tn = error "Same argument lists in (4) rule"
+  | otherwise = error "Not implemented yet"
