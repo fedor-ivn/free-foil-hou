@@ -6,52 +6,71 @@ import           Data.List                         (elemIndex)
 import           Language.Lambda.FCU.Covers        (coverExists)
 import           Language.Lambda.FCU.RTerms        (RTerm (..), toRTerm)
 import           Language.Lambda.FCU.Strip         (strip)
-import           Language.Lambda.FCU.Substitutions (Substitutions (..), devar)
-import           Language.Lambda.FCU.Terms         (Id, Term (..))
+import           Language.Lambda.FCU.Substitutions (Substitutions (..), devar, mkvars)
+import           Language.Lambda.FCU.Terms         (Id, Term (..), subset)
 
-foldlNTerms ::
-     (([(Id, Term)], Term) -> [(Id, Term)])
-  -> ([(Id, Term)], [Term])
-  -> [(Id, Term)]
-foldlNTerms _ (rho, [])   = rho
-foldlNTerms f (rho, t:ts) = foldlNTerms f (f (rho, t), ts)
+abst :: ([Id], Term) -> Term
+abst ([], t) = t
+abst (x : xs, t) = x :.: abst (xs, t)
+
+-- >>> abst (["x", "y"], "z")
+-- λx . (λy . (z))
+
+-- >>> abst (mkvars ["x" :@ "y", "z" :.: "z"], "z" :@ "w")
+-- λz1 . (λz2 . (z w))
+
+hnf :: ([Id], [Char], [Id]) -> Term
+hnf (vars, base, args) =
+  foldr
+    (:.:)
+    (foldl (\acc x -> acc :@ O x) (Constructor base) args)
+    vars
+
+-- >>> hnf (["z1", "z2"], "X", ["z1", "z2", "z3"])
+-- λz1 . (λz2 . (((X z1) z2) z3))
+
+-- >>> hnf (mkvars ["x" :@ "y", "z" :.: "z"], "X", mkvars ["x" :@ "y", "z" :.: "z"])
+-- λz1 . (λz2 . ((X z1) z2))
+
+foldlN :: (([(Id, Term)], Term) -> [(Id, Term)]) -> ([(Id, Term)], [Term]) -> [(Id, Term)]
+foldlN _ (rho, []) = rho
+foldlN f (rho, t : ts) = foldlN f (f (rho, t), ts)
+
+eqsel :: [Id] -> [Term] -> [Term] -> [Id]
+eqsel vsm tn sm =
+  [v | (v, t) <- zip vsm tn, t `notElem` sm]
+
+-- >>> eqsel ["z1", "z2"] ["x", "y", "z"] ["x", "y", "z"]
+-- []
+
+-- >>> eqsel ["z1", "z2"] ["x", "y"] ["x", "w"]
+-- ["z2"]
+
+-- >>> eqsel ["z1", "z2"] ["x", "y"] ["z", "x"]
+-- ["z2"]
 
 prune :: [Term] -> ([(Id, Term)], Term) -> [(Id, Term)]
-prune tn (rho, u) =
-  case strip (devar rho u) of
-    (x :.: t', _) -> prune (O x : tn) (rho, t')
-    (Constructor _, rr) -> foldlNTerms (prune tn) (rho, rr)
-    (O x, rr) ->
-      if O x `elem` tn
-        then foldlNTerms (prune tn) (rho, rr)
-        else error "Not unifiable"
-    (W _W, sm) ->
-      case termsDiff tn sm of
-        [] -> rho
-        qs -> rho ++ map (replaceQ _W rho tn sm) qs
-    _ -> rho
+prune tn (rho, u) = case strip (devar rho u) of
+  (_, []) -> rho
+  (x :.: t', _) -> prune (O x : tn) (rho, t')
+  (Constructor _, rr) -> foldlN (prune tn) (rho, rr)
+  (O x, rr) ->
+    if O x `elem` tn
+      then foldlN (prune tn) (rho, rr)
+      else error (show (O x) ++ " not in " ++ show tn)
+  (W _W, sm) ->
+    if sm `subset` tn -- all sm appear in lhs
+      then rho
+      else
+        let vsm = mkvars sm
+         in (_W, hnf (vsm, _W ++ "'", eqsel vsm tn sm)) : rho
+  _ -> error "Prune: unexpected case"
 
-replaceQ :: Id -> [(Id, Term)] -> [Term] -> [Term] -> Term -> (Id, Term)
-replaceQ _W rho tn sm q =
-  if coverExists (map toRTerm tn) (toRTerm (devar rho q))
-    then (_W, substitution)
-    else error "Cover does not exist, not unifiable"
-  where
-    indexQ =
-      case elemIndex q sm of
-        Just idx -> idx
-        Nothing  -> error "q not found in sm"
-    lambdaVars = ["z" ++ show i | i <- [1 ..]]
-    bodyVars = [O ("z" ++ show i) | i <- [1 ..], i /= (indexQ + 1)]
-    lambdaArgs = take (length sm) lambdaVars
-    bodyArgs = take (length sm - 1) bodyVars
-    newTerm = W (_W ++ "'")
-    body = foldl (:@) newTerm bodyArgs
-    substitution = foldr (:.:) body lambdaArgs
-
-termsDiff :: [Term] -> [Term] -> [Term]
-termsDiff tn = filter (`notElem` tn)
 -- >>> prune ["x", "y"] ([], "Cons" :@ "x" :@ "y")
 -- []
+
 -- >>> prune ["x", "q", "y"] ([], "X" :@ ("Snd" :@ "x") :@ "q")
--- [("X",λz1 . (λz2 . (X' (z2))))]
+-- [("X",λz1 . (λz2 . (X' z1)))]
+
+-- >>> prune ["y"] ([("X", "z1" :.: ("Cons" :@ "x"))], "Cons" :@ "x")
+-- [("X",λz1 . (Cons x))]

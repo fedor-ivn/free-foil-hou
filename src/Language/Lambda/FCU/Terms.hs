@@ -2,11 +2,12 @@
 
 module Language.Lambda.FCU.Terms where
 
-import           Data.Char   (isUpper)
-import           Data.String (IsString (..))
+import Data.Char (isUpper)
+import Data.String (IsString (..))
 
 -- $setup
 -- >>> :set -XOverloadedStrings
+
 type Id = String
 
 ------- Metavars - Bound vars - Functions -- Application - Abstraction
@@ -20,7 +21,7 @@ data Term
 
 instance IsString Term where
   fromString :: String -> Term
-  fromString s@(c:_)
+  fromString s@(c : _)
     | isUpper c && length s == 1 = W s
     | isUpper c = Constructor s
     | otherwise = O s
@@ -31,14 +32,14 @@ instance Show Term where
   show = ppTerm
 
 ppTerm :: Term -> String
-ppTerm (W x)           = x
-ppTerm (O x)           = x
+ppTerm (W x) = x
+ppTerm (O x) = x
 ppTerm (Constructor x) = x
-ppTerm (x :.: y)       = "λ" ++ x ++ " . (" ++ ppTerm y ++ ")"
-ppTerm (f :@ x)        = case f of
+ppTerm (x :.: y) = "λ" ++ x ++ " . (" ++ ppTerm y ++ ")"
+ppTerm (f :@ x) = case f of
   _ :.: _ -> "(" ++ ppTerm f ++ ") " ++ "(" ++ ppTerm x ++ ")"
-  _ :@ _  -> "(" ++ ppTerm f ++ ") " ++ "(" ++ ppTerm x ++ ")"
-  _       -> ppTerm f ++ " " ++ ppTerm x
+  _ :@ _ -> "(" ++ ppTerm f ++ ") " ++ "(" ++ ppTerm x ++ ")"
+  _ -> ppTerm f ++ " " ++ ppTerm x
 
 -- >>> "x" :: Term
 -- x
@@ -50,7 +51,8 @@ ppTerm (f :@ x)        = case f of
 -- λx . ((Cons x) y)
 isMeta :: Term -> Bool
 isMeta (W _) = True
-isMeta _     = False
+isMeta _ = False
+
 -- >>> isMeta "x"
 -- False
 -- >>> isMeta "X"
@@ -59,3 +61,14 @@ isMeta _     = False
 -- False
 -- >>> isMeta ("x" :.: ("Cons" :@ "x" :@ "y"))
 -- False
+
+subset :: [Term] -> [Term] -> Bool
+subset sm tn = all (`elem` tn) sm
+
+-- >>> subset ["x", "y"] ["x", "y", "z"]
+-- True
+
+-- >>> subset ["x", "y", "z"] ["x", "y"]
+-- False
+
+
