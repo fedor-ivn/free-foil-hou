@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Lambda.FCU.RTerms (RTerm (..), toRTerm, toTerm) where
+module Language.Lambda.FCU.RTerms (RTerm (..), toRTerm, toTerm, isRTerm) where
 
 import Language.Lambda.FCU.Terms (Id, Term (..))
 
@@ -14,6 +14,13 @@ toRTerm (x :@ y) = RApp (toRTerm x) (toRTerm y)
 toRTerm (W _) = error "Metavars are not allowed in Restricted Terms"
 toRTerm (Constructor _) = error "Constructor terms should have > 0 arguments"
 toRTerm (_ :.: _) = error "Abstraction is not allowed in Restricted Terms"
+
+isRTerm :: Term -> Bool
+isRTerm (O _) = True
+isRTerm (Constructor _ :@ y) = isRTerm y
+isRTerm (x :@ y) = isRTerm x && isRTerm y
+isRTerm _ = False
+
 
 toTerm :: RTerm -> Term
 toTerm (RO x) = O x
