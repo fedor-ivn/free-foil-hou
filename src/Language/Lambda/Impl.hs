@@ -251,7 +251,15 @@ type MetaSubst' =
     FoilPattern
     TermSig
     Raw.MetaVarIdent
+    (MetaAppSig Raw.MetaVarIdent)
+    Raw.Type
+
+type MetaSubsts' =
+  MetaSubsts
+    FoilPattern
+    TermSig
     Raw.MetaVarIdent
+    (MetaAppSig Raw.MetaVarIdent)
     Raw.Type
 
 fromMetaSubst :: MetaSubst' -> Raw.MetaSubst
@@ -369,6 +377,10 @@ instance Show MetaSubst' where
   show :: MetaSubst' -> String
   show = Raw.printTree . fromMetaSubst
 
+instance Show MetaSubsts' where
+  show :: MetaSubsts' -> String
+  show = show . getMetaSubsts
+
 -- >>> "X [ x: a, y: u ] ↦ λ x : t. y" :: MetaSubst'
 -- X [x0 : a, x1 : u] ↦ λ x2 : t . x1
 instance IsString MetaSubst' where
@@ -483,7 +495,7 @@ interpretProgram (Raw.AProgram commands) = mapM_ interpretCommand commands
 -- True
 
 solveUnificationConstraint
-  :: MetaSubsts FoilPattern TermSig Raw.MetaVarIdent Raw.MetaVarIdent Raw.Type
+  :: MetaSubsts FoilPattern TermSig Raw.MetaVarIdent (MetaAppSig Raw.MetaVarIdent) Raw.Type
   -> UnificationConstraint
   -> UnificationConstraint
 solveUnificationConstraint substs (UnificationConstraint scope binders binderTypes lhs rhs) =
@@ -578,8 +590,8 @@ printInvalidSolutionsWithConstraint (solution, constraints) = do
   putStrLn $ replicate 25 '-' <> "\n"
 
 -- Main function to parse and print the configuration
-main :: IO ()
-main = do
+parseConfigAndValidate :: IO ()
+parseConfigAndValidate = do
   configResult <- Toml.decodeFileEither configCodec "config.toml"
   case configResult of
     Left err -> print err
@@ -592,3 +604,27 @@ main = do
     mapM_ (putStrLn . ("- " ++) . show . solutionName) validatedSolutions
     putStrLn "\n=== Invalid solutions ===\n"
     mapM_ printInvalidSolutionsWithConstraint invalidSolutionsWithConstraints
+
+main :: IO ()
+-- main = parseConfigAndValidate
+main = do
+  let lhs = "λy:t. M[]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+  let rhs = "λy:t. λx:t. x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+  let res = match Foil.emptyScope lhs rhs :: [MetaSubsts']
+  print res
+
+-- >>> lhs = "M[]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> rhs = "λx:t.x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
+-- [[M [] ↦ λ x0 : t . x0]]
+
+-- >>> lhs = "λx : t. x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> rhs = "λy : t. y" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> match Foil.emptyScope lhs lhs :: [MetaSubsts']
+-- []
+
+-- >>> lhs = "λy:t. M[]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> rhs = "λy:t. λx:t. x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
+-- []
+
