@@ -620,11 +620,11 @@ main = do
 
 -- >>> lhs = "λx : t. x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> rhs = "λy : t. y" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
--- >>> match Foil.emptyScope lhs lhs :: [MetaSubsts']
--- []
+-- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
+-- [[]]
 
 -- >>> lhs = "λy:t. M[]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> rhs = "λy:t. λx:t. x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
--- []
+-- [[M [] ↦ λ x1 : t . x1]]
 

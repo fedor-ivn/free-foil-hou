@@ -18,6 +18,7 @@ import Data.Bifunctor
 import Data.Bifunctor.Sum
 import Data.Bifunctor.TH
 import Data.Bitraversable (Bitraversable (bitraverse))
+import Data.Maybe (mapMaybe)
 import Data.ZipMatchK
 import Debug.Trace (trace)
 import qualified GHC.Generics as GHC
@@ -68,14 +69,15 @@ newtype MetaSubsts binder sig metavar ext t = MetaSubsts
 -- M[x, y] M[y, x] = x y
 -- M[x, y] M[x, y] = x y
 
+-- TODO: refactor
 combineMetaSubsts
   :: (Eq metavar, Bitraversable sig, Bitraversable ext, ZipMatchK (Sum sig ext), Foil.UnifiablePattern binder, Foil.SinkableK binder)
   => MetaSubsts binder sig metavar ext t
   -> MetaSubsts binder sig metavar ext t
-  -> [MetaSubsts binder sig metavar ext t]
+  -> Maybe (MetaSubsts binder sig metavar ext t)
 combineMetaSubsts (MetaSubsts xs) (MetaSubsts ys)
-  | conflicts = []
-  | otherwise = [MetaSubsts (xs ++ ys)]
+  | conflicts = trace "there are conflicts" Nothing
+  | otherwise = trace "no conflicts" return (MetaSubsts (xs ++ ys))
  where
   conflicts =
     and
@@ -94,13 +96,19 @@ combineMetaSubsts (MetaSubsts xs) (MetaSubsts ys)
       ]
 
 combineMetaSubsts'
-  :: (Eq metavar, Bitraversable sig, Bitraversable ext, ZipMatchK (Sum sig ext), Foil.UnifiablePattern binder, Foil.SinkableK binder)
+  :: ( Eq metavar
+     , Bitraversable sig
+     , Bitraversable ext
+     , ZipMatchK (Sum sig ext)
+     , Foil.UnifiablePattern binder
+     , Foil.SinkableK binder
+     )
   => [MetaSubsts binder sig metavar ext t]
   -> [MetaSubsts binder sig metavar ext t]
-combineMetaSubsts' =
-  foldr
-    (\substs substsList -> concatMap (combineMetaSubsts substs) substsList)
-    []
+combineMetaSubsts' = foldr go []
+ where
+  go x [] = [x]
+  go x xs = mapMaybe (combineMetaSubsts x) xs
 
 applyMetaSubsts
   :: ( Bifunctor sig
@@ -183,7 +191,7 @@ match
   -> [MetaSubsts binder sig metavar ext t]
 match scope lhs rhs =
   case (lhs, rhs) of
-    (Var x, Var y) | x == y -> return (MetaSubsts [])
+    (Var x, Var y) | x == y -> trace "matched same vars" return (MetaSubsts [])
     (MetaApp metavar args, _) ->
       trace "matching metavar" map addMetaSubst (matchMetavar scope args rhs)
      where
@@ -199,8 +207,9 @@ match scope lhs rhs =
       -- [[s13], [], [], [s24]]
       case zipMatch2 leftTerm rightTerm of
         Just node ->
-          let tmp = bitraverse (uncurry (matchScoped scope)) (uncurry (match scope)) node
-           in trace "terms matched, combine substitutions" concatMap (combineMetaSubsts' . biList) tmp
+          let traversed = bitraverse (uncurry (matchScoped scope)) (uncurry (match scope)) node
+           in trace "terms matched, combine substitutions" $
+                concatMap (combineMetaSubsts' . biList) traversed
         Nothing -> trace "term structs doesn't match" []
     (Node (L2 _term), Node (R2 _ext)) -> []
     (_, Var _) -> []
@@ -265,10 +274,12 @@ matchMetavar _scope args rhs =
     [] ->
       case closed rhs of
         Just rhs' ->
-          trace "term is closed, substitute with rhs" [
-            ( MetaAbs Foil.NameBinderListEmpty Foil.emptyNameMap rhs'
-            , MetaSubsts []
-            )
-          ]
+          trace
+            "term is closed, substitute with rhs"
+            [
+              ( MetaAbs Foil.NameBinderListEmpty Foil.emptyNameMap rhs'
+              , MetaSubsts []
+              )
+            ]
         Nothing -> []
     _ -> undefined
