@@ -10,6 +10,9 @@
         pkgs = import nixpkgs { inherit system; };
       in with pkgs; {
         devShells.default = mkShell {
+          buildInputs = pkgs.lib.optional stdenv.isDarwin (
+            [darwin.Libsystem]
+          );
           packages = [
             haskell.compiler.ghc982
             stack
