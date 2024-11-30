@@ -6,12 +6,12 @@ module Language.Lambda.FCU.Unification
 where
 
 import Language.Lambda.FCU.Discharge (discharge)
+import Language.Lambda.FCU.Prune (abst, eqsel, hnf, prune)
 import Language.Lambda.FCU.RTerms (RTerm (..), toRTerm)
 import Language.Lambda.FCU.Restrictions (argumentRestriction, localRestriction)
-import Language.Lambda.FCU.Substitutions (devar, rename, mkvars)
-import Language.Lambda.FCU.Terms (Id, Term (..), subset)
 import Language.Lambda.FCU.Strip (strip)
-import Language.Lambda.FCU.Prune
+import Language.Lambda.FCU.Substitutions (devar, mkvars, rename)
+import Language.Lambda.FCU.Terms (Id, Term (..), subset)
 
 ------- Unification ----- bvs (th (s,t)) = Q, (theta, S)
 unify :: [(Char, Id)] -> ([(Id, Term)], (Term, Term)) -> [(Id, Term)]
@@ -68,8 +68,7 @@ caseFlexRigid bvs (_F, tn, s, rho) -- s is rigid
           pruned = devar pruningResult s
           discharged = discharge (zip tn zn) pruned
           theta = (_F, abst (zn, discharged))
-          substitutions = pruningResult ++ [theta] ++ rho
-       in substitutions
+       in pruningResult ++ [theta] ++ rho
 
 caseRigidRigid :: [(Char, Id)] -> (Term, [Term], Term, [Term], [(Id, Term)]) -> [(Id, Term)]
 caseRigidRigid bvs (a, sn, b, tm, th) = case (a, b) of
@@ -90,11 +89,17 @@ caseFlexFlex bvs (_F, sn, _G, tm, th)
   | not (localRestriction sn) = error "Local restriction fail at flexflex case"
   | not (localRestriction tm) = error "Local restriction fail at flexflex case"
   | _F == _G = caseFlexFlexSame bvs (_F, sn, tm, th)
-  | otherwise = error "Not implemented yet"
-
+  | otherwise = caseFlexFlexDiff bvs (_F, _G, sn, tm, th)
 
 caseFlexFlexSame :: [(Char, Id)] -> (Id, [Term], [Term], [(Id, Term)]) -> [(Id, Term)]
 caseFlexFlexSame bvs (_F, sn, tn, th)
   | length sn /= length tn = error "Different argument lists lengths in (4) rule"
   | sn == tn = error "Same argument lists in (4) rule"
-  | otherwise = error "Not implemented yet"
+  | otherwise =
+      let vsm = mkvars sn
+       in th ++ [(_F, hnf (vsm, _F ++ "'", eqsel vsm tn sn))]
+
+caseFlexFlexDiff :: [(Char, Id)] -> (Id, Id, [Term], [Term], [(Id, Term)]) -> [(Id, Term)]
+caseFlexFlexDiff bvs (_F, _G, sn, tm, th) = 
+    let vsm = mkvars sn
+      in th ++ [(_G, hnf (vsm, _F, eqsel vsm tm sn))] -- TODO: Add correct permutation
