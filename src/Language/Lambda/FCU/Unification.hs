@@ -62,13 +62,11 @@ caseFlexRigid :: [(Char, Id)] -> (Id, [Term], Term, [(Id, Term)]) -> [(Id, Term)
 caseFlexRigid bvs (_F, tn, s, rho) -- s is rigid
   | not (argumentRestriction tn) = error "Argument restriction fail at flexrigid case"
   | not (localRestriction tn) = error "Local restriction fail at flexrigid case"
-  | otherwise =
-      let zn = mkvars tn
-          pruningResult = prune tn (rho, s)
-          pruned = devar pruningResult s
-          discharged = discharge (zip tn zn) pruned
-          theta = (_F, abst (zn, discharged))
-       in pruningResult ++ [theta] ++ rho
+  | otherwise = rho ++ pruningResult ++ newMetavarSubs
+  where
+    zn = mkvars tn
+    pruningResult = prune tn (rho, s)
+    newMetavarSubs = [(_F, abst (zn, discharge (zip tn zn) (devar pruningResult s)))]
 
 caseRigidRigid :: [(Char, Id)] -> (Term, [Term], Term, [Term], [(Id, Term)]) -> [(Id, Term)]
 caseRigidRigid bvs (a, sn, b, tm, th) = case (a, b) of
@@ -100,6 +98,6 @@ caseFlexFlexSame bvs (_F, sn, tn, th)
        in th ++ [(_F, hnf (vsm, _F ++ "'", eqsel vsm tn sn))]
 
 caseFlexFlexDiff :: [(Char, Id)] -> (Id, Id, [Term], [Term], [(Id, Term)]) -> [(Id, Term)]
-caseFlexFlexDiff bvs (_F, _G, sn, tm, th) = 
-    let vsm = mkvars sn
-      in th ++ [(_G, hnf (vsm, _F, eqsel vsm tm sn))] -- TODO: Add correct permutation
+caseFlexFlexDiff bvs (_F, _G, sn, tm, th) =
+  let vsm = mkvars sn
+   in th ++ [(_G, hnf (vsm, _F, eqsel vsm tm sn))] -- TODO: Add correct permutation
