@@ -3,6 +3,8 @@
 module Language.Lambda.FCU.Terms where
 
 import Data.Char (isUpper)
+import Data.List (elemIndex)
+import Data.Maybe (mapMaybe)
 import Data.String (IsString (..))
 
 -- $setup
@@ -71,4 +73,17 @@ subset sm tn = all (`elem` tn) sm
 -- >>> subset ["x", "y", "z"] ["x", "y"]
 -- False
 
+matchTermLists :: [Id] -> [Term] -> [Term] -> [Id]
+matchTermLists vsm tn sm =
+  [v | (v, t) <- zip vsm tn, t `elem` sm]
 
+-- | Untested
+permutate :: [Id] -> [Term] -> [Term] -> [Id]
+permutate vsm tn sm = mapMaybe selectId sm
+  where
+    selectId s = do
+      index <- elemIndex s tn
+      return (vsm !! index)
+
+applyTerms :: Term -> [Term] -> Term
+applyTerms = foldl (:@)
