@@ -8,12 +8,12 @@ where
 import Language.Lambda.FCU.Discharge (discharge)
 import Language.Lambda.FCU.Prune (abst, eqsel, hnf, prune)
 import Language.Lambda.FCU.RTerms (RTerm (..), toRTerm)
-import Language.Lambda.FCU.Restrictions (argumentRestriction, localRestriction)
+import Language.Lambda.FCU.Restrictions (argumentRestriction, globalRestriction, localRestriction)
 import Language.Lambda.FCU.Strip (strip)
 import Language.Lambda.FCU.Substitutions (devar, mkvars, rename)
-import Language.Lambda.FCU.Terms (Id, Term (..), subset)
+import Language.Lambda.FCU.Terms (Id, Term (..), applyTerms, matchTermLists, permutate, subset)
 
-------- Unification ----- bvs (th (s,t)) = Q, (theta, S)
+----- Unification ----- bvs (th (s,t)) = Q, (theta, S)
 unify :: [(Char, Id)] -> ([(Id, Term)], (Term, Term)) -> [(Id, Term)]
 unify bvs (th, (s, t)) = case (devar th s, devar th t) of
   (x :.: s, x' :.: t) ->
@@ -49,6 +49,18 @@ unify bvs (th, (s, t)) = case (devar th s, devar th t) of
 -- Example from the paper
 -- >>> unify [] ([], ("l1" :.: ("l2" :.: ("X" :@ ("Fst" :@ "l1") :@ ("Fst" :@ ("Snd" :@ "l2")))), "l1" :.: ("l2" :.: ("Snd" :@ (("Y" :@ ("Fst" :@ "l2")) :@ ("Fst" :@ "l1"))))))
 -- [("Y",λz1 . (λz2 . (Y' z2))),("X",λz1 . (λz2 . (Snd Y' z1)))]
+
+-- >>> unify [] ([], ("X" :@ "a" :@ "b" :@ "c", "X" :@ "a" :@ "b" :@ "c"))
+-- Same argument lists in (4) rule
+
+-- >>> unify [] ([], ("X" :@ "a" :@ "c", "X" :@ "a" :@ "b" :@ "c"))
+-- Different argument lists lengths in (4) rule
+
+-- >>> unify [] ([], ("X" :@ "a" :@ "b1" :@ "c", "X" :@ "a" :@ "b2" :@ "c"))
+-- [("X",λz1 . (λz2 . (λz3 . ((X' z1) (z3)))))]
+
+-- >>> unify [] ([], ("X" :@ "a" :@ "b1" :@ "c", "Y" :@ "a" :@ "b2" :@ "c"))
+-- [("Y",λz1 . (λz2 . (λz3 . (Y' z2)))),("X",λz1 . (λz2 . (λz3 . (((X z1) (z2)) (z3)))))]
 
 cases :: [(Char, Id)] -> ([(Id, Term)], (Term, Term)) -> [(Id, Term)]
 cases bvs (th, (s, t)) = case (strip s, strip t) of
@@ -93,11 +105,17 @@ caseFlexFlexSame :: [(Char, Id)] -> (Id, [Term], [Term], [(Id, Term)]) -> [(Id, 
 caseFlexFlexSame bvs (_F, sn, tn, th)
   | length sn /= length tn = error "Different argument lists lengths in (4) rule"
   | sn == tn = error "Same argument lists in (4) rule"
-  | otherwise =
-      let vsm = mkvars sn
-       in th ++ [(_F, hnf (vsm, _F ++ "'", eqsel vsm tn sn))]
+  | otherwise = th ++ newMetavarSubs
+  where
+    vsm = mkvars sn
+    newMetavarSubs = [(_F, hnf (vsm, _F ++ "'", matchTermLists vsm tn sn))]
 
 caseFlexFlexDiff :: [(Char, Id)] -> (Id, Id, [Term], [Term], [(Id, Term)]) -> [(Id, Term)]
-caseFlexFlexDiff bvs (_F, _G, sn, tm, th) =
-  let vsm = mkvars sn
-   in th ++ [(_G, hnf (vsm, _F, eqsel vsm tm sn))] -- TODO: Add correct permutation
+caseFlexFlexDiff bvs (_F, _G, sn, tm, th)
+  | not (globalRestriction sn tm) = error "Global restriction fail at flexflex case"
+  | otherwise = th ++ pruningResult ++ metavarSubs
+  where
+    vsm = mkvars sn
+    lhs = (applyTerms (W _G) tm)
+    pruningResult = prune sn (th, lhs)
+    metavarSubs = [(_F, hnf (vsm, _F, permutate vsm sn (snd (strip (devar pruningResult lhs)))))]

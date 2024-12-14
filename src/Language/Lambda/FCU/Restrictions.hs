@@ -22,3 +22,6 @@ localRestriction tn =
     isSubset (t1 :@ t2) (s1 :@ s2) = isSubset t1 s1 && isSubset t2 s2
     isSubset (x :.: t) (y :.: s) = x == y && isSubset t s
     isSubset x y = x == y
+
+globalRestriction :: [Term] -> [Term] -> Bool
+globalRestriction sn tm = True -- TODO
