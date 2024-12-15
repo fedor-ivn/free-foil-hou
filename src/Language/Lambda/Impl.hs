@@ -241,10 +241,6 @@ withMetaSubstVars (Raw.ABinder ident type_ : idents) scope env binderList binder
         binderList' = push binder binderList
         binderTypes' = Foil.addNameBinder binder type_ binderTypes
      in withMetaSubstVars idents scope' env' binderList' binderTypes' cont
- where
-  push :: Foil.NameBinder i l -> NameBinderList n i -> NameBinderList n l
-  push x NameBinderListEmpty = NameBinderListCons x NameBinderListEmpty
-  push x (NameBinderListCons y ys) = NameBinderListCons y (push x ys)
 
 type MetaSubst' =
   MetaSubst
@@ -608,23 +604,37 @@ parseConfigAndValidate = do
 main :: IO ()
 -- main = parseConfigAndValidate
 main = do
-  let lhs = "λy:t. M[]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+  let lhs = "M[λy:t. λx:t. x, λa:t. λa:t. a]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
   let rhs = "λy:t. λx:t. x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
   let res = match Foil.emptyScope lhs rhs :: [MetaSubsts']
   print res
 
+-- >>> lhs = "M[λx:t.x, λx:t.x]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> rhs = "λx:t.x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
+-- Prelude.undefined
+
+-- >>> lhs = "M[λy:t. y, λa:t. λa:t. a]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> rhs = "λy:t. y" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
+-- [[M [x0 : T, x1 : T] ↦ x0]]
+
 -- >>> lhs = "M[]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> rhs = "λx:t.x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
--- [[M [] ↦ λ x0 : t . x0]]
+-- [[M [x0 : T] ↦ x0]]
 
 -- >>> lhs = "λx : t. x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> rhs = "λy : t. y" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
 -- [[]]
 
+-- >>> lhs = "λx : t. λx : t. x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> rhs = "λy : t. y" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
+-- []
+
 -- >>> lhs = "λy:t. M[]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> rhs = "λy:t. λx:t. x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
 -- [[M [] ↦ λ x1 : t . x1]]
-

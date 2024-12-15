@@ -5,7 +5,10 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Data.SOAS where
@@ -23,6 +26,7 @@ import Data.ZipMatchK
 import Debug.Trace (trace)
 import qualified GHC.Generics as GHC
 import Generics.Kind.TH (deriveGenericK)
+import qualified Language.Lambda.Syntax.Abs as Raw
 import Unsafe.Coerce (unsafeCoerce)
 
 data MetaAppSig metavar scope term = MetaAppSig metavar [term]
@@ -65,50 +69,6 @@ newtype MetaSubst binder sig metavar ext t = MetaSubst
 newtype MetaSubsts binder sig metavar ext t = MetaSubsts
   { getMetaSubsts :: [MetaSubst binder sig metavar ext t]
   }
-
--- M[x, y] M[y, x] = x y
--- M[x, y] M[x, y] = x y
-
--- TODO: refactor
-combineMetaSubsts
-  :: (Eq metavar, Bitraversable sig, Bitraversable ext, ZipMatchK (Sum sig ext), Foil.UnifiablePattern binder, Foil.SinkableK binder)
-  => MetaSubsts binder sig metavar ext t
-  -> MetaSubsts binder sig metavar ext t
-  -> Maybe (MetaSubsts binder sig metavar ext t)
-combineMetaSubsts (MetaSubsts xs) (MetaSubsts ys)
-  | conflicts = trace "there are conflicts" Nothing
-  | otherwise = trace "no conflicts" return (MetaSubsts (xs ++ ys))
- where
-  conflicts =
-    and
-      [ case Foil.unifyPatterns binders binders' of
-        Foil.SameNameBinders _ ->
-          case Foil.assertDistinct binders of
-            Foil.Distinct ->
-              let scope' = Foil.extendScopePattern binders Foil.emptyScope
-               in alphaEquiv scope' body body'
-        Foil.NotUnifiable -> False
-        -- FIXME: RenameLeftNameBinder _ _ -> undefined
-        _ -> undefined
-      | MetaSubst (m, MetaAbs binders _types body) <- xs
-      , MetaSubst (m', MetaAbs binders' _types' body') <- ys
-      , m == m'
-      ]
-
-combineMetaSubsts'
-  :: ( Eq metavar
-     , Bitraversable sig
-     , Bitraversable ext
-     , ZipMatchK (Sum sig ext)
-     , Foil.UnifiablePattern binder
-     , Foil.SinkableK binder
-     )
-  => [MetaSubsts binder sig metavar ext t]
-  -> [MetaSubsts binder sig metavar ext t]
-combineMetaSubsts' = foldr go []
- where
-  go x [] = [x]
-  go x xs = mapMaybe (combineMetaSubsts x) xs
 
 applyMetaSubsts
   :: ( Bifunctor sig
@@ -167,6 +127,45 @@ applyMetaSubsts rename scope substs = \case
    where
     newScope = Foil.extendScopePattern binder scope'
 
+-- M[x, y] M[y, x] = x y
+-- M[x, y] M[x, y] = x y
+
+-- TODO: refactor
+combineMetaSubsts
+  :: ( Eq metavar
+     , Bitraversable sig
+     , Bitraversable ext
+     , ZipMatchK (Sum sig ext)
+     , Foil.UnifiablePattern binder
+     , Foil.SinkableK binder
+     )
+  => [MetaSubsts binder sig metavar ext t]
+  -> [MetaSubsts binder sig metavar ext t]
+combineMetaSubsts = foldr go []
+ where
+  go x [] = [x]
+  go x xs = mapMaybe (inner x) xs
+
+  inner (MetaSubsts xs) (MetaSubsts ys)
+    | conflicts = trace "there are conflicts" Nothing
+    | otherwise = trace "no conflicts" return (MetaSubsts (xs ++ ys))
+   where
+    conflicts =
+      and
+        [ case Foil.unifyPatterns binders binders' of
+          Foil.SameNameBinders _ ->
+            case Foil.assertDistinct binders of
+              Foil.Distinct ->
+                let scope' = Foil.extendScopePattern binders Foil.emptyScope
+                 in alphaEquiv scope' body body'
+          Foil.NotUnifiable -> False
+          -- FIXME: RenameLeftNameBinder _ _ ->
+          _ -> error "unexpected renaming"
+        | MetaSubst (m, MetaAbs binders _types body) <- xs
+        , MetaSubst (m', MetaAbs binders' _types' body') <- ys
+        , m == m'
+        ]
+
 -- | This function takes the following parameters:
 --
 --   * `Scope n` - The current scope.
@@ -209,7 +208,7 @@ match scope lhs rhs =
         Just node ->
           let traversed = bitraverse (uncurry (matchScoped scope)) (uncurry (match scope)) node
            in trace "terms matched, combine substitutions" $
-                concatMap (combineMetaSubsts' . biList) traversed
+                concatMap (combineMetaSubsts . biList) traversed
         Nothing -> trace "term structs doesn't match" []
     (Node (L2 _term), Node (R2 _ext)) -> []
     (_, Var _) -> []
@@ -264,22 +263,108 @@ closed :: AST binder sig n -> Maybe (AST binder sig Foil.VoidS)
 closed term = Just (unsafeCoerce term)
 
 -- M[x, x] = x + x
+-- ∀ x. M[λy:t. x, λa:t. λa:t. a] = λy:t. x
 matchMetavar
-  :: Foil.Scope n
+  :: forall metavar n binder sig ext t
+   . ( Eq metavar
+     , Foil.Distinct n
+     , Foil.UnifiablePattern binder
+     , Foil.SinkableK binder
+     , Bitraversable sig
+     , Bitraversable ext
+     , ZipMatchK sig
+     , ZipMatchK (Sum sig ext)
+     )
+  => Foil.Scope n
   -> [SOAS binder metavar sig n]
   -> AST binder (Sum sig ext) n
   -> [(MetaAbs binder (Sum sig ext) t, MetaSubsts binder sig metavar ext t)]
-matchMetavar _scope args rhs =
-  case args of
-    [] ->
-      case closed rhs of
-        Just rhs' ->
-          trace
-            "term is closed, substitute with rhs"
-            [
-              ( MetaAbs Foil.NameBinderListEmpty Foil.emptyNameMap rhs'
-              , MetaSubsts []
-              )
-            ]
-        Nothing -> []
-    _ -> undefined
+matchMetavar scope args rhs =
+  projections
+    ++ case rhs of
+      -- M[t1, t2] = F(x.u1, u2)
+      -- T1[t1, t2, x] = u1
+      -- -- [([z1, z2, z3] -> w1, substs1)]
+      -- T2[t1, t2] = u2
+      -- -- [([z1, z2] -> w2, substs2)]
+      -- bitraverse ... node = [F(([z1, z2, z3] -> w1, substs1), ([z1, z2] -> w2, substs2))]
+      -- final result: [([z1, z2, z3] -> w, substs)]
+      Node node -> do
+        traversed <- bitraverse (matchMetavarScoped scope args) (matchMetavar scope args) node
+        -- FIXME: 
+        metaAbs <- undefined
+        substs <- combineMetaSubsts (map snd (biList traversed))
+        return (metaAbs, substs)
+      _ -> []
+ where
+  project
+    :: (Foil.Distinct i)
+    => Foil.NameBinderList Foil.VoidS l
+    -> Foil.NameBinderList i l
+    -> [SOAS binder metavar sig n]
+    -> [(MetaAbs binder (Sum sig ext) t, MetaSubsts binder sig metavar ext t)]
+  project _ Foil.NameBinderListEmpty [] = []
+  project binderList (Foil.NameBinderListCons x xs) (arg : args') =
+    case Foil.assertDistinct x of
+      Foil.Distinct ->
+        case (Foil.assertExt xs, Foil.assertDistinct xs) of
+          (Foil.Ext, Foil.Distinct) ->
+            let substs = match scope arg rhs
+                dummyTypes =
+                  Foil.addNameBinders
+                    binderList
+                    ( unsafeCoerce (repeat (Raw.Base (Raw.VarIdent "T")))
+                    )
+                    Foil.emptyNameMap
+                term = Var (Foil.sink (Foil.nameOf x))
+                metaAbs = MetaAbs binderList dummyTypes term
+             in map (metaAbs,) substs ++ project binderList xs args'
+  project _ _ _ = error "mismatched name list and argument list"
+
+  projections =
+    withFreshNameBinderList args Foil.emptyScope Foil.NameBinderListEmpty $ \_ binders ->
+      project binders binders args
+
+matchMetavarScoped
+  :: ( Foil.Distinct n
+     , Eq metavar
+     , Foil.UnifiablePattern binder
+     , Bitraversable sig
+     , Bitraversable ext
+     , ZipMatchK sig
+     , ZipMatchK (Sum sig ext)
+     , Foil.SinkableK binder
+     )
+  => Foil.Scope n
+  -> [SOAS binder metavar sig n]
+  -> ScopedAST binder (Sum sig ext) n
+  -> [(MetaAbs binder (Sum sig ext) t, MetaSubsts binder sig metavar ext t)]
+matchMetavarScoped scope args (ScopedAST binder rhs) =
+  case (Foil.assertExt binder, Foil.assertDistinct binder) of
+    (Foil.Ext, Foil.Distinct) ->
+      let scope' = Foil.extendScopePattern binder scope
+          args' = map Foil.sink args ++ map Var (Foil.namesOfPattern binder)
+       in matchMetavar scope' args' rhs
+
+withFreshNameBinderList
+  :: (Foil.Distinct n)
+  => [a]
+  -> Foil.Scope n
+  -> Foil.NameBinderList i n
+  -> ( forall l
+        . (Foil.Distinct l)
+       => Foil.Scope l
+       -> Foil.NameBinderList i l
+       -> r
+     )
+  -> r
+withFreshNameBinderList [] scope binders cont = cont scope binders
+withFreshNameBinderList (_ : xs) scope binders cont =
+  Foil.withFresh scope $ \binder ->
+    let scope' = Foil.extendScope binder scope
+        binders' = push binder binders
+     in withFreshNameBinderList xs scope' binders' cont
+
+push :: Foil.NameBinder i l -> Foil.NameBinderList n i -> Foil.NameBinderList n l
+push x Foil.NameBinderListEmpty = Foil.NameBinderListCons x Foil.NameBinderListEmpty
+push x (Foil.NameBinderListCons y ys) = Foil.NameBinderListCons y (push x ys)

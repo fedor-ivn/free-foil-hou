@@ -10,8 +10,8 @@ constraints = [
 [[problems.solutions]]
 name = "most general"
 substitutions = [
-    "Y[x: magic] ↦ x x",
-    "X[f: magic -> t, x: magic] ↦ f (x x)",
+    "Y[a: magic] ↦ a a",
+    "X[b: magic -> t, c: magic] ↦ b (c c)",
 ]
 
 [[problems.solutions]]
@@ -20,4 +20,15 @@ substitutions = [
     "Y[x: magic] ↦ x x",
     "X[f: magic -> t, x: magic] ↦ f (x x)",
     "M[x: t, y: t -> u] ↦ y x"
+]
+
+[[problems]]
+constraints = [
+    "∀ x:t. M[λy:t. x, λa:t. λa:t. a] = λy:t. x"
+]
+
+[[problems.solutions]]
+name = "most general"
+substitutions = [
+    "M[a: t, b: t -> t] ↦ a",
 ]
