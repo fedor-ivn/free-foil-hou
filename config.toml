@@ -32,3 +32,33 @@ name = "most general"
 substitutions = [
     "M[a: t, b: t -> t] ↦ a",
 ]
+
+[[problems]]
+constraints = [
+    "∀ x:t, y:t. M[λz:t.N[x, y], x y] = λa:t.λb:t.x"
+]
+
+[[problems.solutions]]
+name = "some other solution"
+substitutions = [
+    "M[z1:t, z2:t] ↦ λa:t.z1",
+    "N[z1:t, z2:t] ↦ z1"
+]
+
+[[problems]]
+constraints = [
+    "∀ x:t, y:t. M[λz:t.N[x, y], x] = λa:t.λb:t.x"
+]
+
+[[problems.solutions]]
+name = "solution 1"
+substitutions = [
+    "M[z1:t, z2:t] ↦ λa:t.z1",
+    "N[z1:t, z2:t] ↦ z1"
+]
+
+[[problems.solutions]]
+name = "solution 2"
+substitutions = [
+    "M[z1:t, z2:t] ↦ λa:t.λb:t.z2",
+]
