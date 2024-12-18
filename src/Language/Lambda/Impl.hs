@@ -124,16 +124,30 @@ instance ZipMatchK Raw.Type where zipMatchWithK = zipMatchViaEq
 
 -- ** Pattern synonyms
 
-pattern App' :: AST binder (Sum TermSig q) n -> AST binder (Sum TermSig q) n -> AST binder (Sum TermSig q) n
+pattern App'
+  :: AST binder (Sum TermSig q) n
+  -> AST binder (Sum TermSig q) n
+  -> AST binder (Sum TermSig q) n
 pattern App' f x = Node (L2 (AppSig f x))
 
-pattern Lam' :: Raw.Type -> binder n l -> AST binder (Sum TermSig q) l -> AST binder (Sum TermSig q) n
+pattern Lam'
+  :: Raw.Type
+  -> binder n l
+  -> AST binder (Sum TermSig q) l
+  -> AST binder (Sum TermSig q) n
 pattern Lam' typ binder body = Node (L2 (LamSig typ (ScopedAST binder body)))
 
-pattern Let' :: AST binder (Sum TermSig q) n -> binder n l -> AST binder (Sum TermSig q) l -> AST binder (Sum TermSig q) n
+pattern Let'
+  :: AST binder (Sum TermSig q) n
+  -> binder n l
+  -> AST binder (Sum TermSig q) l
+  -> AST binder (Sum TermSig q) n
 pattern Let' term binder body = Node (L2 (LetSig term (ScopedAST binder body)))
 
-pattern MetaVar' :: Raw.MetaVarIdent -> [AST binder (Sum TermSig q) n] -> AST binder (Sum TermSig q) n
+pattern MetaVar'
+  :: Raw.MetaVarIdent
+  -> [AST binder (Sum TermSig q) n]
+  -> AST binder (Sum TermSig q) n
 pattern MetaVar' metavar args = Node (L2 (MetaVarSig metavar args))
 
 -- FV( (λ x. x) y )  =  { y }
@@ -602,27 +616,31 @@ parseConfigAndValidate = do
     mapM_ printInvalidSolutionsWithConstraint invalidSolutionsWithConstraints
 
 main :: IO ()
--- main = parseConfigAndValidate
-main = do
-  let lhs = "M[λy:t. λx:t. x, λa:t. λa:t. a]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
-  let rhs = "λy:t. λx:t. x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
-  let res = match Foil.emptyScope lhs rhs :: [MetaSubsts']
-  print res
+main = parseConfigAndValidate
+-- main = do
+--   let lhs = "M[λy:t. λx:t. x, λa:t. λa:t. a]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+--   let rhs = "λy:t. λx:t. x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+--   let res = match Foil.emptyScope lhs rhs :: [MetaSubsts']
+--   print res
+
+-- ∀ x, y. M[λz.N[x, y], x y] = λa.λb.x
+-- M [z1, z2] ↦ λa.z1
+-- N [z1, z2] ↦ z1
 
 -- >>> lhs = "M[λx:t.x, λx:t.x]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> rhs = "λx:t.x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
--- Prelude.undefined
+-- [[M [x0 : T, x1 : T] ↦ x0],[M [x0 : T, x1 : T] ↦ x1],[M [x0 : T, x1 : T] ↦ λ x2 : t . x2]]
 
 -- >>> lhs = "M[λy:t. y, λa:t. λa:t. a]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> rhs = "λy:t. y" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
--- [[M [x0 : T, x1 : T] ↦ x0]]
+-- [[M [x0 : T, x1 : T] ↦ x0],[M [x0 : T, x1 : T] ↦ λ x2 : t . x2]]
 
 -- >>> lhs = "M[]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> rhs = "λx:t.x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
--- [[M [x0 : T] ↦ x0]]
+-- [[M [] ↦ λ x0 : t . x0]]
 
 -- >>> lhs = "λx : t. x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> rhs = "λy : t. y" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
@@ -634,7 +652,7 @@ main = do
 -- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
 -- []
 
--- >>> lhs = "λy:t. M[]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> lhs = "λy:t. M[λx:t. x]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> rhs = "λy:t. λx:t. x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
 -- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
--- [[M [] ↦ λ x1 : t . x1]]
+-- [[M [x0 : T] ↦ x0],[M [x0 : T] ↦ λ x1 : t . x1]]

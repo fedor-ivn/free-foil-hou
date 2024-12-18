@@ -9,11 +9,13 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module Data.SOAS where
 
 import qualified Control.Monad.Foil as Foil
+import qualified Control.Monad.Foil.Internal as Foil
 import qualified Control.Monad.Foil.Relative as Foil
 import Control.Monad.Free.Foil
 import Data.Bifoldable
@@ -192,10 +194,26 @@ match scope lhs rhs =
   case (lhs, rhs) of
     (Var x, Var y) | x == y -> trace "matched same vars" return (MetaSubsts [])
     (MetaApp metavar args, _) ->
-      trace "matching metavar" map addMetaSubst (matchMetavar scope args rhs)
-     where
-      addMetaSubst (metaAbs, MetaSubsts substs) =
-        MetaSubsts (MetaSubst (metavar, metaAbs) : substs)
+      withFreshNameBinderList
+        args
+        Foil.emptyScope
+        Foil.NameBinderListEmpty
+        $ \scope' binderList ->
+          trace
+            "matching metavar"
+            map
+            ( \(term, MetaSubsts substs) ->
+                let dummyTypes =
+                      Foil.addNameBinders
+                        binderList
+                        ( unsafeCoerce (repeat (Raw.Base (Raw.VarIdent "T")))
+                        )
+                        Foil.emptyNameMap
+                    metaAbs = MetaAbs binderList dummyTypes term
+                    subst = MetaSubst (metavar, metaAbs)
+                 in MetaSubsts (subst : substs)
+            )
+            (matchMetavar scope' binderList scope args rhs)
     (Node (L2 leftTerm), Node (L2 rightTerm)) ->
       -- AppSig t1 t2 -- left term
       -- AppSig a1 a2 -- right term
@@ -265,9 +283,10 @@ closed term = Just (unsafeCoerce term)
 -- M[x, x] = x + x
 -- ∀ x. M[λy:t. x, λa:t. λa:t. a] = λy:t. x
 matchMetavar
-  :: forall metavar n binder sig ext t
+  :: forall metavar n m binder sig ext t
    . ( Eq metavar
      , Foil.Distinct n
+     , Foil.Distinct m
      , Foil.UnifiablePattern binder
      , Foil.SinkableK binder
      , Bitraversable sig
@@ -275,58 +294,56 @@ matchMetavar
      , ZipMatchK sig
      , ZipMatchK (Sum sig ext)
      )
-  => Foil.Scope n
+  => Foil.Scope m
+  -> Foil.NameBinderList Foil.VoidS m
+  -> Foil.Scope n
   -> [SOAS binder metavar sig n]
   -> AST binder (Sum sig ext) n
-  -> [(MetaAbs binder (Sum sig ext) t, MetaSubsts binder sig metavar ext t)]
-matchMetavar scope args rhs =
-  projections
-    ++ case rhs of
-      -- M[t1, t2] = F(x.u1, u2)
-      -- T1[t1, t2, x] = u1
-      -- -- [([z1, z2, z3] -> w1, substs1)]
-      -- T2[t1, t2] = u2
-      -- -- [([z1, z2] -> w2, substs2)]
-      -- bitraverse ... node = [F(([z1, z2, z3] -> w1, substs1), ([z1, z2] -> w2, substs2))]
-      -- final result: [([z1, z2, z3] -> w, substs)]
-      Node node -> do
-        traversed <- bitraverse (matchMetavarScoped scope args) (matchMetavar scope args) node
-        -- FIXME: 
-        metaAbs <- undefined
-        substs <- combineMetaSubsts (map snd (biList traversed))
-        return (metaAbs, substs)
-      _ -> []
+  -> [(AST binder (Sum sig ext) m, MetaSubsts binder sig metavar ext t)]
+matchMetavar metavarScope metavarNameBinders scope args rhs =
+  let
+    projections = project metavarNameBinders args
+   in
+    projections
+      ++ case rhs of
+        -- M[t1, t2] = F(x.u1, u2)
+        -- T1[t1, t2, x] = u1
+        -- -- [([z1, z2, z3] -> w1, substs1)]
+        -- T2[t1, t2] = u2
+        -- -- [([z1, z2] -> w2, substs2)]
+        -- bitraverse ... node = [F(([z1, z2, z3] -> w1, substs1), ([z1, z2] -> w2, substs2))]
+        -- final result: [([z1, z2, z3] -> w, substs)]
+        Node node -> do
+          traversed <-
+            bitraverse
+              (matchMetavarScoped metavarScope metavarNameBinders scope args)
+              (matchMetavar metavarScope metavarNameBinders scope args)
+              node
+          let term = Node (bimap fst fst traversed)
+          substs <- combineMetaSubsts (biList (bimap snd snd traversed))
+          return (term, substs)
+        _ -> []
  where
   project
     :: (Foil.Distinct i)
-    => Foil.NameBinderList Foil.VoidS l
-    -> Foil.NameBinderList i l
+    => Foil.NameBinderList i m
     -> [SOAS binder metavar sig n]
-    -> [(MetaAbs binder (Sum sig ext) t, MetaSubsts binder sig metavar ext t)]
-  project _ Foil.NameBinderListEmpty [] = []
-  project binderList (Foil.NameBinderListCons x xs) (arg : args') =
+    -> [(AST binder (Sum sig ext) m, MetaSubsts binder sig metavar ext t)]
+  project Foil.NameBinderListEmpty [] = []
+  project (Foil.NameBinderListCons x xs) (arg : args') =
     case Foil.assertDistinct x of
       Foil.Distinct ->
         case (Foil.assertExt xs, Foil.assertDistinct xs) of
           (Foil.Ext, Foil.Distinct) ->
             let substs = match scope arg rhs
-                dummyTypes =
-                  Foil.addNameBinders
-                    binderList
-                    ( unsafeCoerce (repeat (Raw.Base (Raw.VarIdent "T")))
-                    )
-                    Foil.emptyNameMap
                 term = Var (Foil.sink (Foil.nameOf x))
-                metaAbs = MetaAbs binderList dummyTypes term
-             in map (metaAbs,) substs ++ project binderList xs args'
-  project _ _ _ = error "mismatched name list and argument list"
-
-  projections =
-    withFreshNameBinderList args Foil.emptyScope Foil.NameBinderListEmpty $ \_ binders ->
-      project binders binders args
+             in map (term,) substs ++ project xs args'
+  project _ _ = error "mismatched name list and argument list"
 
 matchMetavarScoped
-  :: ( Foil.Distinct n
+  :: forall n m metavar binder sig ext t
+   . ( Foil.Distinct n
+     , Foil.Distinct m
      , Eq metavar
      , Foil.UnifiablePattern binder
      , Bitraversable sig
@@ -335,16 +352,27 @@ matchMetavarScoped
      , ZipMatchK (Sum sig ext)
      , Foil.SinkableK binder
      )
-  => Foil.Scope n
+  => Foil.Scope m
+  -> Foil.NameBinderList Foil.VoidS m
+  -> Foil.Scope n
   -> [SOAS binder metavar sig n]
   -> ScopedAST binder (Sum sig ext) n
-  -> [(MetaAbs binder (Sum sig ext) t, MetaSubsts binder sig metavar ext t)]
-matchMetavarScoped scope args (ScopedAST binder rhs) =
+  -> [(ScopedAST binder (Sum sig ext) m, MetaSubsts binder sig metavar ext t)]
+matchMetavarScoped metavarScope metavarNameBinders scope args (ScopedAST binder rhs) =
   case (Foil.assertExt binder, Foil.assertDistinct binder) of
     (Foil.Ext, Foil.Distinct) ->
-      let scope' = Foil.extendScopePattern binder scope
-          args' = map Foil.sink args ++ map Var (Foil.namesOfPattern binder)
-       in matchMetavar scope' args' rhs
+      Foil.withRefreshedPattern @_ @_ @(AST binder sig)
+        metavarScope
+        binder
+        $ \_extendSubst metavarBinder ->
+          let metavarScope' = Foil.extendScopePattern metavarBinder metavarScope
+              freshNameBinders = Foil.nameBinderListOf metavarBinder
+              metavarNameBinders' =
+                concatNameBinderLists freshNameBinders metavarNameBinders
+              scope' = Foil.extendScopePattern binder scope
+              args' = map Foil.sink args ++ map Var (Foil.namesOfPattern binder)
+              result = matchMetavar metavarScope' metavarNameBinders' scope' args' rhs
+           in map (first (ScopedAST metavarBinder)) result
 
 withFreshNameBinderList
   :: (Foil.Distinct n)
@@ -368,3 +396,8 @@ withFreshNameBinderList (_ : xs) scope binders cont =
 push :: Foil.NameBinder i l -> Foil.NameBinderList n i -> Foil.NameBinderList n l
 push x Foil.NameBinderListEmpty = Foil.NameBinderListCons x Foil.NameBinderListEmpty
 push x (Foil.NameBinderListCons y ys) = Foil.NameBinderListCons y (push x ys)
+
+concatNameBinderLists :: Foil.NameBinderList i l -> Foil.NameBinderList n i -> Foil.NameBinderList n l
+concatNameBinderLists lst Foil.NameBinderListEmpty = lst
+concatNameBinderLists lst (Foil.NameBinderListCons x xs) =
+  Foil.NameBinderListCons x (concatNameBinderLists lst xs)
