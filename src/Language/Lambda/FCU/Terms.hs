@@ -4,7 +4,7 @@ module Language.Lambda.FCU.Terms where
 
 import Data.Char (isUpper)
 import Data.List (elemIndex)
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, fromMaybe)
 import Data.String (IsString (..))
 
 -- $setup
@@ -78,12 +78,11 @@ matchTermLists vsm tn sm =
   [v | (v, t) <- zip vsm tn, t `elem` sm]
 
 -- | Untested
-permutate :: [Id] -> [Term] -> [Term] -> [Id]
-permutate vsm tn sm = mapMaybe selectId sm
-  where
-    selectId s = do
-      index <- elemIndex s tn
-      return (vsm !! index)
+permutate :: [String] -> [String] -> [String] -> [String]
+permutate zs as bs = [zs !! i | b <- bs, let i = fromMaybe 0 $ elemIndex b as]
+
+-- >>> permutate ["z1", "z2", "z3"] ["a", "b", "c"] ["b", "a"]
+-- ["z2","z1"]
 
 applyTerms :: Term -> [Term] -> Term
 applyTerms = foldl (:@)
