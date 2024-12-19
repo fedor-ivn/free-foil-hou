@@ -4,7 +4,7 @@ module Language.Lambda.FCU.Terms where
 
 import Data.Char (isUpper)
 import Data.List (elemIndex)
-import Data.Maybe (mapMaybe, fromMaybe)
+import Data.Maybe (mapMaybe, fromMaybe, maybeToList)
 import Data.String (IsString (..))
 
 -- $setup
@@ -73,16 +73,15 @@ subset sm tn = all (`elem` tn) sm
 -- >>> subset ["x", "y", "z"] ["x", "y"]
 -- False
 
-matchTermLists :: [Id] -> [Term] -> [Term] -> [Id]
-matchTermLists vsm tn sm =
-  [v | (v, t) <- zip vsm tn, t `elem` sm]
+-- | Apply a permutation to two list of arguments
+permutate :: [Id] -> [Term] -> [Term] -> [Id]
+permutate zs as bs = [zs !! i | b <- bs, i <- maybeToList $ elemIndex b as]
 
--- | Untested
-permutate :: [String] -> [String] -> [String] -> [String]
-permutate zs as bs = [zs !! i | b <- bs, let i = fromMaybe 0 $ elemIndex b as]
-
--- >>> permutate ["z1", "z2", "z3"] ["a", "b", "c"] ["b", "a"]
+-- >>> permutate ["z1", "z2"] ["a", "b", "c"] ["b", "a"]
 -- ["z2","z1"]
 
-applyTerms :: Term -> [Term] -> Term
-applyTerms = foldl (:@)
+-- >>> permutate ["z1", "z2", "z3"] ["a", "b", "c"] ["b", "a", "c"]
+-- ["z2","z1","z3"]
+
+-- >>> permutate ["z1", "z2", "z3", "z4"] ["a", "b", "c"] ["b", "a", "d", "c"]
+-- ["z2","z1","z3"]
