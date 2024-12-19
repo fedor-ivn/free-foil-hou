@@ -11,7 +11,7 @@ import Language.Lambda.FCU.RTerms (RTerm (..), toRTerm)
 import Language.Lambda.FCU.Restrictions (argumentRestriction, globalRestriction, localRestriction)
 import Language.Lambda.FCU.Strip (strip, unstrip)
 import Language.Lambda.FCU.Substitutions (devar, mkvars, rename)
-import Language.Lambda.FCU.Terms (Id, Term (..), permutate, subset)
+import Language.Lambda.FCU.Terms (Id, Term (..), permutate, subset, newMetaVarId)
 
 ----- Unification ----- bvs (th (s,t)) = Q, (theta, S)
 unify :: [(Char, Id)] -> ([(Id, Term)], (Term, Term)) -> [(Id, Term)]
@@ -51,7 +51,7 @@ unify bvs (th, (s, t)) = case (devar th s, devar th t) of
 -- λz1 . (λz2 . (Snd Y' z1))
 
 -- >>> unify [] ([], ("X" :@ "a" :@ "b1" :@ "c", "Y" :@ "c" :@ "b2" :@ "a"))
--- [("Y",λz1 . (λz2 . (λz3 . ((Y' z1) (z3))))),("X",λz1 . (λz2 . (λz3 . ((X' z1) (z3))))),("Y",λz1 . (λz2 . ((X z2) (z1))))]
+-- [("Y",λz1 . (λz2 . (λz3 . ((Y' z1) (z3))))),("X",λz1 . (λz2 . (λz3 . ((X' z1) (z3))))),("Y'",λz1 . (λz2 . ((X' z2) (z1))))]
 
 cases :: [(Char, Id)] -> ([(Id, Term)], (Term, Term)) -> [(Id, Term)]
 cases bvs (th, (s, t)) = case (strip s, strip t) of
@@ -113,4 +113,4 @@ caseFlexFlexDiff bvs (_F, _G, sn, tm, th)
     tmnew = strip (devar pruningResultLeft t)
     snnew = strip (devar pruningResultRight s)
     vsm = mkvars (snd tmnew)
-    metavarSubs = [(_G ++ "'", hnf (vsm, _F ++ "'", permutate vsm (snd tmnew) (snd snnew)))]
+    metavarSubs = [(newMetaVarId _G, hnf (vsm, newMetaVarId _F, permutate vsm (snd tmnew) (snd snnew)))]

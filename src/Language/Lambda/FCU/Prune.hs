@@ -7,7 +7,7 @@ import           Language.Lambda.FCU.Covers        (coverExists)
 import           Language.Lambda.FCU.RTerms        (RTerm (..), toRTerm)
 import           Language.Lambda.FCU.Strip         (strip)
 import           Language.Lambda.FCU.Substitutions (Substitutions (..), devar, mkvars)
-import           Language.Lambda.FCU.Terms         (Id, Term (..), subset)
+import           Language.Lambda.FCU.Terms         (Id, Term (..), subset, newMetaVarId)
 
 abst :: ([Id], Term) -> Term
 abst ([], t) = t
@@ -39,7 +39,7 @@ foldlN f (rho, t : ts) = foldlN f (f (rho, t), ts)
 -- | Select the variables in the first list that are in the second list
 eqsel :: [Id] -> [Term] -> [Term] -> [Id]
 eqsel vsm tn sm =
-  [v | (v, t) <- zip vsm tn, t `elem` sm]
+  [v | (v, s) <- zip vsm sm, s `elem` tn]
 
 -- >>> eqsel ["z1", "z2", "z3"] ["x", "y", "z"] ["x", "y", "z"]
 -- ["z1","z2","z3"]
@@ -48,7 +48,7 @@ eqsel vsm tn sm =
 -- ["z1"]
 
 -- >>> eqsel ["z1", "z2"] ["x", "y"] ["z", "x"]
--- ["z1"]
+-- ["z2"]
 
 prune :: [Term] -> ([(Id, Term)], Term) -> [(Id, Term)]
 prune tn (rho, u) = case strip (devar rho u) of
@@ -64,7 +64,7 @@ prune tn (rho, u) = case strip (devar rho u) of
       then rho
       else
         let vsm = mkvars sm
-         in (_W, hnf (vsm, _W ++ "'", eqsel vsm tn sm)) : rho
+         in (_W, hnf (vsm, newMetaVarId _W, eqsel vsm tn sm)) : rho
   _ -> error "Prune: unexpected case"
 
 -- >>> prune ["x", "y"] ([], "Cons" :@ "x" :@ "y")
@@ -78,3 +78,6 @@ prune tn (rho, u) = case strip (devar rho u) of
 
 -- >>> prune ["a", "b1", "c"] ([], "X" :@ "a" :@ "b2" :@ "c")
 -- [("X",λz1 . (λz2 . (λz3 . ((X' z1) (z3)))))]
+
+-- >>> prune ["l1", "l2"] ([], "Snd" :@ "l3" :@ "l1")
+-- []
