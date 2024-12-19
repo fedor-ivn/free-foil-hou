@@ -36,18 +36,19 @@ foldlN :: (([(Id, Term)], Term) -> [(Id, Term)]) -> ([(Id, Term)], [Term]) -> [(
 foldlN _ (rho, []) = rho
 foldlN f (rho, t : ts) = foldlN f (f (rho, t), ts)
 
+-- | Select the variables in the first list that are in the second list
 eqsel :: [Id] -> [Term] -> [Term] -> [Id]
 eqsel vsm tn sm =
-  [v | (v, t) <- zip vsm tn, t `notElem` sm]
+  [v | (v, t) <- zip vsm tn, t `elem` sm]
 
--- >>> eqsel ["z1", "z2"] ["x", "y", "z"] ["x", "y", "z"]
--- []
+-- >>> eqsel ["z1", "z2", "z3"] ["x", "y", "z"] ["x", "y", "z"]
+-- ["z1","z2","z3"]
 
 -- >>> eqsel ["z1", "z2"] ["x", "y"] ["x", "w"]
--- ["z2"]
+-- ["z1"]
 
 -- >>> eqsel ["z1", "z2"] ["x", "y"] ["z", "x"]
--- ["z2"]
+-- ["z1"]
 
 prune :: [Term] -> ([(Id, Term)], Term) -> [(Id, Term)]
 prune tn (rho, u) = case strip (devar rho u) of
@@ -70,7 +71,10 @@ prune tn (rho, u) = case strip (devar rho u) of
 -- []
 
 -- >>> prune ["x", "q", "y"] ([], "X" :@ ("Snd" :@ "x") :@ "q")
--- [("X",λz1 . (λz2 . (X' z1)))]
+-- [("X",λz1 . (λz2 . (X' z2)))]
 
 -- >>> prune ["y"] ([("X", "z1" :.: ("Cons" :@ "x"))], "Cons" :@ "x")
 -- [("X",λz1 . (Cons x))]
+
+-- >>> prune ["a", "b1", "c"] ([], "X" :@ "a" :@ "b2" :@ "c")
+-- [("X",λz1 . (λz2 . (λz3 . ((X' z1) (z3)))))]

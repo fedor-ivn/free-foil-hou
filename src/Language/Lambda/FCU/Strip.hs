@@ -16,3 +16,17 @@ strip t = (t, [])
 
 --- >>> strip ("Cons" :@ "x" :@ ("y" :@ ("z" :.: "z")))
 -- (Cons,[x,y λz . (z)])
+
+
+-- | Combine a head term with arguments to reconstruct the original term
+unstrip :: (Term, [Term]) -> Term
+unstrip (head, args) = foldl (:@) head args
+
+-- >>> unstrip ("X", ["y", "z"])
+-- (W "X" :@ O "y") :@ O "z"
+
+-- >>> ("X" :@ "y" :@ "z")
+-- (W "X" :@ O "y") :@ O "z"
+
+-- >>> unstrip ("Cons", ["x", "y" :@ ("z" :.: "z")])
+-- (Constructor "Cons" :@ O "x") :@ (O "y" :@ ("z" :.: O "z"))
