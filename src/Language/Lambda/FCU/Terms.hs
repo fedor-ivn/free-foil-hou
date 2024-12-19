@@ -85,3 +85,6 @@ permutate zs as bs = [zs !! i | b <- bs, i <- maybeToList $ elemIndex b as]
 
 -- >>> permutate ["z1", "z2", "z3", "z4"] ["a", "b", "c"] ["b", "a", "d", "c"]
 -- ["z2","z1","z3"]
+
+newMetaVarId :: Id -> Id
+newMetaVarId = (++ "'")
