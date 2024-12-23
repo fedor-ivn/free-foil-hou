@@ -109,9 +109,9 @@ caseFlexFlexDiff bvs (_F, _G, sn, tm, th)
   | not (globalRestriction sn tm) = error "Global restriction fail at flexflex case"
   | otherwise = th ++ pruningResultLeft ++ pruningResultRight ++ metavarSubs
   where
-    t = (unstrip ((W _G), tm))
+    t = unstrip (W _G, tm)
     pruningResultLeft = prune sn (th, t)
-    s = (unstrip ((W _F), sn))
+    s = unstrip (W _F, sn)
     pruningResultRight = prune tm (th, s)
     tmnew = strip (devar pruningResultLeft t)
     snnew = strip (devar pruningResultRight s)
