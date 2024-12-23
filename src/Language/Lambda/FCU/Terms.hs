@@ -4,7 +4,7 @@ module Language.Lambda.FCU.Terms where
 
 import Data.Char (isUpper)
 import Data.List (elemIndex)
-import Data.Maybe (mapMaybe, fromMaybe, maybeToList)
+import Data.Maybe (fromMaybe, mapMaybe, maybeToList)
 import Data.String (IsString (..))
 
 -- $setup
@@ -51,6 +51,7 @@ ppTerm (f :@ x) = case f of
 -- Cons
 -- >>> "x" :.: ("Cons" :@ "x" :@ "y") :: Term
 -- λx . ((Cons x) y)
+
 isMeta :: Term -> Bool
 isMeta (W _) = True
 isMeta _ = False
@@ -88,3 +89,6 @@ permutate zs as bs = [zs !! i | b <- bs, i <- maybeToList $ elemIndex b as]
 
 newMetaVarId :: Id -> Id
 newMetaVarId = (++ "'")
+
+-- >>> newMetaVarId "X"
+-- "X'"

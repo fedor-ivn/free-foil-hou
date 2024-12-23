@@ -61,4 +61,4 @@ coverTest2 =
         ("Snd" :@ "l")
     }
 -- >>> runCoverTest coverTest2
--- Just Cons (Cons (x3) (x2)) (x1)
+-- Just (Cons (Cons x3) (x2)) (x1)
