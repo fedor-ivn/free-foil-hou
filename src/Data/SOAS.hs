@@ -79,7 +79,8 @@ newtype MetaSubsts binder sig metavar ext t = MetaSubsts
 
 -- | Apply metavariable substitutions to a SOAS term.
 applyMetaSubsts
-  :: ( Bifunctor sig
+  :: forall sig metavar metavar' n binder t
+   . ( Bifunctor sig
      , Eq metavar
      , Foil.Distinct n
      , Foil.CoSinkable binder
@@ -94,24 +95,32 @@ applyMetaSubsts rename scope substs = \case
   Var x -> Var x
   -- FIXME: MetaApp metavar args ->
   Node (R2 (MetaAppSig metavar args)) ->
-    let args' = map apply args
-     in case lookup metavar (getMetaSubst <$> getMetaSubsts substs) of
-          Just (MetaAbs names _types body) ->
-            let nameMap = toNameMap Foil.emptyNameMap names args'
-                substs' = Foil.nameMapToSubstitution nameMap
-             in substitute scope substs' body
-          Nothing -> MetaApp (rename metavar) args'
-  Node (L2 term) ->
-    let term' = bimap (goScoped rename scope substs) apply term
-     in Node (L2 term')
- where
-  apply = applyMetaSubsts rename scope substs
-
-  toNameMap :: Foil.NameMap n a -> Foil.NameBinderList n l -> [a] -> Foil.NameMap l a
-  toNameMap nameMap Foil.NameBinderListEmpty [] = nameMap
-  toNameMap nameMap (Foil.NameBinderListCons binder rest) (x : xs) = toNameMap fresh rest xs
+    case lookup metavar (getMetaSubst <$> getMetaSubsts substs) of
+      Just (MetaAbs names _types body) ->
+        let nameMap = toNameMap Foil.emptyNameMap names args'
+            substs' = Foil.nameMapToSubstitution nameMap
+         in substitute scope substs' body
+      Nothing -> MetaApp (rename metavar) args'
    where
-    fresh = Foil.addNameBinder binder x nameMap
+    args' = map go args
+  Node (L2 term) ->
+    let term' = bimap goScoped go term in Node (L2 term')
+ where
+  go = applyMetaSubsts rename scope substs
+  goScoped (ScopedAST binder body) =
+    let scope' = Foil.extendScopePattern binder scope
+     in case Foil.assertDistinct binder of
+          Foil.Distinct ->
+            ScopedAST binder (applyMetaSubsts rename scope' substs body)
+
+  toNameMap
+    :: Foil.NameMap m a
+    -> Foil.NameBinderList m l
+    -> [a]
+    -> Foil.NameMap l a
+  toNameMap nameMap Foil.NameBinderListEmpty [] = nameMap
+  toNameMap nameMap (Foil.NameBinderListCons binder rest) (x : xs) =
+    toNameMap (Foil.addNameBinder binder x nameMap) rest xs
   toNameMap _ _ _ = error "mismatched name list and argument list"
 
   goScoped
