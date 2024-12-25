@@ -73,7 +73,8 @@ newtype MetaSubsts binder sig metavar ext t = MetaSubsts
   }
 
 applyMetaSubsts
-  :: ( Bifunctor sig
+  :: forall sig metavar metavar' n binder t
+   . ( Bifunctor sig
      , Eq metavar
      , Bifunctor (MetaAppSig metavar')
      , Foil.Distinct n
@@ -89,45 +90,33 @@ applyMetaSubsts rename scope substs = \case
   Var x -> Var x
   -- FIXME: MetaApp metavar args ->
   Node (R2 (MetaAppSig metavar args)) ->
-    let args' = map apply args
-     in case lookup metavar (getMetaSubst <$> getMetaSubsts substs) of
-          Just (MetaAbs names _types body) ->
-            let nameMap = toNameMap Foil.emptyNameMap names args'
-                substs' = Foil.nameMapToSubstitution nameMap
-             in substitute scope substs' body
-          Nothing -> MetaApp (rename metavar) args'
+    case lookup metavar (getMetaSubst <$> getMetaSubsts substs) of
+      Just (MetaAbs names _types body) ->
+        let nameMap = toNameMap Foil.emptyNameMap names args'
+            substs' = Foil.nameMapToSubstitution nameMap
+         in substitute scope substs' body
+      Nothing -> MetaApp (rename metavar) args'
+   where
+    args' = map go args
   Node (L2 term) ->
-    let term' = bimap (goScoped rename scope substs) apply term
-     in Node (L2 term')
+    let term' = bimap goScoped go term in Node (L2 term')
  where
-  apply = applyMetaSubsts rename scope substs
+  go = applyMetaSubsts rename scope substs
+  goScoped (ScopedAST binder body) =
+    let scope' = Foil.extendScopePattern binder scope
+     in case Foil.assertDistinct binder of
+          Foil.Distinct ->
+            ScopedAST binder (applyMetaSubsts rename scope' substs body)
 
-  toNameMap :: Foil.NameMap n a -> Foil.NameBinderList n l -> [a] -> Foil.NameMap l a
+  toNameMap
+    :: Foil.NameMap m a
+    -> Foil.NameBinderList m l
+    -> [a]
+    -> Foil.NameMap l a
   toNameMap nameMap Foil.NameBinderListEmpty [] = nameMap
-  toNameMap nameMap (Foil.NameBinderListCons binder rest) (x : xs) = toNameMap fresh rest xs
-   where
-    fresh = Foil.addNameBinder binder x nameMap
+  toNameMap nameMap (Foil.NameBinderListCons binder rest) (x : xs) =
+    toNameMap (Foil.addNameBinder binder x nameMap) rest xs
   toNameMap _ _ _ = error "mismatched name list and argument list"
-
-  goScoped
-    :: ( Bifunctor sig
-       , Eq metavar
-       , Bifunctor (MetaAppSig metavar')
-       , Foil.Distinct n
-       , Foil.CoSinkable binder
-       , Foil.SinkableK binder
-       )
-    => (metavar -> metavar')
-    -> Foil.Scope n
-    -> MetaSubsts binder sig metavar (MetaAppSig metavar') t
-    -> ScopedAST binder (Sum sig (MetaAppSig metavar)) n
-    -> ScopedAST binder (Sum sig (MetaAppSig metavar')) n
-  goScoped rename' scope' substs' (ScopedAST binder body) =
-    case Foil.assertDistinct binder of
-      Foil.Distinct ->
-        ScopedAST binder (applyMetaSubsts rename' newScope substs' body)
-   where
-    newScope = Foil.extendScopePattern binder scope'
 
 -- M[x, y] M[y, x] = x y
 -- M[x, y] M[x, y] = x y
@@ -276,9 +265,6 @@ matchScoped scope (ScopedAST binder lhs) (ScopedAST binder' rhs) =
               rhs' = Foil.liftRM scope' (Foil.fromNameBinderRenaming rename2) rhs
            in match scope' lhs' rhs'
     Foil.NotUnifiable -> trace "not unifiable" []
-
-closed :: AST binder sig n -> Maybe (AST binder sig Foil.VoidS)
-closed term = Just (unsafeCoerce term)
 
 -- M[x, x] = x + x
 -- ∀ x. M[λy:t. x, λa:t. λa:t. a] = λy:t. x
