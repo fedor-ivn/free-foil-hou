@@ -2,12 +2,12 @@
 
 module Language.Lambda.FCU.Prune where
 
-import           Data.List                         (elemIndex)
-import           Language.Lambda.FCU.Covers        (coverExists)
-import           Language.Lambda.FCU.RTerms        (RTerm (..), toRTerm)
-import           Language.Lambda.FCU.Strip         (strip)
-import           Language.Lambda.FCU.Substitutions (Substitutions (..), devar, mkvars)
-import           Language.Lambda.FCU.Terms         (Id, Term (..), subset, newMetaVarId)
+import Data.List (elemIndex)
+import Language.Lambda.FCU.Covers (coverExists)
+import Language.Lambda.FCU.RTerms (RTerm (..), toRTerm)
+import Language.Lambda.FCU.Strip (strip)
+import Language.Lambda.FCU.Substitutions (Substitutions (..), devar, mkvars)
+import Language.Lambda.FCU.Terms (Id, Term (..), newMetaVarId, subset)
 
 abst :: ([Id], Term) -> Term
 abst ([], t) = t
