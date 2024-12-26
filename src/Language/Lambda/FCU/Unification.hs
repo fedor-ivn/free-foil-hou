@@ -11,7 +11,7 @@ import Language.Lambda.FCU.RTerms (RTerm (..), toRTerm)
 import Language.Lambda.FCU.Restrictions (argumentRestriction, globalRestriction, localRestriction)
 import Language.Lambda.FCU.Strip (strip, unstrip)
 import Language.Lambda.FCU.Substitutions (devar, mkvars, rename)
-import Language.Lambda.FCU.Terms (Id, Term (..), permutate, subset, newMetaVarId)
+import Language.Lambda.FCU.Terms (Id, Term (..), newMetaVarId, permutate, subset)
 
 ----- Unification ----- bvs (th (s,t)) = Q, (theta, S)
 unify :: [(Char, Id)] -> ([(Id, Term)], (Term, Term)) -> [(Id, Term)]
