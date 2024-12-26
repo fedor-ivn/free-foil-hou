@@ -1,0 +1,17 @@
+comment "--" ;
+
+-- All uppercase letters
+token MetaVarId (upper (upper | digit | '_')*) ;
+
+-- Uppercase followed by lowercase letters
+token ConsId (upper (lower | digit | '_')*) ;
+
+-- Lowercase letters
+token VarId (lower (letter | digit | '_')*) ;
+
+-- Terms in the lambda calculus
+Lam.     Term  ::= "λ" VarId "." Term1 ;
+App.     Term1 ::= Term1 Term2 ; -- x y z  =  (x y) z  ≠  x (y z)
+Var.     Term2 ::= VarId ;
+MetaVar. Term2 ::= MetaVarId ;
+Cons. Term2 ::= ConsId ;
