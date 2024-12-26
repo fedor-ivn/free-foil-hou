@@ -7,7 +7,7 @@ module Language.Lambda.FCU.Substitutions
     devar,
     devarOne,
     mkvars,
-    rename
+    rename,
   )
 where
 

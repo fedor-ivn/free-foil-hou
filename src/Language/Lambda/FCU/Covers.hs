@@ -1,16 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Language.Lambda.FCU.Covers
-  ( findCover
-  , coverExists
-  , CoverTest(..)
-  , runCoverTest
-  ) where
+  ( findCover,
+    coverExists,
+    CoverTest (..),
+    runCoverTest,
+  )
+where
 
-import           Data.Maybe                 (isJust)
-import           Language.Lambda.FCU.RTerms (RTerm (..), toRTerm, toTerm)
-import           Language.Lambda.FCU.Terms  (Term (..))
+import Data.Maybe (isJust)
+import Language.Lambda.FCU.RTerms (RTerm (..), toRTerm, toTerm)
+import Language.Lambda.FCU.Terms (Term (..))
 
 findCover :: [RTerm] -> RTerm -> Maybe RTerm
 findCover params r =
@@ -34,11 +35,11 @@ coverExists params r = isJust (findCover params r)
 -- Cons x y, [y, x]
 -- >>> findCover [RO "y", RO "x"] (RApp (RApp (RConstructor "Cons") (RO "x")) (RO "y"))
 -- Just (RApp (RApp (RConstructor "Cons") (RO "x2")) (RO "x1"))
-data CoverTest =
-  CoverTest
-    { coverTestParams :: [Term]
-    , coverTestRHS    :: Term
-    }
+data CoverTest
+  = CoverTest
+  { coverTestParams :: [Term],
+    coverTestRHS :: Term
+  }
 
 runCoverTest :: CoverTest -> Maybe Term
 runCoverTest CoverTest {..} =
@@ -53,12 +54,14 @@ coverTest1 =
 coverTest2 :: CoverTest
 coverTest2 =
   CoverTest
-      -- snd l, z, cons (fst x) y
-    { coverTestParams = ["Snd" :@ "l", "z", "Cons" :@ ("Fst" :@ "x") :@ "y"]
+    { -- snd l, z, cons (fst x) y
+      coverTestParams = ["Snd" :@ "l", "z", "Cons" :@ ("Fst" :@ "x") :@ "y"],
       -- cons (cons (cons (fst x) y) z) (snd l)
-    , coverTestRHS =
-        "Cons" :@ ("Cons" :@ ("Cons" :@ ("Fst" :@ "x") :@ "y") :@ "z") :@
-        ("Snd" :@ "l")
+      coverTestRHS =
+        "Cons"
+          :@ ("Cons" :@ ("Cons" :@ ("Fst" :@ "x") :@ "y") :@ "z")
+          :@ ("Snd" :@ "l")
     }
+
 -- >>> runCoverTest coverTest2
 -- Just (Cons (Cons x3) (x2)) (x1)

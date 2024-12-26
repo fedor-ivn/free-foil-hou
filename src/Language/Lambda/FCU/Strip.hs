@@ -2,7 +2,7 @@
 
 module Language.Lambda.FCU.Strip where
 
-import           Language.Lambda.FCU.Terms (Id, Term (..))
+import Language.Lambda.FCU.Terms (Id, Term (..))
 
 -- | Strip a term into a head and a list of arguments.
 strip :: Term -> (Term, [Term])
@@ -16,7 +16,6 @@ strip t = (t, [])
 
 --- >>> strip ("Cons" :@ "x" :@ ("y" :@ ("z" :.: "z")))
 -- (Cons,[x,y λz . (z)])
-
 
 -- | Combine a head term with arguments to reconstruct the original term
 unstrip :: (Term, [Term]) -> Term
