@@ -31,47 +31,53 @@ import Generics.Kind.TH (deriveGenericK)
 import qualified Language.Lambda.Syntax.Abs as Raw
 import Unsafe.Coerce (unsafeCoerce)
 
-data MetaAppSig metavar scope term = MetaAppSig metavar [term]
+-- | Second-order signature for metavariable applications.
+-- This way, metavariables can be added to any other signature using 'Sum'.
+data MetaAppSig metavar scope term
+  = MetaAppSig metavar [term] -- ^ A metavariable is always fully applied to a list of arguments.
   deriving (Functor, Foldable, Traversable, GHC.Generic)
-
 deriveBifunctor ''MetaAppSig
 deriveBifoldable ''MetaAppSig
 deriveBitraversable ''MetaAppSig
-
 deriveGenericK ''MetaAppSig
-
 instance (ZipMatchK a) => ZipMatchK (MetaAppSig a)
 
--- >>> a = "λy.(λx.λy.X[x, y X[y, x]])y" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
--- >>> b = "λz.(λx.λy.X[x, y X[y, x]])z" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
--- >>> alphaEquiv Foil.emptyScope a b
--- True
-
+-- | A second-order abstract syntax (SOAS) is generated from a signature
+-- by adding parametrised metavariables.
+--
+-- Note that here we also parametrise SOAS by the type of binders (patterns) @binder@.
 type SOAS binder metavar sig n = AST binder (Sum sig (MetaAppSig metavar)) n
 
+-- | A scoped version of 'SOAS'. 
+-- 'ScopedSOAS' is to 'SOAS' what 'ScopedAST' is to 'AST'.
 type ScopedSOAS binder metavar sig n = ScopedAST binder (Sum sig (MetaAppSig metavar)) n
 
+-- | A convenient pattern synonym for parametrised metavariables.
 pattern MetaApp
   :: metavar
   -> [SOAS binder metavar sig n]
   -> SOAS binder metavar sig n
 pattern MetaApp metavar args = Node (R2 (MetaAppSig metavar args))
 
+-- | A body of a metavariable substitution for one metavariable.
 data MetaAbs binder sig t where
   MetaAbs
-    :: Foil.NameBinderList Foil.VoidS n
-    -> Foil.NameMap n t
-    -> AST binder sig n
+    :: Foil.NameBinderList Foil.VoidS n -- ^ A list of binders corresponding to metavariable arguments.
+    -> Foil.NameMap n t                 -- ^ Types of parameters.
+    -> AST binder sig n                 -- ^ Term to substitute the metavariable with.
     -> MetaAbs binder sig t
 
+-- | A metavariable substitution is a pair of a metavariable name and its body.
 newtype MetaSubst binder sig metavar ext t = MetaSubst
   { getMetaSubst :: (metavar, MetaAbs binder (Sum sig ext) t)
   }
 
+-- | A collection of metavariable substitutions (for simultaneous substitution of multiple metavariables).
 newtype MetaSubsts binder sig metavar ext t = MetaSubsts
   { getMetaSubsts :: [MetaSubst binder sig metavar ext t]
   }
 
+-- | Apply metavariable substitutions to a SOAS term.
 applyMetaSubsts
   :: ( Bifunctor sig
      , Eq metavar
@@ -80,10 +86,10 @@ applyMetaSubsts
      , Foil.CoSinkable binder
      , Foil.SinkableK binder
      )
-  => (metavar -> metavar')
-  -> Foil.Scope n
-  -> MetaSubsts binder sig metavar (MetaAppSig metavar') t
-  -> SOAS binder metavar sig n
+  => (metavar -> metavar')  -- ^ Renaming of metavariables (normally, 'id' or some kind of injection).
+  -> Foil.Scope n           -- ^ Scope of terms.
+  -> MetaSubsts binder sig metavar (MetaAppSig metavar') t    -- ^ Metavariable substitutions.
+  -> SOAS binder metavar sig n    -- ^ The original SOAS term.
   -> SOAS binder metavar' sig n
 applyMetaSubsts rename scope substs = \case
   Var x -> Var x
@@ -129,9 +135,8 @@ applyMetaSubsts rename scope substs = \case
    where
     newScope = Foil.extendScopePattern binder scope'
 
--- M[x, y] M[y, x] = x y
--- M[x, y] M[x, y] = x y
-
+-- | Combine (compose) metavariable substitutions.
+-- 
 -- TODO: refactor
 combineMetaSubsts
   :: ( Eq metavar
@@ -168,14 +173,21 @@ combineMetaSubsts = foldr go []
         , m == m'
         ]
 
--- | This function takes the following parameters:
+-- | Match left-hand side (with metavariables) against the rigid right-hand side.
 --
---   * `Scope n` - The current scope.
---   * `SOAS binder metavar sig n` - The left-hand side (where we want to apply
---     substitutions).
---   * `AST binder sig' n` - The right-hand side (unchangeable).
---   * `[MetaSubsts sig' metavar]` - The substitutions that turn the LHS into
---     the RHS.
+-- If matching is successful, it produces metavariable substitutions that when applied to LHS make it syntactically equal to RHS.
+-- For example, matching
+--   M[f x, g]) = g (f x)
+-- produces substitution
+--   M[z₁, z₂] ↦ z₂ z₁
+--
+-- There may be more than one solution for matching, e.g.
+--   M[f x, f x] = f x
+-- can be solved with two different substitutions:
+--   1. M[z₁, z₂] ↦ z₁
+--   2. M[z₁, z₂] ↦ z₂
+-- 
+-- Hence, this function produces a list of possible substitutions.
 match
   :: ( Bitraversable sig
      , ZipMatchK sig
@@ -186,9 +198,9 @@ match
      , Bitraversable ext
      , ZipMatchK (Sum sig ext)
      )
-  => Foil.Scope n
-  -> SOAS binder metavar sig n
-  -> AST binder (Sum sig ext) n
+  => Foil.Scope n                           -- ^ The current scope.
+  -> SOAS binder metavar sig n              -- ^ The left-hand side (with metavariables that we solve for).
+  -> AST binder (Sum sig ext) n             -- ^ The right hand side (rigid).
   -> [MetaSubsts binder sig metavar ext t]
 match scope lhs rhs =
   case (lhs, rhs) of
@@ -233,6 +245,7 @@ match scope lhs rhs =
     (Var _, _) -> []
     _ -> []
 
+-- | Same as 'match' but for scoped terms.
 matchScoped
   :: ( Bitraversable sig
      , ZipMatchK sig
@@ -277,11 +290,18 @@ matchScoped scope (ScopedAST binder lhs) (ScopedAST binder' rhs) =
            in match scope' lhs' rhs'
     Foil.NotUnifiable -> trace "not unifiable" []
 
-closed :: AST binder sig n -> Maybe (AST binder sig Foil.VoidS)
-closed term = Just (unsafeCoerce term)
-
--- M[x, x] = x + x
--- ∀ x. M[λy:t. x, λa:t. λa:t. a] = λy:t. x
+-- | A special case of 'match', when LHS is a parametrised metavariable.
+--
+-- Note that here we do not have an explicit name for that metavariable,
+-- and only consider its arguments.
+-- This is helpful when recursively matching with fresh metavariables,
+-- since we do not need to generate any actual fresh names for such metavariables,
+-- saving in complexity and performance.
+--
+-- For each possible solution, this function produces a pair of
+--
+-- 1. Body of the metavariable substitution.
+-- 2. Metavariable substitutions for the metavariables that occur in the parameters of the root metavariable on the LHS.
 matchMetavar
   :: forall metavar n m binder sig ext t
    . ( Eq metavar
@@ -294,11 +314,11 @@ matchMetavar
      , ZipMatchK sig
      , ZipMatchK (Sum sig ext)
      )
-  => Foil.Scope m
-  -> Foil.NameBinderList Foil.VoidS m
-  -> Foil.Scope n
-  -> [SOAS binder metavar sig n]
-  -> AST binder (Sum sig ext) n
+  => Foil.Scope m                         -- ^ Scope for the body of the metavariable substitution (at root of LHS).
+  -> Foil.NameBinderList Foil.VoidS m     -- ^ List of binders for the metavariable parameters (size of the list should match the actual list of parameters).
+  -> Foil.Scope n                         -- ^ Current scope.
+  -> [SOAS binder metavar sig n]          -- ^ A list of arguments of the parametrised metavariable on the left-hand side.
+  -> AST binder (Sum sig ext) n           -- ^ The right-hand side term (rigid).
   -> [(AST binder (Sum sig ext) m, MetaSubsts binder sig metavar ext t)]
 matchMetavar metavarScope metavarNameBinders scope args rhs =
   let
@@ -340,6 +360,7 @@ matchMetavar metavarScope metavarNameBinders scope args rhs =
              in map (term,) substs ++ project xs args'
   project _ _ = error "mismatched name list and argument list"
 
+-- | Same as 'matchMetavar' but for scoped term.
 matchMetavarScoped
   :: forall n m metavar binder sig ext t
    . ( Foil.Distinct n
@@ -374,6 +395,8 @@ matchMetavarScoped metavarScope metavarNameBinders scope args (ScopedAST binder 
               result = matchMetavar metavarScope' metavarNameBinders' scope' args' rhs
            in map (first (ScopedAST metavarBinder)) result
 
+-- | Generate fresh name binders for a list of things.
+-- This is useful to generate proper name binders of metavariable parameters.
 withFreshNameBinderList
   :: (Foil.Distinct n)
   => [a]
@@ -393,10 +416,16 @@ withFreshNameBinderList (_ : xs) scope binders cont =
         binders' = push binder binders
      in withFreshNameBinderList xs scope' binders' cont
 
+-- | /O(n)/. Push a name binder into the end of a name binder list.
+--
+-- /Should be in "Control.Monad.Foil"./
 push :: Foil.NameBinder i l -> Foil.NameBinderList n i -> Foil.NameBinderList n l
 push x Foil.NameBinderListEmpty = Foil.NameBinderListCons x Foil.NameBinderListEmpty
 push x (Foil.NameBinderListCons y ys) = Foil.NameBinderListCons y (push x ys)
 
+-- | /O(n)/. Concatenate name binder lists.
+--
+-- Should be in "Control.Monad.Foil".
 concatNameBinderLists :: Foil.NameBinderList i l -> Foil.NameBinderList n i -> Foil.NameBinderList n l
 concatNameBinderLists lst Foil.NameBinderListEmpty = lst
 concatNameBinderLists lst (Foil.NameBinderListCons x xs) =
