@@ -70,7 +70,7 @@ executables:
       - free-foil-hou
 
 tests:
-  free-foil-hou-test:
+  spec:
     main: Spec.hs
     source-dirs: test
     ghc-options:
@@ -79,3 +79,6 @@ tests:
       - -with-rtsopts=-N
     dependencies:
       - free-foil-hou
+      - hspec
+      - hspec-discover
+      - QuickCheck
