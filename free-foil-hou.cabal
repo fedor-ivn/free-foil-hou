@@ -87,10 +87,11 @@ executable free-foil-hou-exe
     , tomland
   default-language: Haskell2010
 
-test-suite free-foil-hou-test
+test-suite spec
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Language.Lambda.ImplSpec
       Paths_free_foil_hou
   autogen-modules:
       Paths_free_foil_hou
@@ -103,12 +104,15 @@ test-suite free-foil-hou-test
   build-tool-depends:
       BNFC:bnfc >=2.9.4.1
   build-depends:
-      array >=0.5.3.0
+      QuickCheck
+    , array >=0.5.3.0
     , base >=4.7 && <5
     , bifunctors
     , containers
     , free-foil >=0.1.0
     , free-foil-hou
+    , hspec
+    , hspec-discover
     , kind-generics-th
     , text
     , tomland
