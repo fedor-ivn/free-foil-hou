@@ -55,7 +55,7 @@ jobs:
       - name: 🧰 Setup Stack
         uses: freckle/stack-action@v5
         with:
-          stack-build-arguments: --pedantic
+          stack-build-arguments: --pedantic --no-nix
           stack-build-arguments-build: --dry-run
           stack-build-arguments-test: --ghc-options -O2 ${{ steps.check-syntax-files.outputs.SYNTAX_FILES_EXIST == 'true' && ' ' || '--reconfigure --force-dirty --ghc-options -fforce-recomp' }}
 
@@ -82,7 +82,7 @@ jobs:
         uses: freckle/stack-action@v5
         with:
           test: false
-          stack-build-arguments: --fast --haddock
+          stack-build-arguments: --fast --haddock --no-nix
           cache-prefix: docs-
 
       - name: Download pipeline artifact
