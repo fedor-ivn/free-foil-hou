@@ -81,7 +81,6 @@ newtype MetaSubsts binder sig metavar ext t = MetaSubsts
 applyMetaSubsts
   :: ( Bifunctor sig
      , Eq metavar
-     , Bifunctor (MetaAppSig metavar')
      , Foil.Distinct n
      , Foil.CoSinkable binder
      , Foil.SinkableK binder
@@ -118,7 +117,6 @@ applyMetaSubsts rename scope substs = \case
   goScoped
     :: ( Bifunctor sig
        , Eq metavar
-       , Bifunctor (MetaAppSig metavar')
        , Foil.Distinct n
        , Foil.CoSinkable binder
        , Foil.SinkableK binder
@@ -177,7 +175,7 @@ combineMetaSubsts = foldr go []
 --
 -- If matching is successful, it produces metavariable substitutions that when applied to LHS make it syntactically equal to RHS.
 -- For example, matching
---   M[f x, g]) = g (f x)
+--   M[f x, g] = g (f x)
 -- produces substitution
 --   M[z₁, z₂] ↦ z₂ z₁
 --
