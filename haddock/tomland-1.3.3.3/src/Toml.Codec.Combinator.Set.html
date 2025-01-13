@@ -1,0 +1,315 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE CPP #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="annot"><span class="hs-comment">{- |
+Module                  : Toml.Codec.Combinator.Set
+Copyright               : (c) 2018-2022 Kowainik
+SPDX-License-Identifier : MPL-2.0
+Maintainer              : Kowainik &lt;xrom.xkov@gmail.com&gt;
+Stability               : Stable
+Portability             : Portable
+
+TOML-specific combinators for converting between TOML and Haskell Set-like data
+types.
+
+There are two way to represent list-like structures with the @tomland@ library.
+
+* Ordinary array sets of primitives:
+
+    @
+    foo = [100, 200, 300]
+    @
+
+* Sets via tables:
+
+    @
+    foo =
+        [ {x = 100}
+        , {x = 200}
+        , {x = 300}
+        ]
+
+    __OR__
+
+    [[foo]]
+        x = 100
+    [[foo]]
+        x = 200
+    [[foo]]
+        x = 300
+    @
+
+You can find both types of the codecs in this module for different set-like
+structures. See the following table for the better understanding:
+
++------------------------+----------------------------------+-------------------------------------+
+|      Haskell Type      |              @TOML@              |             'TomlCodec'             |
++========================+==================================+=====================================+
+| __@'Set' 'Text'@__     | @a = [&quot;foo&quot;, &quot;bar&quot;, &quot;baz&quot;]@      | @'arraySetOf' 'Toml._Text' &quot;a&quot;@     |
++------------------------+----------------------------------+-------------------------------------+
+| __'IntSet'__           | @a = [11, 42]@                   | @'arrayIntSet' &quot;a&quot;@                 |
++------------------------+----------------------------------+-------------------------------------+
+| __@'HashSet' 'Text'@__ | @a = [&quot;foo&quot;, &quot;bar&quot;]@             | @'arrayHashSetOf' 'Toml._Text' &quot;a&quot;@ |
++------------------------+----------------------------------+-------------------------------------+
+| __@'Set' 'Text'@__     | @x = [{a = &quot;foo&quot;}, {a = &quot;bar&quot;}]@ | @'set' ('Toml.text' &quot;a&quot;) &quot;x&quot;@       |
++------------------------+----------------------------------+-------------------------------------+
+| __@'HashSet' 'Text'@__ | @x = [{a = &quot;foo&quot;}, {a = &quot;bar&quot;}]@ | @'hashSet' ('Toml.text' &quot;a&quot;) &quot;x&quot;@   |
++------------------------+----------------------------------+-------------------------------------+
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-60"></span><span>
+</span><span id="line-61"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Toml.Codec.Combinator.Set</span><span>
+</span><span id="line-62"></span><span>    </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Array sets</span></span><span>
+</span><span id="line-63"></span><span>      </span><span class="annot"><a href="Toml.Codec.Combinator.Set.html#arraySetOf"><span class="hs-identifier">arraySetOf</span></a></span><span>
+</span><span id="line-64"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Set.html#arrayIntSet"><span class="hs-identifier">arrayIntSet</span></a></span><span>
+</span><span id="line-65"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Set.html#arrayHashSetOf"><span class="hs-identifier">arrayHashSetOf</span></a></span><span>
+</span><span id="line-66"></span><span>      </span><span class="annot"><span class="hs-comment">-- * Table Sets</span></span><span>
+</span><span id="line-67"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Set.html#set"><span class="hs-identifier">set</span></a></span><span>
+</span><span id="line-68"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Set.html#intSet"><span class="hs-identifier">intSet</span></a></span><span>
+</span><span id="line-69"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Set.html#hashSet"><span class="hs-identifier">hashSet</span></a></span><span>
+</span><span id="line-70"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-71"></span><span>
+</span><span id="line-72"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Hashable</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Hashable</span></span><span class="hs-special">)</span><span>
+</span><span id="line-73"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.HashSet</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">HashSet</span></span><span class="hs-special">)</span><span>
+</span><span id="line-74"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.IntSet</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">IntSet</span></span><span class="hs-special">)</span><span>
+</span><span id="line-75"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Set</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Set</span></span><span class="hs-special">)</span><span>
+</span><span id="line-76"></span><span>
+</span><span id="line-77"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.html"><span class="hs-identifier">Toml.Codec.BiMap</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.BiMap.html#TomlBiMap"><span class="hs-identifier">TomlBiMap</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-78"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.Conversion.html"><span class="hs-identifier">Toml.Codec.BiMap.Conversion</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.BiMap.Conversion.html#_HashSet"><span class="hs-identifier">_HashSet</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.Conversion.html#_IntSet"><span class="hs-identifier">_IntSet</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.Conversion.html#_Set"><span class="hs-identifier">_Set</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-79"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Common.html"><span class="hs-identifier">Toml.Codec.Combinator.Common</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Combinator.Common.html#match"><span class="hs-identifier">match</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-80"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.List.html"><span class="hs-identifier">Toml.Codec.Combinator.List</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Combinator.List.html#list"><span class="hs-identifier">list</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-81"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Di.html"><span class="hs-identifier">Toml.Codec.Di</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Di.html#dimap"><span class="hs-identifier">dimap</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-82"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html"><span class="hs-identifier">Toml.Codec.Types</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier">TomlCodec</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-83"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.AnyValue.html"><span class="hs-identifier">Toml.Type.AnyValue</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier">AnyValue</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-84"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.Key.html"><span class="hs-identifier">Toml.Type.Key</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier">Key</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-85"></span><span>
+</span><span id="line-86"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.HashSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">HS</span></span><span>
+</span><span id="line-87"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.IntSet</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">IS</span></span><span>
+</span><span id="line-88"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Set</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">S</span></span><span>
+</span><span id="line-89"></span><span>
+</span><span id="line-90"></span><span>
+</span><span id="line-91"></span><span class="annot"><span class="hs-comment">{- | Codec for sets. Takes converter for single value and
+returns a set of values.
+
+__Example:__
+
+Haskell @'Set' 'Int'@ can look like this in your @TOML@ file:
+
+@
+foo = [1, 2, 3]
+@
+
+In case of the missing field, the following error will be seen:
+
+@
+tomland decode error:  Key foo is not found
+@
+
+@since 0.5.0
+-}</span></span><span>
+</span><span id="line-110"></span><span id="local-6989586621679109479"><span class="annot"><a href="Toml.Codec.Combinator.Set.html#arraySetOf"><span class="hs-identifier hs-type">arraySetOf</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679109479"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.html#TomlBiMap"><span class="hs-identifier hs-type">TomlBiMap</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679109479"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier hs-type">AnyValue</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Set</span></span><span> </span><span class="annot"><a href="#local-6989586621679109479"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-111"></span><span id="arraySetOf"><span class="annot"><span class="annottext">arraySetOf :: forall a. Ord a =&gt; TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec (Set a)
+</span><a href="Toml.Codec.Combinator.Set.html#arraySetOf"><span class="hs-identifier hs-var hs-var">arraySetOf</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlBiMap (Set a) AnyValue -&gt; Key -&gt; TomlCodec (Set a)
+forall a. TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Common.html#match"><span class="hs-identifier hs-var">match</span></a></span><span> </span><span class="annot"><span class="annottext">(TomlBiMap (Set a) AnyValue -&gt; Key -&gt; TomlCodec (Set a))
+-&gt; (TomlBiMap a AnyValue -&gt; TomlBiMap (Set a) AnyValue)
+-&gt; TomlBiMap a AnyValue
+-&gt; Key
+-&gt; TomlCodec (Set a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TomlBiMap a AnyValue -&gt; TomlBiMap (Set a) AnyValue
+forall a.
+Ord a =&gt;
+TomlBiMap a AnyValue -&gt; TomlBiMap (Set a) AnyValue
+</span><a href="Toml.Codec.BiMap.Conversion.html#_Set"><span class="hs-identifier hs-var">_Set</span></a></span><span>
+</span><span id="line-112"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Set.html#arraySetOf"><span class="hs-pragma hs-type">arraySetOf</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-113"></span><span>
+</span><span id="line-114"></span><span class="annot"><span class="hs-comment">{- | Codec for sets of ints. Takes converter for single value and
+returns a set of ints.
+
+__Example:__
+
+Haskell @'IntSet'@ can look like this in your @TOML@ file:
+
+@
+foo = [1, 2, 3]
+@
+
+In case of the missing field, the following error will be seen:
+
+@
+tomland decode error:  Key foo is not found
+@
+
+@since 0.5.0
+-}</span></span><span>
+</span><span id="line-133"></span><span class="annot"><a href="Toml.Codec.Combinator.Set.html#arrayIntSet"><span class="hs-identifier hs-type">arrayIntSet</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">IntSet</span></span><span>
+</span><span id="line-134"></span><span id="arrayIntSet"><span class="annot"><span class="annottext">arrayIntSet :: Key -&gt; TomlCodec IntSet
+</span><a href="Toml.Codec.Combinator.Set.html#arrayIntSet"><span class="hs-identifier hs-var hs-var">arrayIntSet</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlBiMap IntSet AnyValue -&gt; Key -&gt; TomlCodec IntSet
+forall a. TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Common.html#match"><span class="hs-identifier hs-var">match</span></a></span><span> </span><span class="annot"><span class="annottext">TomlBiMap IntSet AnyValue
+</span><a href="Toml.Codec.BiMap.Conversion.html#_IntSet"><span class="hs-identifier hs-var">_IntSet</span></a></span><span>
+</span><span id="line-135"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Set.html#arrayIntSet"><span class="hs-pragma hs-type">arrayIntSet</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-136"></span><span>
+</span><span id="line-137"></span><span class="annot"><span class="hs-comment">{- | Codec for hash sets. Takes converter for single hashable value and
+returns a set of hashable values.
+
+__Example:__
+
+Haskell @'HashSet' 'Int'@ can look like this in your @TOML@ file:
+
+@
+foo = [1, 2, 3]
+@
+
+In case of the missing field, the following error will be seen:
+
+@
+tomland decode error:  Key foo is not found
+@
+
+@since 0.5.0
+-}</span></span><span>
+</span><span id="line-156"></span><span id="local-6989586621679109492"><span class="annot"><a href="Toml.Codec.Combinator.Set.html#arrayHashSetOf"><span class="hs-identifier hs-type">arrayHashSetOf</span></a></span><span class="hs-cpp">
+#if MIN_VERSION_hashable(1,4,0)
+</span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Hashable</span></span><span> </span><span class="annot"><a href="#local-6989586621679109492"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-cpp">
+#else
+</span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="hs-identifier">Eq</span><span> </span><span class="hs-identifier">a</span><span class="hs-special">,</span><span> </span><span class="hs-identifier">Hashable</span><span> </span><span class="hs-identifier">a</span><span class="hs-special">)</span><span class="hs-cpp">
+#endif
+</span><span>    </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.html#TomlBiMap"><span class="hs-identifier hs-type">TomlBiMap</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679109492"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier hs-type">AnyValue</span></a></span><span>
+</span><span id="line-163"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span>
+</span><span id="line-164"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">HashSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679109492"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-165"></span><span id="arrayHashSetOf"><span class="annot"><span class="annottext">arrayHashSetOf :: forall a.
+Hashable a =&gt;
+TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec (HashSet a)
+</span><a href="Toml.Codec.Combinator.Set.html#arrayHashSetOf"><span class="hs-identifier hs-var hs-var">arrayHashSetOf</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlBiMap (HashSet a) AnyValue -&gt; Key -&gt; TomlCodec (HashSet a)
+forall a. TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Common.html#match"><span class="hs-identifier hs-var">match</span></a></span><span> </span><span class="annot"><span class="annottext">(TomlBiMap (HashSet a) AnyValue -&gt; Key -&gt; TomlCodec (HashSet a))
+-&gt; (TomlBiMap a AnyValue -&gt; TomlBiMap (HashSet a) AnyValue)
+-&gt; TomlBiMap a AnyValue
+-&gt; Key
+-&gt; TomlCodec (HashSet a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TomlBiMap a AnyValue -&gt; TomlBiMap (HashSet a) AnyValue
+forall a.
+Hashable a =&gt;
+TomlBiMap a AnyValue -&gt; TomlBiMap (HashSet a) AnyValue
+</span><a href="Toml.Codec.BiMap.Conversion.html#_HashSet"><span class="hs-identifier hs-var">_HashSet</span></a></span><span>
+</span><span id="line-166"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Set.html#arrayHashSetOf"><span class="hs-pragma hs-type">arrayHashSetOf</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-167"></span><span>
+</span><span id="line-168"></span><span class="hs-comment">----------------------------------------------------------------------------</span><span>
+</span><span id="line-169"></span><span class="hs-comment">-- Tables and arrays of tables</span><span>
+</span><span id="line-170"></span><span class="hs-comment">----------------------------------------------------------------------------</span><span>
+</span><span id="line-171"></span><span>
+</span><span id="line-172"></span><span class="annot"><span class="hs-comment">{- | 'Codec' for set of values. Represented in TOML as array of tables.
+
+__Example:__
+
+Haskell @'Set' 'Int'@ can look like this in your @TOML@ file:
+
+@
+foo =
+  [ {a = 1}
+  , {a = 2}
+  ]
+@
+
+Decodes to an empty 'Set' in case of the missing field in @TOML@.
+
+@since 1.2.0.0
+-}</span></span><span>
+</span><span id="line-189"></span><span class="annot"><a href="Toml.Codec.Combinator.Set.html#set"><span class="hs-identifier hs-type">set</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679109497"><span class="annot"><a href="#local-6989586621679109497"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-operator">.</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ord</span></span><span> </span><span class="annot"><a href="#local-6989586621679109497"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679109497"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Set</span></span><span> </span><span class="annot"><a href="#local-6989586621679109497"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-190"></span><span id="set"><span class="annot"><span class="annottext">set :: forall a. Ord a =&gt; TomlCodec a -&gt; Key -&gt; TomlCodec (Set a)
+</span><a href="Toml.Codec.Combinator.Set.html#set"><span class="hs-identifier hs-var hs-var">set</span></a></span></span><span> </span><span id="local-6989586621679109528"><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679109528"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span id="local-6989586621679109529"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679109529"><span class="hs-identifier hs-var">key</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Set a -&gt; [a])
+-&gt; ([a] -&gt; Set a) -&gt; TomlCodec [a] -&gt; TomlCodec (Set a)
+forall b a. (b -&gt; a) -&gt; (a -&gt; b) -&gt; TomlCodec a -&gt; TomlCodec b
+</span><a href="Toml.Codec.Di.html#dimap"><span class="hs-identifier hs-var">dimap</span></a></span><span> </span><span class="annot"><span class="annottext">Set a -&gt; [a]
+forall a. Set a -&gt; [a]
+</span><span class="hs-identifier hs-var">S.toList</span></span><span> </span><span class="annot"><span class="annottext">[a] -&gt; Set a
+forall a. Ord a =&gt; [a] -&gt; Set a
+</span><span class="hs-identifier hs-var">S.fromList</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TomlCodec a -&gt; Key -&gt; TomlCodec [a]
+forall a. TomlCodec a -&gt; Key -&gt; TomlCodec [a]
+</span><a href="Toml.Codec.Combinator.List.html#list"><span class="hs-identifier hs-var">list</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679109528"><span class="hs-identifier hs-var">codec</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679109529"><span class="hs-identifier hs-var">key</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-191"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Set.html#set"><span class="hs-pragma hs-type">set</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-192"></span><span>
+</span><span id="line-193"></span><span class="annot"><span class="hs-comment">{- | 'Codec' for 'IntSet'. Represented in TOML as an array of tables.
+
+__Example:__
+
+Haskell 'IntSet' can look like this in your @TOML@ file:
+
+@
+foo =
+  [ {a = 1}
+  , {a = 2}
+  ]
+@
+
+Decodes to an empty 'IntSet' in case of the missing field in @TOML@.
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-210"></span><span class="annot"><a href="Toml.Codec.Combinator.Set.html#intSet"><span class="hs-identifier hs-type">intSet</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">IntSet</span></span><span>
+</span><span id="line-211"></span><span id="intSet"><span class="annot"><span class="annottext">intSet :: TomlCodec Int -&gt; Key -&gt; TomlCodec IntSet
+</span><a href="Toml.Codec.Combinator.Set.html#intSet"><span class="hs-identifier hs-var hs-var">intSet</span></a></span></span><span> </span><span id="local-6989586621679109532"><span class="annot"><span class="annottext">TomlCodec Int
+</span><a href="#local-6989586621679109532"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span id="local-6989586621679109533"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679109533"><span class="hs-identifier hs-var">key</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(IntSet -&gt; [Int])
+-&gt; ([Int] -&gt; IntSet) -&gt; TomlCodec [Int] -&gt; TomlCodec IntSet
+forall b a. (b -&gt; a) -&gt; (a -&gt; b) -&gt; TomlCodec a -&gt; TomlCodec b
+</span><a href="Toml.Codec.Di.html#dimap"><span class="hs-identifier hs-var">dimap</span></a></span><span> </span><span class="annot"><span class="annottext">IntSet -&gt; [Int]
+</span><span class="hs-identifier hs-var">IS.toList</span></span><span> </span><span class="annot"><span class="annottext">[Int] -&gt; IntSet
+</span><span class="hs-identifier hs-var">IS.fromList</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TomlCodec Int -&gt; Key -&gt; TomlCodec [Int]
+forall a. TomlCodec a -&gt; Key -&gt; TomlCodec [a]
+</span><a href="Toml.Codec.Combinator.List.html#list"><span class="hs-identifier hs-var">list</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec Int
+</span><a href="#local-6989586621679109532"><span class="hs-identifier hs-var">codec</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679109533"><span class="hs-identifier hs-var">key</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-212"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Set.html#intSet"><span class="hs-pragma hs-type">intSet</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-213"></span><span>
+</span><span id="line-214"></span><span class="annot"><span class="hs-comment">{- | 'Codec' for 'HashSet' of values. Represented in TOML as an array of tables.
+
+__Example:__
+
+Haskell @'HashSet' 'Int'@ can look like this in your @TOML@ file:
+
+@
+foo =
+  [ {a = 1}
+  , {a = 2}
+  ]
+@
+
+Decodes to an empty 'HashSet' in case of the missing field in @TOML@.
+
+@since 1.2.0.0
+-}</span></span><span>
+</span><span id="line-231"></span><span class="annot"><a href="Toml.Codec.Combinator.Set.html#hashSet"><span class="hs-identifier hs-type">hashSet</span></a></span><span> </span><span>
+</span><span id="line-232"></span><span>    </span><span class="hs-glyph">::</span><span> </span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679109504"><span class="annot"><a href="#local-6989586621679109504"><span class="hs-identifier hs-type">a</span></a></span></span><span class="hs-cpp"> 
+#if MIN_VERSION_hashable(1,4,0)
+</span><span>    </span><span class="hs-operator">.</span><span>  </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Hashable</span></span><span> </span><span class="annot"><a href="#local-6989586621679109504"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-cpp">
+#else
+</span><span>    </span><span class="hs-operator">.</span><span>  </span><span class="hs-special">(</span><span class="hs-identifier">Eq</span><span> </span><span class="hs-identifier">a</span><span class="hs-special">,</span><span> </span><span class="hs-identifier">Hashable</span><span> </span><span class="hs-identifier">a</span><span class="hs-special">)</span><span class="hs-cpp">
+#endif
+</span><span>    </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679109504"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span>
+</span><span id="line-239"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span>
+</span><span id="line-240"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">HashSet</span></span><span> </span><span class="annot"><a href="#local-6989586621679109504"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-241"></span><span id="hashSet"><span class="annot"><span class="annottext">hashSet :: forall a. Hashable a =&gt; TomlCodec a -&gt; Key -&gt; TomlCodec (HashSet a)
+</span><a href="Toml.Codec.Combinator.Set.html#hashSet"><span class="hs-identifier hs-var hs-var">hashSet</span></a></span></span><span> </span><span id="local-6989586621679109541"><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679109541"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span id="local-6989586621679109542"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679109542"><span class="hs-identifier hs-var">key</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(HashSet a -&gt; [a])
+-&gt; ([a] -&gt; HashSet a) -&gt; TomlCodec [a] -&gt; TomlCodec (HashSet a)
+forall b a. (b -&gt; a) -&gt; (a -&gt; b) -&gt; TomlCodec a -&gt; TomlCodec b
+</span><a href="Toml.Codec.Di.html#dimap"><span class="hs-identifier hs-var">dimap</span></a></span><span> </span><span class="annot"><span class="annottext">HashSet a -&gt; [a]
+forall a. HashSet a -&gt; [a]
+</span><span class="hs-identifier hs-var">HS.toList</span></span><span> </span><span class="annot"><span class="annottext">[a] -&gt; HashSet a
+forall a. (Eq a, Hashable a) =&gt; [a] -&gt; HashSet a
+</span><span class="hs-identifier hs-var">HS.fromList</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TomlCodec a -&gt; Key -&gt; TomlCodec [a]
+forall a. TomlCodec a -&gt; Key -&gt; TomlCodec [a]
+</span><a href="Toml.Codec.Combinator.List.html#list"><span class="hs-identifier hs-var">list</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679109541"><span class="hs-identifier hs-var">codec</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679109542"><span class="hs-identifier hs-var">key</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-242"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Set.html#hashSet"><span class="hs-pragma hs-type">hashSet</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-243"></span></pre></body></html>

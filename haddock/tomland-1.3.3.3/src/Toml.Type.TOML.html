@@ -1,0 +1,391 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE DeriveAnyClass #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="annot"><span class="hs-comment">{- |
+Module                  : Toml.Type.TOML
+Copyright               : (c) 2018-2022 Kowainik
+SPDX-License-Identifier : MPL-2.0
+Maintainer              : Kowainik &lt;xrom.xkov@gmail.com&gt;
+Stability               : Stable
+Portability             : Portable
+
+Type of TOML AST. This is intermediate representation of TOML parsed from text.
+-}</span></span><span>
+</span><span id="line-13"></span><span>
+</span><span id="line-14"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Toml.Type.TOML</span><span>
+</span><span id="line-15"></span><span>       </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier">TOML</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-16"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#insertKeyVal"><span class="hs-identifier">insertKeyVal</span></a></span><span>
+</span><span id="line-17"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#insertKeyAnyVal"><span class="hs-identifier">insertKeyAnyVal</span></a></span><span>
+</span><span id="line-18"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#insertTable"><span class="hs-identifier">insertTable</span></a></span><span>
+</span><span id="line-19"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#insertTableArrays"><span class="hs-identifier">insertTableArrays</span></a></span><span>
+</span><span id="line-20"></span><span>
+</span><span id="line-21"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#tomlDiff"><span class="hs-identifier">tomlDiff</span></a></span><span>
+</span><span id="line-22"></span><span>       </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-23"></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.DeepSeq</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">NFData</span></span><span class="hs-special">)</span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.HashMap.Strict</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">HashMap</span></span><span class="hs-special">)</span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.List.NonEmpty</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">NonEmpty</span></span><span class="hs-special">)</span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">GHC.Generics</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Generic</span></span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.AnyValue.html"><span class="hs-identifier">Toml.Type.AnyValue</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier">AnyValue</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.Key.html"><span class="hs-identifier">Toml.Type.Key</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier">Key</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html"><span class="hs-identifier">Toml.Type.PrefixTree</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier">PrefixMap</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.Value.html"><span class="hs-identifier">Toml.Type.Value</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Value.html#Value"><span class="hs-identifier">Value</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.HashMap.Strict</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">HashMap</span></span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.List.NonEmpty</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">NE</span></span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html"><span class="hs-identifier">Toml.Type.PrefixTree</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Prefix</span></span><span>
+</span><span id="line-37"></span><span>
+</span><span id="line-38"></span><span>
+</span><span id="line-39"></span><span class="annot"><span class="hs-comment">{- | Represents TOML configuration value.
+
+For example, if we have the following @TOML@ file:
+
+@
+server.port        = 8080
+server.codes       = [ 5, 10, 42 ]
+server.description = &quot;This is production server.&quot;
+
+[mail]
+    host = &quot;smtp.gmail.com&quot;
+    send-if-inactive = false
+
+[[user]]
+    id = 42
+
+[[user]]
+    name = &quot;Foo Bar&quot;
+@
+
+corresponding 'TOML' looks like:
+
+@
+TOML
+    { tomlPairs = fromList
+        [ ( &quot;server&quot; :| [ &quot;port&quot; ] , Integer 8080)
+        , ( &quot;server&quot; :| [ &quot;codes&quot; ] , Array [ Integer 5 , Integer 10 , Integer 42])
+        , ( &quot;server&quot; :| [ &quot;description&quot; ] , Text &quot;This is production server.&quot;)
+        ]
+    , tomlTables = fromList
+        [ ( &quot;mail&quot;
+          , Leaf ( &quot;mail&quot; :| [] )
+              ( TOML
+                  { tomlPairs = fromList
+                      [ ( &quot;host&quot; :| [] , Text &quot;smtp.gmail.com&quot;)
+                      , ( &quot;send-if-inactive&quot; :| [] , Bool False)
+                      ]
+                  , tomlTables = fromList []
+                  , tomlTableArrays = fromList []
+                  }
+              )
+          )
+        ]
+    , tomlTableArrays = fromList
+        [ ( &quot;user&quot; :| []
+          , TOML
+              { tomlPairs = fromList [( &quot;id&quot; :| [] , Integer 42)]
+              , tomlTables = fromList []
+              , tomlTableArrays = fromList []
+              } :|
+              [ TOML
+                  { tomlPairs = fromList [( &quot;name&quot; :| [] , Text &quot;Foo Bar&quot;)]
+                  , tomlTables = fromList []
+                  , tomlTableArrays = fromList []
+                  }
+              ]
+          )
+        ]
+    }
+@
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-102"></span><span class="hs-keyword">data</span><span> </span><span id="TOML"><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-var">TOML</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="TOML"><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-var">TOML</span></a></span></span><span>
+</span><span id="line-103"></span><span>    </span><span class="hs-special">{</span><span> </span><span id="tomlPairs"><span class="annot"><span class="annottext">TOML -&gt; HashMap Key AnyValue
+</span><a href="Toml.Type.TOML.html#tomlPairs"><span class="hs-identifier hs-var hs-var">tomlPairs</span></a></span></span><span>       </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">HashMap</span></span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier hs-type">AnyValue</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-104"></span><span>    </span><span class="hs-special">,</span><span> </span><span id="tomlTables"><span class="annot"><span class="annottext">TOML -&gt; PrefixMap TOML
+</span><a href="Toml.Type.TOML.html#tomlTables"><span class="hs-identifier hs-var hs-var">tomlTables</span></a></span></span><span>      </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier hs-type">PrefixMap</span></a></span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-105"></span><span>    </span><span class="hs-special">,</span><span> </span><span id="tomlTableArrays"><span class="annot"><span class="annottext">TOML -&gt; HashMap Key (NonEmpty TOML)
+</span><a href="Toml.Type.TOML.html#tomlTableArrays"><span class="hs-identifier hs-var hs-var">tomlTableArrays</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-glyph">!</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">HashMap</span></span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">NonEmpty</span></span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-106"></span><span>    </span><span class="hs-special">}</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="annot"><span class="hs-keyword">stock</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679105106"><span id="local-6989586621679105119"><span id="local-6989586621679105123"><span class="annot"><span class="annottext">Int -&gt; TOML -&gt; ShowS
+[TOML] -&gt; ShowS
+TOML -&gt; String
+(Int -&gt; TOML -&gt; ShowS)
+-&gt; (TOML -&gt; String) -&gt; ([TOML] -&gt; ShowS) -&gt; Show TOML
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; TOML -&gt; ShowS
+showsPrec :: Int -&gt; TOML -&gt; ShowS
+$cshow :: TOML -&gt; String
+show :: TOML -&gt; String
+$cshowList :: [TOML] -&gt; ShowS
+showList :: [TOML] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679105133"><span id="local-6989586621679105143"><span class="annot"><span class="annottext">TOML -&gt; TOML -&gt; Bool
+(TOML -&gt; TOML -&gt; Bool) -&gt; (TOML -&gt; TOML -&gt; Bool) -&gt; Eq TOML
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: TOML -&gt; TOML -&gt; Bool
+== :: TOML -&gt; TOML -&gt; Bool
+$c/= :: TOML -&gt; TOML -&gt; Bool
+/= :: TOML -&gt; TOML -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679105151"><span id="local-6989586621679105153"><span class="annot"><span class="annottext">(forall x. TOML -&gt; Rep TOML x)
+-&gt; (forall x. Rep TOML x -&gt; TOML) -&gt; Generic TOML
+forall x. Rep TOML x -&gt; TOML
+forall x. TOML -&gt; Rep TOML x
+forall a.
+(forall x. a -&gt; Rep a x) -&gt; (forall x. Rep a x -&gt; a) -&gt; Generic a
+$cfrom :: forall x. TOML -&gt; Rep TOML x
+from :: forall x. TOML -&gt; Rep TOML x
+$cto :: forall x. Rep TOML x -&gt; TOML
+to :: forall x. Rep TOML x -&gt; TOML
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Generic</span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-107"></span><span>      </span><span class="hs-keyword">deriving</span><span> </span><span class="annot"><span class="hs-keyword">anyclass</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679105157"><span class="annot"><span class="annottext">TOML -&gt; ()
+(TOML -&gt; ()) -&gt; NFData TOML
+forall a. (a -&gt; ()) -&gt; NFData a
+$crnf :: TOML -&gt; ()
+rnf :: TOML -&gt; ()
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">NFData</span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-108"></span><span>
+</span><span id="line-109"></span><span class="annot"><span class="hs-comment">-- | @since 0.3</span></span><span>
+</span><span id="line-110"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679105192"><span id="local-6989586621679105196"><span class="annot"><span class="hs-identifier hs-type">Semigroup</span></span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-111"></span><span>    </span><span class="annot"><span class="hs-operator hs-type">(&lt;&gt;)</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span>
+</span><span id="line-112"></span><span>    </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span id="local-6989586621679105207"><span class="annot"><span class="annottext">HashMap Key AnyValue
+</span><a href="#local-6989586621679105207"><span class="hs-identifier hs-var">pairsA</span></a></span></span><span> </span><span id="local-6989586621679105208"><span class="annot"><span class="annottext">PrefixMap TOML
+</span><a href="#local-6989586621679105208"><span class="hs-identifier hs-var">tablesA</span></a></span></span><span> </span><span id="local-6989586621679105209"><span class="annot"><span class="annottext">HashMap Key (NonEmpty TOML)
+</span><a href="#local-6989586621679105209"><span class="hs-identifier hs-var">arraysA</span></a></span></span><span> </span><span id="local-6989586621679105210"><span class="annot"><span class="annottext">&lt;&gt; :: TOML -&gt; TOML -&gt; TOML
+</span><span class="hs-operator hs-var hs-var hs-var hs-var">&lt;&gt;</span></span></span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span id="local-6989586621679105211"><span class="annot"><span class="annottext">HashMap Key AnyValue
+</span><a href="#local-6989586621679105211"><span class="hs-identifier hs-var">pairsB</span></a></span></span><span> </span><span id="local-6989586621679105212"><span class="annot"><span class="annottext">PrefixMap TOML
+</span><a href="#local-6989586621679105212"><span class="hs-identifier hs-var">tablesB</span></a></span></span><span> </span><span id="local-6989586621679105213"><span class="annot"><span class="annottext">HashMap Key (NonEmpty TOML)
+</span><a href="#local-6989586621679105213"><span class="hs-identifier hs-var">arraysB</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">HashMap Key AnyValue
+-&gt; PrefixMap TOML -&gt; HashMap Key (NonEmpty TOML) -&gt; TOML
+</span><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-var">TOML</span></a></span><span>
+</span><span id="line-113"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">HashMap Key AnyValue
+</span><a href="#local-6989586621679105207"><span class="hs-identifier hs-var">pairsA</span></a></span><span> </span><span class="annot"><span class="annottext">HashMap Key AnyValue
+-&gt; HashMap Key AnyValue -&gt; HashMap Key AnyValue
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">HashMap Key AnyValue
+</span><a href="#local-6989586621679105211"><span class="hs-identifier hs-var">pairsB</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-114"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(PrefixTree TOML -&gt; PrefixTree TOML -&gt; PrefixTree TOML)
+-&gt; PrefixMap TOML -&gt; PrefixMap TOML -&gt; PrefixMap TOML
+forall k v.
+Eq k =&gt;
+(v -&gt; v -&gt; v) -&gt; HashMap k v -&gt; HashMap k v -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HashMap.unionWith</span></span><span> </span><span class="annot"><span class="annottext">PrefixTree TOML -&gt; PrefixTree TOML -&gt; PrefixTree TOML
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(&lt;&gt;)</span></span><span> </span><span class="annot"><span class="annottext">PrefixMap TOML
+</span><a href="#local-6989586621679105208"><span class="hs-identifier hs-var">tablesA</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixMap TOML
+</span><a href="#local-6989586621679105212"><span class="hs-identifier hs-var">tablesB</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-115"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">HashMap Key (NonEmpty TOML)
+</span><a href="#local-6989586621679105209"><span class="hs-identifier hs-var">arraysA</span></a></span><span> </span><span class="annot"><span class="annottext">HashMap Key (NonEmpty TOML)
+-&gt; HashMap Key (NonEmpty TOML) -&gt; HashMap Key (NonEmpty TOML)
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">HashMap Key (NonEmpty TOML)
+</span><a href="#local-6989586621679105213"><span class="hs-identifier hs-var">arraysB</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-116"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="hs-pragma">(</span><span class="hs-pragma">&lt;&gt;</span><span class="hs-pragma">)</span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-117"></span><span>
+</span><span id="line-118"></span><span class="annot"><span class="hs-comment">-- | @since 0.3</span></span><span>
+</span><span id="line-119"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679105220"><span class="annot"><span class="hs-identifier hs-type">Monoid</span></span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-120"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">mempty</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span>
+</span><span id="line-121"></span><span>    </span><span id="local-6989586621679105230"><span class="annot"><span class="annottext">mempty :: TOML
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">mempty</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">HashMap Key AnyValue
+-&gt; PrefixMap TOML -&gt; HashMap Key (NonEmpty TOML) -&gt; TOML
+</span><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-var">TOML</span></a></span><span> </span><span class="annot"><span class="annottext">HashMap Key AnyValue
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span> </span><span class="annot"><span class="annottext">PrefixMap TOML
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span> </span><span class="annot"><span class="annottext">HashMap Key (NonEmpty TOML)
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-122"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><span class="hs-pragma hs-type">mempty</span></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-123"></span><span>
+</span><span id="line-124"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">mappend</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span>
+</span><span id="line-125"></span><span>    </span><span id="local-6989586621679105232"><span class="annot"><span class="annottext">mappend :: TOML -&gt; TOML -&gt; TOML
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">mappend</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TOML -&gt; TOML -&gt; TOML
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">(&lt;&gt;)</span></span><span>
+</span><span id="line-126"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><span class="hs-pragma hs-type">mappend</span></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-127"></span><span>
+</span><span id="line-128"></span><span class="annot"><span class="hs-comment">-- | Inserts given key-value into the 'TOML'.</span></span><span>
+</span><span id="line-129"></span><span id="local-6989586621679105058"><span class="annot"><a href="Toml.Type.TOML.html#insertKeyVal"><span class="hs-identifier hs-type">insertKeyVal</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Value.html#Value"><span class="hs-identifier hs-type">Value</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679105058"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span></span><span>
+</span><span id="line-130"></span><span id="insertKeyVal"><span class="annot"><span class="annottext">insertKeyVal :: forall (a :: TValue). Key -&gt; Value a -&gt; TOML -&gt; TOML
+</span><a href="Toml.Type.TOML.html#insertKeyVal"><span class="hs-identifier hs-var hs-var">insertKeyVal</span></a></span></span><span> </span><span id="local-6989586621679105233"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679105233"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span id="local-6989586621679105234"><span class="annot"><span class="annottext">Value a
+</span><a href="#local-6989586621679105234"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Key -&gt; AnyValue -&gt; TOML -&gt; TOML
+</span><a href="Toml.Type.TOML.html#insertKeyAnyVal"><span class="hs-identifier hs-var">insertKeyAnyVal</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679105233"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Value a -&gt; AnyValue
+forall (t :: TValue). Value t -&gt; AnyValue
+</span><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier hs-var">AnyValue</span></a></span><span> </span><span class="annot"><span class="annottext">Value a
+</span><a href="#local-6989586621679105234"><span class="hs-identifier hs-var">v</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-131"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#insertKeyVal"><span class="hs-pragma hs-type">insertKeyVal</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-132"></span><span>
+</span><span id="line-133"></span><span class="annot"><span class="hs-comment">-- | Inserts given key-value into the 'TOML'.</span></span><span>
+</span><span id="line-134"></span><span class="annot"><a href="Toml.Type.TOML.html#insertKeyAnyVal"><span class="hs-identifier hs-type">insertKeyAnyVal</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier hs-type">AnyValue</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span>
+</span><span id="line-135"></span><span id="insertKeyAnyVal"><span class="annot"><span class="annottext">insertKeyAnyVal :: Key -&gt; AnyValue -&gt; TOML -&gt; TOML
+</span><a href="Toml.Type.TOML.html#insertKeyAnyVal"><span class="hs-identifier hs-var hs-var">insertKeyAnyVal</span></a></span></span><span> </span><span id="local-6989586621679105236"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679105236"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span id="local-6989586621679105237"><span class="annot"><span class="annottext">AnyValue
+</span><a href="#local-6989586621679105237"><span class="hs-identifier hs-var">av</span></a></span></span><span> </span><span id="local-6989586621679105238"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105238"><span class="hs-identifier hs-var">toml</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105238"><span class="hs-identifier hs-var">toml</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#tomlPairs"><span class="hs-identifier hs-var">tomlPairs</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">HashMap.insert</span></span><span> </span><span class="annot"><a href="#local-6989586621679105236"><span class="hs-identifier hs-type">k</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679105237"><span class="hs-identifier hs-type">av</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.TOML.html#tomlPairs"><span class="hs-identifier hs-var">tomlPairs</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679105238"><span class="hs-identifier hs-type">toml</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-136"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#insertKeyAnyVal"><span class="hs-pragma hs-type">insertKeyAnyVal</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-137"></span><span>
+</span><span id="line-138"></span><span class="annot"><span class="hs-comment">-- | Inserts given table into the 'TOML'.</span></span><span>
+</span><span id="line-139"></span><span class="annot"><a href="Toml.Type.TOML.html#insertTable"><span class="hs-identifier hs-type">insertTable</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span>
+</span><span id="line-140"></span><span id="insertTable"><span class="annot"><span class="annottext">insertTable :: Key -&gt; TOML -&gt; TOML -&gt; TOML
+</span><a href="Toml.Type.TOML.html#insertTable"><span class="hs-identifier hs-var hs-var">insertTable</span></a></span></span><span> </span><span id="local-6989586621679105240"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679105240"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span id="local-6989586621679105241"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105241"><span class="hs-identifier hs-var">inToml</span></a></span></span><span> </span><span id="local-6989586621679105242"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105242"><span class="hs-identifier hs-var">toml</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105242"><span class="hs-identifier hs-var">toml</span></a></span><span>
+</span><span id="line-141"></span><span>    </span><span class="hs-special">{</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#tomlTables"><span class="hs-identifier hs-var">tomlTables</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#insert"><span class="hs-identifier hs-type">Prefix.insert</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679105240"><span class="hs-identifier hs-type">k</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679105241"><span class="hs-identifier hs-type">inToml</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.TOML.html#tomlTables"><span class="hs-identifier hs-var">tomlTables</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679105242"><span class="hs-identifier hs-type">toml</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-142"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-143"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#insertTable"><span class="hs-pragma hs-type">insertTable</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-144"></span><span>
+</span><span id="line-145"></span><span class="annot"><span class="hs-comment">-- | Inserts given array of tables into the 'TOML'.</span></span><span>
+</span><span id="line-146"></span><span class="annot"><a href="Toml.Type.TOML.html#insertTableArrays"><span class="hs-identifier hs-type">insertTableArrays</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">NonEmpty</span></span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span>
+</span><span id="line-147"></span><span id="insertTableArrays"><span class="annot"><span class="annottext">insertTableArrays :: Key -&gt; NonEmpty TOML -&gt; TOML -&gt; TOML
+</span><a href="Toml.Type.TOML.html#insertTableArrays"><span class="hs-identifier hs-var hs-var">insertTableArrays</span></a></span></span><span> </span><span id="local-6989586621679105244"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679105244"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span id="local-6989586621679105245"><span class="annot"><span class="annottext">NonEmpty TOML
+</span><a href="#local-6989586621679105245"><span class="hs-identifier hs-var">arr</span></a></span></span><span> </span><span id="local-6989586621679105246"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105246"><span class="hs-identifier hs-var">toml</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105246"><span class="hs-identifier hs-var">toml</span></a></span><span>
+</span><span id="line-148"></span><span>    </span><span class="hs-special">{</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#tomlTableArrays"><span class="hs-identifier hs-var">tomlTableArrays</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">HashMap.insert</span></span><span> </span><span class="annot"><a href="#local-6989586621679105244"><span class="hs-identifier hs-type">k</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679105245"><span class="hs-identifier hs-type">arr</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.TOML.html#tomlTableArrays"><span class="hs-identifier hs-var">tomlTableArrays</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679105246"><span class="hs-identifier hs-type">toml</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-149"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-150"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#insertTableArrays"><span class="hs-pragma hs-type">insertTableArrays</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-151"></span><span>
+</span><span id="line-152"></span><span class="annot"><span class="hs-comment">{- | Difference of two 'TOML's. Returns elements of the first 'TOML' that are
+not existing in the second one.
+
+@since 1.3.2.0
+-}</span></span><span>
+</span><span id="line-157"></span><span class="annot"><a href="Toml.Type.TOML.html#tomlDiff"><span class="hs-identifier hs-type">tomlDiff</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span>
+</span><span id="line-158"></span><span id="tomlDiff"><span class="annot"><span class="annottext">tomlDiff :: TOML -&gt; TOML -&gt; TOML
+</span><a href="Toml.Type.TOML.html#tomlDiff"><span class="hs-identifier hs-var hs-var">tomlDiff</span></a></span></span><span> </span><span id="local-6989586621679105247"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105247"><span class="hs-identifier hs-var">t1</span></a></span></span><span> </span><span id="local-6989586621679105248"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105248"><span class="hs-identifier hs-var">t2</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span>
+</span><span id="line-159"></span><span>    </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">tomlPairs :: HashMap Key AnyValue
+</span><a href="Toml.Type.TOML.html#tomlPairs"><span class="hs-identifier hs-var">tomlPairs</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">HashMap Key AnyValue
+-&gt; HashMap Key AnyValue -&gt; HashMap Key AnyValue
+forall k v w.
+(Eq k, Hashable k) =&gt;
+HashMap k v -&gt; HashMap k w -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HashMap.difference</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TOML -&gt; HashMap Key AnyValue
+</span><a href="Toml.Type.TOML.html#tomlPairs"><span class="hs-identifier hs-var">tomlPairs</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105247"><span class="hs-identifier hs-var">t1</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TOML -&gt; HashMap Key AnyValue
+</span><a href="Toml.Type.TOML.html#tomlPairs"><span class="hs-identifier hs-var">tomlPairs</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105248"><span class="hs-identifier hs-var">t2</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-160"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">tomlTables :: PrefixMap TOML
+</span><a href="Toml.Type.TOML.html#tomlTables"><span class="hs-identifier hs-var">tomlTables</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">PrefixMap TOML -&gt; PrefixMap TOML -&gt; PrefixMap TOML
+</span><a href="Toml.Type.TOML.html#prefixMapDiff"><span class="hs-identifier hs-var">prefixMapDiff</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TOML -&gt; PrefixMap TOML
+</span><a href="Toml.Type.TOML.html#tomlTables"><span class="hs-identifier hs-var">tomlTables</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105247"><span class="hs-identifier hs-var">t1</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TOML -&gt; PrefixMap TOML
+</span><a href="Toml.Type.TOML.html#tomlTables"><span class="hs-identifier hs-var">tomlTables</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105248"><span class="hs-identifier hs-var">t2</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-161"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">tomlTableArrays :: HashMap Key (NonEmpty TOML)
+</span><a href="Toml.Type.TOML.html#tomlTableArrays"><span class="hs-identifier hs-var">tomlTableArrays</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(NonEmpty TOML -&gt; NonEmpty TOML -&gt; Maybe (NonEmpty TOML))
+-&gt; HashMap Key (NonEmpty TOML)
+-&gt; HashMap Key (NonEmpty TOML)
+-&gt; HashMap Key (NonEmpty TOML)
+forall k v w.
+(Eq k, Hashable k) =&gt;
+(v -&gt; w -&gt; Maybe v) -&gt; HashMap k v -&gt; HashMap k w -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HashMap.differenceWith</span></span><span> </span><span class="annot"><span class="annottext">NonEmpty TOML -&gt; NonEmpty TOML -&gt; Maybe (NonEmpty TOML)
+</span><a href="#local-6989586621679105252"><span class="hs-identifier hs-var">interTomlsDiff</span></a></span><span>
+</span><span id="line-162"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TOML -&gt; HashMap Key (NonEmpty TOML)
+</span><a href="Toml.Type.TOML.html#tomlTableArrays"><span class="hs-identifier hs-var">tomlTableArrays</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105247"><span class="hs-identifier hs-var">t1</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-163"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TOML -&gt; HashMap Key (NonEmpty TOML)
+</span><a href="Toml.Type.TOML.html#tomlTableArrays"><span class="hs-identifier hs-var">tomlTableArrays</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105248"><span class="hs-identifier hs-var">t2</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-164"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-165"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-166"></span><span>    </span><span class="annot"><a href="#local-6989586621679105252"><span class="hs-identifier hs-type">interTomlsDiff</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">NonEmpty</span></span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">NonEmpty</span></span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">NonEmpty</span></span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-167"></span><span>    </span><span id="local-6989586621679105252"><span class="annot"><span class="annottext">interTomlsDiff :: NonEmpty TOML -&gt; NonEmpty TOML -&gt; Maybe (NonEmpty TOML)
+</span><a href="#local-6989586621679105252"><span class="hs-identifier hs-var hs-var">interTomlsDiff</span></a></span></span><span> </span><span id="local-6989586621679105253"><span class="annot"><span class="annottext">NonEmpty TOML
+</span><a href="#local-6989586621679105253"><span class="hs-identifier hs-var">tl1</span></a></span></span><span> </span><span id="local-6989586621679105254"><span class="annot"><span class="annottext">NonEmpty TOML
+</span><a href="#local-6989586621679105254"><span class="hs-identifier hs-var">tl2</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[TOML] -&gt; Maybe (NonEmpty TOML)
+forall a. [a] -&gt; Maybe (NonEmpty a)
+</span><span class="hs-identifier hs-var">NE.nonEmpty</span></span><span> </span><span class="annot"><span class="annottext">([TOML] -&gt; Maybe (NonEmpty TOML))
+-&gt; [TOML] -&gt; Maybe (NonEmpty TOML)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[TOML] -&gt; [TOML] -&gt; [TOML]
+</span><a href="Toml.Type.TOML.html#tomlListDiff"><span class="hs-identifier hs-var">tomlListDiff</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">NonEmpty TOML -&gt; [TOML]
+forall a. NonEmpty a -&gt; [a]
+</span><span class="hs-identifier hs-var">NE.toList</span></span><span> </span><span class="annot"><span class="annottext">NonEmpty TOML
+</span><a href="#local-6989586621679105253"><span class="hs-identifier hs-var">tl1</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">NonEmpty TOML -&gt; [TOML]
+forall a. NonEmpty a -&gt; [a]
+</span><span class="hs-identifier hs-var">NE.toList</span></span><span> </span><span class="annot"><span class="annottext">NonEmpty TOML
+</span><a href="#local-6989586621679105254"><span class="hs-identifier hs-var">tl2</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-168"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#tomlDiff"><span class="hs-pragma hs-type">tomlDiff</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-169"></span><span>
+</span><span id="line-170"></span><span class="annot"><span class="hs-comment">{- | Difference of two 'PrefixMap's. Returns elements of the first 'PrefixMap'
+that are not existing in the second one.
+
+@since 1.3.2.0
+-}</span></span><span>
+</span><span id="line-175"></span><span class="annot"><a href="Toml.Type.TOML.html#prefixMapDiff"><span class="hs-identifier hs-type">prefixMapDiff</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier hs-type">PrefixMap</span></a></span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier hs-type">PrefixMap</span></a></span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier hs-type">PrefixMap</span></a></span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span>
+</span><span id="line-176"></span><span id="prefixMapDiff"><span class="annot"><span class="annottext">prefixMapDiff :: PrefixMap TOML -&gt; PrefixMap TOML -&gt; PrefixMap TOML
+</span><a href="Toml.Type.TOML.html#prefixMapDiff"><span class="hs-identifier hs-var hs-var">prefixMapDiff</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(TOML -&gt; TOML -&gt; Maybe TOML)
+-&gt; PrefixMap TOML -&gt; PrefixMap TOML -&gt; PrefixMap TOML
+forall a b.
+(a -&gt; b -&gt; Maybe a) -&gt; PrefixMap a -&gt; PrefixMap b -&gt; PrefixMap a
+</span><a href="Toml.Type.PrefixTree.html#differenceWith"><span class="hs-identifier hs-var">Prefix.differenceWith</span></a></span><span> </span><span class="annot"><span class="annottext">((TOML -&gt; TOML -&gt; Maybe TOML)
+ -&gt; PrefixMap TOML -&gt; PrefixMap TOML -&gt; PrefixMap TOML)
+-&gt; (TOML -&gt; TOML -&gt; Maybe TOML)
+-&gt; PrefixMap TOML
+-&gt; PrefixMap TOML
+-&gt; PrefixMap TOML
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679105259"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105259"><span class="hs-identifier hs-var">toml1</span></a></span></span><span> </span><span id="local-6989586621679105260"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105260"><span class="hs-identifier hs-var">toml2</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679105261"><span class="annot"><span class="annottext">diff :: TOML
+</span><a href="#local-6989586621679105261"><span class="hs-identifier hs-var hs-var">diff</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TOML -&gt; TOML -&gt; TOML
+</span><a href="Toml.Type.TOML.html#tomlDiff"><span class="hs-identifier hs-var">tomlDiff</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105259"><span class="hs-identifier hs-var">toml1</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105260"><span class="hs-identifier hs-var">toml2</span></a></span><span> </span><span class="hs-keyword">in</span><span>
+</span><span id="line-177"></span><span>    </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105261"><span class="hs-identifier hs-var">diff</span></a></span><span> </span><span class="annot"><span class="annottext">TOML -&gt; TOML -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">TOML
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-178"></span><span>    </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Maybe TOML
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-179"></span><span>    </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">TOML -&gt; Maybe TOML
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105261"><span class="hs-identifier hs-var">diff</span></a></span><span>
+</span><span id="line-180"></span><span>
+</span><span id="line-181"></span><span>
+</span><span id="line-182"></span><span class="annot"><a href="Toml.Type.TOML.html#tomlListDiff"><span class="hs-identifier hs-type">tomlListDiff</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-183"></span><span id="tomlListDiff"><span class="annot"><span class="annottext">tomlListDiff :: [TOML] -&gt; [TOML] -&gt; [TOML]
+</span><a href="Toml.Type.TOML.html#tomlListDiff"><span class="hs-identifier hs-var hs-var">tomlListDiff</span></a></span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">[TOML]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-184"></span><span class="annot"><a href="Toml.Type.TOML.html#tomlListDiff"><span class="hs-identifier hs-var">tomlListDiff</span></a></span><span> </span><span id="local-6989586621679105262"><span class="annot"><span class="annottext">[TOML]
+</span><a href="#local-6989586621679105262"><span class="hs-identifier hs-var">ts</span></a></span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[TOML]
+</span><a href="#local-6989586621679105262"><span class="hs-identifier hs-var">ts</span></a></span><span>
+</span><span id="line-185"></span><span class="annot"><a href="Toml.Type.TOML.html#tomlListDiff"><span class="hs-identifier hs-var">tomlListDiff</span></a></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679105263"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105263"><span class="hs-identifier hs-var">t1</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679105264"><span class="annot"><span class="annottext">[TOML]
+</span><a href="#local-6989586621679105264"><span class="hs-identifier hs-var">t1s</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679105265"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105265"><span class="hs-identifier hs-var">t2</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679105266"><span class="annot"><span class="annottext">[TOML]
+</span><a href="#local-6989586621679105266"><span class="hs-identifier hs-var">t2s</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679105267"><span class="annot"><span class="annottext">diff :: TOML
+</span><a href="#local-6989586621679105267"><span class="hs-identifier hs-var hs-var">diff</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TOML -&gt; TOML -&gt; TOML
+</span><a href="Toml.Type.TOML.html#tomlDiff"><span class="hs-identifier hs-var">tomlDiff</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105263"><span class="hs-identifier hs-var">t1</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105265"><span class="hs-identifier hs-var">t2</span></a></span><span> </span><span class="hs-keyword">in</span><span>
+</span><span id="line-186"></span><span>    </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105267"><span class="hs-identifier hs-var">diff</span></a></span><span> </span><span class="annot"><span class="annottext">TOML -&gt; TOML -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">TOML
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-187"></span><span>    </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">[TOML] -&gt; [TOML] -&gt; [TOML]
+</span><a href="Toml.Type.TOML.html#tomlListDiff"><span class="hs-identifier hs-var">tomlListDiff</span></a></span><span> </span><span class="annot"><span class="annottext">[TOML]
+</span><a href="#local-6989586621679105264"><span class="hs-identifier hs-var">t1s</span></a></span><span> </span><span class="annot"><span class="annottext">[TOML]
+</span><a href="#local-6989586621679105266"><span class="hs-identifier hs-var">t2s</span></a></span><span>
+</span><span id="line-188"></span><span>    </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679105267"><span class="hs-identifier hs-var">diff</span></a></span><span> </span><span class="annot"><span class="annottext">TOML -&gt; [TOML] -&gt; [TOML]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[TOML] -&gt; [TOML] -&gt; [TOML]
+</span><a href="Toml.Type.TOML.html#tomlListDiff"><span class="hs-identifier hs-var">tomlListDiff</span></a></span><span> </span><span class="annot"><span class="annottext">[TOML]
+</span><a href="#local-6989586621679105264"><span class="hs-identifier hs-var">t1s</span></a></span><span> </span><span class="annot"><span class="annottext">[TOML]
+</span><a href="#local-6989586621679105266"><span class="hs-identifier hs-var">t2s</span></a></span><span>
+</span><span id="line-189"></span></pre></body></html>

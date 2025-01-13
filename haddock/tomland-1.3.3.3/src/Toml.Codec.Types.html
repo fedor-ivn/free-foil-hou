@@ -1,0 +1,543 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE FlexibleInstances     #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE MultiParamTypeClasses #-}</span><span>
+</span><span id="line-3"></span><span class="hs-pragma">{-# LANGUAGE TupleSections         #-}</span><span>
+</span><span id="line-4"></span><span class="hs-pragma">{-# LANGUAGE TypeFamilies          #-}</span><span>
+</span><span id="line-5"></span><span class="hs-pragma">{-# LANGUAGE TypeOperators         #-}</span><span>
+</span><span id="line-6"></span><span class="hs-pragma">{-# LANGUAGE UndecidableInstances  #-}</span><span>
+</span><span id="line-7"></span><span>
+</span><span id="line-8"></span><span class="annot"><span class="hs-comment">{- |
+Module                  : Toml.Codec.Types
+Copyright               : (c) 2018-2022 Kowainik
+SPDX-License-Identifier : MPL-2.0
+Maintainer              : Kowainik &lt;xrom.xkov@gmail.com&gt;
+Stability               : Stable
+Portability             : Portable
+
+Contains general underlying monad for bidirectional conversion.
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-20"></span><span>
+</span><span id="line-21"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Toml.Codec.Types</span><span>
+</span><span id="line-22"></span><span>       </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Toml Codec</span></span><span>
+</span><span id="line-23"></span><span>         </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier">TomlCodec</span></a></span><span>
+</span><span id="line-24"></span><span>         </span><span class="annot"><span class="hs-comment">-- * Toml Environment</span></span><span>
+</span><span id="line-25"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlEnv"><span class="hs-identifier">TomlEnv</span></a></span><span>
+</span><span id="line-26"></span><span>         </span><span class="annot"><span class="hs-comment">-- * Toml State</span></span><span>
+</span><span id="line-27"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier">TomlState</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#eitherToTomlState"><span class="hs-identifier">eitherToTomlState</span></a></span><span>
+</span><span id="line-29"></span><span>
+</span><span id="line-30"></span><span>         </span><span class="annot"><span class="hs-comment">-- * Codec</span></span><span>
+</span><span id="line-31"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier">Codec</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span>         </span><span class="annot"><span class="hs-comment">-- * Function alternative</span></span><span>
+</span><span id="line-34"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#%3C%21%3E"><span class="hs-operator">(&lt;!&gt;)</span></a></span><span>
+</span><span id="line-35"></span><span>       </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-36"></span><span>
+</span><span id="line-37"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Applicative</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Alternative</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">liftA2</span></span><span class="hs-special">)</span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.State</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">MonadState</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-39"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Bifunctor</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">first</span></span><span class="hs-special">)</span><span>
+</span><span id="line-40"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Validation</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Validation</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-41"></span><span>
+</span><span id="line-42"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Error.html"><span class="hs-identifier">Toml.Codec.Error</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Error.html#TomlDecodeError"><span class="hs-identifier">TomlDecodeError</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-43"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.html"><span class="hs-identifier">Toml.Type</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier">TOML</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-44"></span><span>
+</span><span id="line-45"></span><span>
+</span><span id="line-46"></span><span class="annot"><span class="hs-comment">{- | Immutable environment for TOML conversion.
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-50"></span><span class="hs-keyword">type</span><span> </span><span id="TomlEnv"><span class="annot"><a href="Toml.Codec.Types.html#TomlEnv"><span class="hs-identifier hs-var">TomlEnv</span></a></span></span><span> </span><span id="local-6989586621679107609"><span class="annot"><a href="#local-6989586621679107609"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Validation</span></span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Toml.Codec.Error.html#TomlDecodeError"><span class="hs-identifier hs-type">TomlDecodeError</span></a></span><span class="hs-special">]</span><span> </span><span class="annot"><a href="#local-6989586621679107609"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span>
+</span><span id="line-53"></span><span class="annot"><span class="hs-comment">{- | Specialied 'Codec' type alias for bidirectional TOML serialization. Keeps
+'TOML' object as both environment and state.
+
+@since 0.5.0
+-}</span></span><span>
+</span><span id="line-58"></span><span class="hs-keyword">type</span><span> </span><span id="TomlCodec"><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-var">TomlCodec</span></a></span></span><span> </span><span id="local-6989586621679107612"><span class="annot"><a href="#local-6989586621679107612"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107612"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107612"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-59"></span><span>
+</span><span id="line-60"></span><span class="annot"><span class="hs-comment">{- | Monad for bidirectional conversion. Contains pair of functions:
+
+1. How to read value of type @o@ (out) from immutable environment context
+('TomlEnv')?
+2. How to store a value of type @i@ (in) in stateful context ('TomlState') and
+return a value of type @o@?
+
+This approach with the bunch of utility functions allows to
+have single description for from/to @TOML@ conversion.
+
+In practice this type will always be used in the following way:
+
+@
+type 'TomlCodec' a = 'Codec' a a
+@
+
+Type parameter @i@ if fictional. Here some trick is used. This trick is
+implemented in the [codec](http://hackage.haskell.org/package/codec) package and
+described in more details in related blog post:
+&lt;https://blog.poisson.chat/posts/2016-10-12-bidirectional-serialization.html&gt;.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-83"></span><span class="hs-keyword">data</span><span> </span><span id="Codec"><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-var">Codec</span></a></span></span><span> </span><span id="local-6989586621679107492"><span class="annot"><a href="#local-6989586621679107492"><span class="hs-identifier hs-type">i</span></a></span></span><span> </span><span id="local-6989586621679107493"><span class="annot"><a href="#local-6989586621679107493"><span class="hs-identifier hs-type">o</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Codec"><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-var">Codec</span></a></span></span><span>
+</span><span id="line-84"></span><span>    </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="hs-comment">-- | Extract value of type @o@ from monadic context 'TomlEnv'.</span></span><span>
+</span><span id="line-85"></span><span>      </span><span id="codecRead"><span class="annot"><span class="annottext">forall i o. Codec i o -&gt; TomlEnv o
+</span><a href="Toml.Codec.Types.html#codecRead"><span class="hs-identifier hs-var hs-var">codecRead</span></a></span></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlEnv"><span class="hs-identifier hs-type">TomlEnv</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107493"><span class="hs-identifier hs-type">o</span></a></span><span>
+</span><span id="line-86"></span><span>
+</span><span id="line-87"></span><span>      </span><span class="annot"><span class="hs-comment">{- | Store value of type @i@ inside monadic context 'TomlState' and
+      returning value of type @o@. Type of this function actually should be
+      @o -&gt; TomlState ()@ but with such type it's impossible to have 'Monad'
+      and other instances.
+      -}</span></span><span>
+</span><span id="line-92"></span><span>    </span><span class="hs-special">,</span><span> </span><span id="codecWrite"><span class="annot"><span class="annottext">forall i o. Codec i o -&gt; i -&gt; TomlState o
+</span><a href="Toml.Codec.Types.html#codecWrite"><span class="hs-identifier hs-var hs-var">codecWrite</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679107492"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107493"><span class="hs-identifier hs-type">o</span></a></span><span>
+</span><span id="line-93"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-94"></span><span>
+</span><span id="line-95"></span><span class="annot"><span class="hs-comment">-- | @since 0.0.0</span></span><span>
+</span><span id="line-96"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679107507"><span id="local-6989586621679107618"><span class="annot"><span class="hs-identifier hs-type">Functor</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107507"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">)</span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-97"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">fmap</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span id="local-6989586621679107622"><span id="local-6989586621679107623"><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679107622"><span class="hs-identifier hs-type">oA</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679107623"><span class="hs-identifier hs-type">oB</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107507"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107622"><span class="hs-identifier hs-type">oA</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107507"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107623"><span class="hs-identifier hs-type">oB</span></a></span></span></span><span>
+</span><span id="line-98"></span><span>    </span><span id="local-6989586621679107628"><span class="annot"><span class="annottext">fmap :: forall a b. (a -&gt; b) -&gt; Codec i a -&gt; Codec i b
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">fmap</span></span></span><span> </span><span id="local-6989586621679107629"><span class="annot"><span class="annottext">oA -&gt; oB
+</span><a href="#local-6989586621679107629"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679107630"><span class="annot"><span class="annottext">Codec i oA
+</span><a href="#local-6989586621679107630"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span>
+</span><span id="line-99"></span><span>        </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">codecRead :: TomlEnv oB
+</span><a href="Toml.Codec.Types.html#codecRead"><span class="hs-identifier hs-var">codecRead</span></a></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(oA -&gt; oB)
+-&gt; Validation [TomlDecodeError] oA
+-&gt; Validation [TomlDecodeError] oB
+forall a b.
+(a -&gt; b)
+-&gt; Validation [TomlDecodeError] a -&gt; Validation [TomlDecodeError] b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">oA -&gt; oB
+</span><a href="#local-6989586621679107629"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">(Validation [TomlDecodeError] oA
+ -&gt; Validation [TomlDecodeError] oB)
+-&gt; (TOML -&gt; Validation [TomlDecodeError] oA) -&gt; TomlEnv oB
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Codec i oA -&gt; TOML -&gt; Validation [TomlDecodeError] oA
+forall i o. Codec i o -&gt; TomlEnv o
+</span><a href="Toml.Codec.Types.html#codecRead"><span class="hs-identifier hs-var">codecRead</span></a></span><span> </span><span class="annot"><span class="annottext">Codec i oA
+</span><a href="#local-6989586621679107630"><span class="hs-identifier hs-var">codec</span></a></span><span>
+</span><span id="line-100"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">codecWrite :: i -&gt; TomlState oB
+</span><a href="Toml.Codec.Types.html#codecWrite"><span class="hs-identifier hs-var">codecWrite</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(oA -&gt; oB) -&gt; TomlState oA -&gt; TomlState oB
+forall a b. (a -&gt; b) -&gt; TomlState a -&gt; TomlState b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">oA -&gt; oB
+</span><a href="#local-6989586621679107629"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">(TomlState oA -&gt; TomlState oB)
+-&gt; (i -&gt; TomlState oA) -&gt; i -&gt; TomlState oB
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Codec i oA -&gt; i -&gt; TomlState oA
+forall i o. Codec i o -&gt; i -&gt; TomlState o
+</span><a href="Toml.Codec.Types.html#codecWrite"><span class="hs-identifier hs-var">codecWrite</span></a></span><span> </span><span class="annot"><span class="annottext">Codec i oA
+</span><a href="#local-6989586621679107630"><span class="hs-identifier hs-var">codec</span></a></span><span>
+</span><span id="line-101"></span><span>        </span><span class="hs-special">}</span><span>
+</span><span id="line-102"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><span class="hs-pragma hs-type">fmap</span></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-103"></span><span>
+</span><span id="line-104"></span><span class="annot"><span class="hs-comment">-- | @since 0.0.0</span></span><span>
+</span><span id="line-105"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679107529"><span id="local-6989586621679107637"><span id="local-6989586621679107641"><span id="local-6989586621679107644"><span class="annot"><span class="hs-identifier hs-type">Applicative</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107529"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">)</span></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-106"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">pure</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span id="local-6989586621679107647"><span class="annot"><a href="#local-6989586621679107647"><span class="hs-identifier hs-type">o</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107529"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107647"><span class="hs-identifier hs-type">o</span></a></span></span><span>
+</span><span id="line-107"></span><span>    </span><span id="local-6989586621679107650"><span class="annot"><span class="annottext">pure :: forall a. a -&gt; Codec i a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">pure</span></span></span><span> </span><span id="local-6989586621679107651"><span class="annot"><span class="annottext">o
+</span><a href="#local-6989586621679107651"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span>
+</span><span id="line-108"></span><span>        </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">codecRead :: TomlEnv o
+</span><a href="Toml.Codec.Types.html#codecRead"><span class="hs-identifier hs-var">codecRead</span></a></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">\</span><span class="annot"><span class="annottext">TOML
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">o -&gt; Validation [TomlDecodeError] o
+forall e a. a -&gt; Validation e a
+</span><span class="hs-identifier hs-var">Success</span></span><span> </span><span class="annot"><span class="annottext">o
+</span><a href="#local-6989586621679107651"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-109"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">codecWrite :: i -&gt; TomlState o
+</span><a href="Toml.Codec.Types.html#codecWrite"><span class="hs-identifier hs-var">codecWrite</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">\</span><span class="annot"><span class="annottext">i
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">o -&gt; TomlState o
+forall a. a -&gt; TomlState a
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">o
+</span><a href="#local-6989586621679107651"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-110"></span><span>        </span><span class="hs-special">}</span><span>
+</span><span id="line-111"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><span class="hs-pragma hs-type">pure</span></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-112"></span><span>
+</span><span id="line-113"></span><span>    </span><span class="annot"><span class="hs-operator hs-type">(&lt;*&gt;)</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span id="local-6989586621679107653"><span id="local-6989586621679107654"><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107529"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679107653"><span class="hs-identifier hs-type">oA</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679107654"><span class="hs-identifier hs-type">oB</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107529"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107653"><span class="hs-identifier hs-type">oA</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107529"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107654"><span class="hs-identifier hs-type">oB</span></a></span></span></span><span>
+</span><span id="line-114"></span><span>    </span><span id="local-6989586621679107662"><span class="annot"><span class="annottext">Codec i (oA -&gt; oB)
+</span><a href="#local-6989586621679107662"><span class="hs-identifier hs-var">codecf</span></a></span></span><span> </span><span id="local-6989586621679107663"><span class="annot"><span class="annottext">&lt;*&gt; :: forall a b. Codec i (a -&gt; b) -&gt; Codec i a -&gt; Codec i b
+</span><span class="hs-operator hs-var hs-var hs-var hs-var">&lt;*&gt;</span></span></span><span> </span><span id="local-6989586621679107664"><span class="annot"><span class="annottext">Codec i oA
+</span><a href="#local-6989586621679107664"><span class="hs-identifier hs-var">codeca</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span>
+</span><span id="line-115"></span><span>        </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">codecRead :: TomlEnv oB
+</span><a href="Toml.Codec.Types.html#codecRead"><span class="hs-identifier hs-var">codecRead</span></a></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Validation [TomlDecodeError] (oA -&gt; oB)
+ -&gt; Validation [TomlDecodeError] oA
+ -&gt; Validation [TomlDecodeError] oB)
+-&gt; (TOML -&gt; Validation [TomlDecodeError] (oA -&gt; oB))
+-&gt; (TOML -&gt; Validation [TomlDecodeError] oA)
+-&gt; TomlEnv oB
+forall a b c.
+(a -&gt; b -&gt; c) -&gt; (TOML -&gt; a) -&gt; (TOML -&gt; b) -&gt; TOML -&gt; c
+forall (f :: * -&gt; *) a b c.
+Applicative f =&gt;
+(a -&gt; b -&gt; c) -&gt; f a -&gt; f b -&gt; f c
+</span><span class="hs-identifier hs-var">liftA2</span></span><span> </span><span class="annot"><span class="annottext">Validation [TomlDecodeError] (oA -&gt; oB)
+-&gt; Validation [TomlDecodeError] oA
+-&gt; Validation [TomlDecodeError] oB
+forall a b.
+Validation [TomlDecodeError] (a -&gt; b)
+-&gt; Validation [TomlDecodeError] a -&gt; Validation [TomlDecodeError] b
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">(&lt;*&gt;)</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Codec i (oA -&gt; oB)
+-&gt; TOML -&gt; Validation [TomlDecodeError] (oA -&gt; oB)
+forall i o. Codec i o -&gt; TomlEnv o
+</span><a href="Toml.Codec.Types.html#codecRead"><span class="hs-identifier hs-var">codecRead</span></a></span><span> </span><span class="annot"><span class="annottext">Codec i (oA -&gt; oB)
+</span><a href="#local-6989586621679107662"><span class="hs-identifier hs-var">codecf</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Codec i oA -&gt; TOML -&gt; Validation [TomlDecodeError] oA
+forall i o. Codec i o -&gt; TomlEnv o
+</span><a href="Toml.Codec.Types.html#codecRead"><span class="hs-identifier hs-var">codecRead</span></a></span><span> </span><span class="annot"><span class="annottext">Codec i oA
+</span><a href="#local-6989586621679107664"><span class="hs-identifier hs-var">codeca</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-116"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">codecWrite :: i -&gt; TomlState oB
+</span><a href="Toml.Codec.Types.html#codecWrite"><span class="hs-identifier hs-var">codecWrite</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679107665"><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679107665"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Codec i (oA -&gt; oB) -&gt; i -&gt; TomlState (oA -&gt; oB)
+forall i o. Codec i o -&gt; i -&gt; TomlState o
+</span><a href="Toml.Codec.Types.html#codecWrite"><span class="hs-identifier hs-var">codecWrite</span></a></span><span> </span><span class="annot"><span class="annottext">Codec i (oA -&gt; oB)
+</span><a href="#local-6989586621679107662"><span class="hs-identifier hs-var">codecf</span></a></span><span> </span><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679107665"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">TomlState (oA -&gt; oB) -&gt; TomlState oA -&gt; TomlState oB
+forall a b. TomlState (a -&gt; b) -&gt; TomlState a -&gt; TomlState b
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;*&gt;</span></span><span> </span><span class="annot"><span class="annottext">Codec i oA -&gt; i -&gt; TomlState oA
+forall i o. Codec i o -&gt; i -&gt; TomlState o
+</span><a href="Toml.Codec.Types.html#codecWrite"><span class="hs-identifier hs-var">codecWrite</span></a></span><span> </span><span class="annot"><span class="annottext">Codec i oA
+</span><a href="#local-6989586621679107664"><span class="hs-identifier hs-var">codeca</span></a></span><span> </span><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679107665"><span class="hs-identifier hs-var">c</span></a></span><span>
+</span><span id="line-117"></span><span>        </span><span class="hs-special">}</span><span>
+</span><span id="line-118"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="hs-pragma">(</span><span class="hs-pragma">&lt;*&gt;</span><span class="hs-pragma">)</span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-119"></span><span>
+</span><span id="line-120"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679107544"><span id="local-6989586621679107671"><span id="local-6989586621679107675"><span class="annot"><span class="hs-identifier hs-type">Alternative</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107544"><span class="hs-identifier hs-type">i</span></a></span><span class="hs-special">)</span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-121"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">empty</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span id="local-6989586621679107679"><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107544"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107679"><span class="hs-identifier hs-type">o</span></a></span></span><span>
+</span><span id="line-122"></span><span>    </span><span id="local-6989586621679107686"><span class="annot"><span class="annottext">empty :: forall a. Codec i a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">empty</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span>
+</span><span id="line-123"></span><span>        </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">codecRead :: TomlEnv o
+</span><a href="Toml.Codec.Types.html#codecRead"><span class="hs-identifier hs-var">codecRead</span></a></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">\</span><span class="annot"><span class="annottext">TOML
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Validation [TomlDecodeError] o
+forall a. Validation [TomlDecodeError] a
+forall (f :: * -&gt; *) a. Alternative f =&gt; f a
+</span><span class="hs-identifier hs-var">empty</span></span><span>
+</span><span id="line-124"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">codecWrite :: i -&gt; TomlState o
+</span><a href="Toml.Codec.Types.html#codecWrite"><span class="hs-identifier hs-var">codecWrite</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">\</span><span class="annot"><span class="annottext">i
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">TomlState o
+forall a. TomlState a
+forall (f :: * -&gt; *) a. Alternative f =&gt; f a
+</span><span class="hs-identifier hs-var">empty</span></span><span>
+</span><span id="line-125"></span><span>        </span><span class="hs-special">}</span><span>
+</span><span id="line-126"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><span class="hs-pragma hs-type">empty</span></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-127"></span><span>
+</span><span id="line-128"></span><span>    </span><span class="annot"><span class="hs-operator hs-type">(&lt;|&gt;)</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span id="local-6989586621679107688"><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107544"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107688"><span class="hs-identifier hs-type">o</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107544"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107688"><span class="hs-identifier hs-type">o</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107544"><span class="hs-identifier hs-type">i</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107688"><span class="hs-identifier hs-type">o</span></a></span></span><span>
+</span><span id="line-129"></span><span>    </span><span id="local-6989586621679107692"><span class="annot"><span class="annottext">Codec i o
+</span><a href="#local-6989586621679107692"><span class="hs-identifier hs-var">codec1</span></a></span></span><span> </span><span id="local-6989586621679107693"><span class="annot"><span class="annottext">&lt;|&gt; :: forall a. Codec i a -&gt; Codec i a -&gt; Codec i a
+</span><span class="hs-operator hs-var hs-var hs-var hs-var">&lt;|&gt;</span></span></span><span> </span><span id="local-6989586621679107694"><span class="annot"><span class="annottext">Codec i o
+</span><a href="#local-6989586621679107694"><span class="hs-identifier hs-var">codec2</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier hs-type">Codec</span></a></span><span>
+</span><span id="line-130"></span><span>        </span><span class="hs-special">{</span><span> </span><span class="annot"><span class="annottext">codecRead :: TomlEnv o
+</span><a href="Toml.Codec.Types.html#codecRead"><span class="hs-identifier hs-var">codecRead</span></a></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Codec i o -&gt; TomlEnv o
+forall i o. Codec i o -&gt; TomlEnv o
+</span><a href="Toml.Codec.Types.html#codecRead"><span class="hs-identifier hs-var">codecRead</span></a></span><span> </span><span class="annot"><span class="annottext">Codec i o
+</span><a href="#local-6989586621679107692"><span class="hs-identifier hs-var">codec1</span></a></span><span> </span><span class="annot"><span class="annottext">TomlEnv o -&gt; TomlEnv o -&gt; TomlEnv o
+forall (f :: * -&gt; *) a x.
+Alternative f =&gt;
+(a -&gt; f x) -&gt; (a -&gt; f x) -&gt; a -&gt; f x
+</span><a href="Toml.Codec.Types.html#%3C%21%3E"><span class="hs-operator hs-var">&lt;!&gt;</span></a></span><span> </span><span class="annot"><span class="annottext">Codec i o -&gt; TomlEnv o
+forall i o. Codec i o -&gt; TomlEnv o
+</span><a href="Toml.Codec.Types.html#codecRead"><span class="hs-identifier hs-var">codecRead</span></a></span><span> </span><span class="annot"><span class="annottext">Codec i o
+</span><a href="#local-6989586621679107694"><span class="hs-identifier hs-var">codec2</span></a></span><span>
+</span><span id="line-131"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">codecWrite :: i -&gt; TomlState o
+</span><a href="Toml.Codec.Types.html#codecWrite"><span class="hs-identifier hs-var">codecWrite</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679107695"><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679107695"><span class="hs-identifier hs-var">c</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Codec i o -&gt; i -&gt; TomlState o
+forall i o. Codec i o -&gt; i -&gt; TomlState o
+</span><a href="Toml.Codec.Types.html#codecWrite"><span class="hs-identifier hs-var">codecWrite</span></a></span><span> </span><span class="annot"><span class="annottext">Codec i o
+</span><a href="#local-6989586621679107692"><span class="hs-identifier hs-var">codec1</span></a></span><span> </span><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679107695"><span class="hs-identifier hs-var">c</span></a></span><span> </span><span class="annot"><span class="annottext">TomlState o -&gt; TomlState o -&gt; TomlState o
+forall a. TomlState a -&gt; TomlState a -&gt; TomlState a
+forall (f :: * -&gt; *) a. Alternative f =&gt; f a -&gt; f a -&gt; f a
+</span><span class="hs-operator hs-var">&lt;|&gt;</span></span><span> </span><span class="annot"><span class="annottext">Codec i o -&gt; i -&gt; TomlState o
+forall i o. Codec i o -&gt; i -&gt; TomlState o
+</span><a href="Toml.Codec.Types.html#codecWrite"><span class="hs-identifier hs-var">codecWrite</span></a></span><span> </span><span class="annot"><span class="annottext">Codec i o
+</span><a href="#local-6989586621679107694"><span class="hs-identifier hs-var">codec2</span></a></span><span> </span><span class="annot"><span class="annottext">i
+</span><a href="#local-6989586621679107695"><span class="hs-identifier hs-var">c</span></a></span><span>
+</span><span id="line-132"></span><span>        </span><span class="hs-special">}</span><span>
+</span><span id="line-133"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="hs-pragma">(</span><span class="hs-pragma">&lt;|&gt;</span><span class="hs-pragma">)</span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-134"></span><span>
+</span><span id="line-135"></span><span class="annot"><span class="hs-comment">-- | Alternative instance for function arrow but without 'empty'.</span></span><span>
+</span><span id="line-136"></span><span class="hs-keyword">infixl</span><span> </span><span class="hs-number">3</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#%3C%21%3E"><span class="hs-operator hs-type">&lt;!&gt;</span></a></span><span>
+</span><span id="line-137"></span><span id="local-6989586621679107549"><span id="local-6989586621679107550"><span id="local-6989586621679107551"><span class="annot"><a href="Toml.Codec.Types.html#%3C%21%3E"><span class="hs-operator hs-type">(&lt;!&gt;)</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Alternative</span></span><span> </span><span class="annot"><a href="#local-6989586621679107549"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679107550"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679107549"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107551"><span class="hs-identifier hs-type">x</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679107550"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679107549"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107551"><span class="hs-identifier hs-type">x</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679107550"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679107549"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107551"><span class="hs-identifier hs-type">x</span></a></span><span class="hs-special">)</span></span></span></span><span>
+</span><span id="line-138"></span><span id="local-6989586621679107698"><span class="annot"><span class="annottext">a -&gt; f x
+</span><a href="#local-6989586621679107698"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="%3C%21%3E"><span class="annot"><span class="annottext">&lt;!&gt; :: forall (f :: * -&gt; *) a x.
+Alternative f =&gt;
+(a -&gt; f x) -&gt; (a -&gt; f x) -&gt; a -&gt; f x
+</span><a href="Toml.Codec.Types.html#%3C%21%3E"><span class="hs-operator hs-var hs-var">&lt;!&gt;</span></a></span></span><span> </span><span id="local-6989586621679107699"><span class="annot"><span class="annottext">a -&gt; f x
+</span><a href="#local-6989586621679107699"><span class="hs-identifier hs-var">g</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679107700"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679107700"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">a -&gt; f x
+</span><a href="#local-6989586621679107698"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679107700"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">f x -&gt; f x -&gt; f x
+forall a. f a -&gt; f a -&gt; f a
+forall (f :: * -&gt; *) a. Alternative f =&gt; f a -&gt; f a -&gt; f a
+</span><span class="hs-operator hs-var">&lt;|&gt;</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; f x
+</span><a href="#local-6989586621679107699"><span class="hs-identifier hs-var">g</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679107700"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-139"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="hs-pragma">(</span><span class="hs-pragma">&lt;!&gt;</span><span class="hs-pragma">)</span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-140"></span><span>
+</span><span id="line-141"></span><span class="annot"><span class="hs-comment">{- | Mutable context for TOML conversion.
+We are introducing our own implemetation of state with 'MonadState' instance due
+to some limitation in the design connected to the usage of State.
+
+This newtype is equivalent to the following transformer:
+
+@
+MaybeT (State TOML)
+@
+
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-154"></span><span class="hs-keyword">newtype</span><span> </span><span id="TomlState"><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-var">TomlState</span></a></span></span><span> </span><span id="local-6989586621679107555"><span class="annot"><a href="#local-6989586621679107555"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="TomlState"><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-var">TomlState</span></a></span></span><span>
+</span><span id="line-155"></span><span>    </span><span class="hs-special">{</span><span> </span><span id="unTomlState"><span class="annot"><span class="annottext">forall a. TomlState a -&gt; TOML -&gt; (Maybe a, TOML)
+</span><a href="Toml.Codec.Types.html#unTomlState"><span class="hs-identifier hs-var hs-var">unTomlState</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679107555"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-156"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-157"></span><span>
+</span><span id="line-158"></span><span class="annot"><span class="hs-comment">-- | @since 1.3.0.0</span></span><span>
+</span><span id="line-159"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Functor</span></span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-160"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">fmap</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span id="local-6989586621679107704"><span id="local-6989586621679107705"><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679107704"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679107705"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107704"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107705"><span class="hs-identifier hs-type">b</span></a></span></span></span><span>
+</span><span id="line-161"></span><span>    </span><span id="local-6989586621679107710"><span class="annot"><span class="annottext">fmap :: forall a b. (a -&gt; b) -&gt; TomlState a -&gt; TomlState b
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">fmap</span></span></span><span> </span><span id="local-6989586621679107711"><span class="annot"><span class="annottext">a -&gt; b
+</span><a href="#local-6989586621679107711"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span class="hs-special">{</span><span id="local-6989586621679107712"><span class="annot"><span class="annottext">TOML -&gt; (Maybe a, TOML)
+unTomlState :: forall a. TomlState a -&gt; TOML -&gt; (Maybe a, TOML)
+unTomlState :: TOML -&gt; (Maybe a, TOML)
+</span><a href="Toml.Codec.Types.html#unTomlState"><span class="hs-glyph hs-var hs-var">..</span></a></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(TOML -&gt; (Maybe b, TOML)) -&gt; TomlState b
+forall a. (TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+</span><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-var">TomlState</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Maybe a -&gt; Maybe b) -&gt; (Maybe a, TOML) -&gt; (Maybe b, TOML)
+forall a b c. (a -&gt; b) -&gt; (a, c) -&gt; (b, c)
+forall (p :: * -&gt; * -&gt; *) a b c.
+Bifunctor p =&gt;
+(a -&gt; b) -&gt; p a c -&gt; p b c
+</span><span class="hs-identifier hs-var">first</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(a -&gt; b) -&gt; Maybe a -&gt; Maybe b
+forall a b. (a -&gt; b) -&gt; Maybe a -&gt; Maybe b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; b
+</span><a href="#local-6989586621679107711"><span class="hs-identifier hs-var">f</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">((Maybe a, TOML) -&gt; (Maybe b, TOML))
+-&gt; (TOML -&gt; (Maybe a, TOML)) -&gt; TOML -&gt; (Maybe b, TOML)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TOML -&gt; (Maybe a, TOML)
+</span><a href="#local-6989586621679107712"><span class="hs-identifier hs-var">unTomlState</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-162"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><span class="hs-pragma hs-type">fmap</span></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-163"></span><span>
+</span><span id="line-164"></span><span>    </span><span class="annot"><span class="hs-operator hs-type">(&lt;$)</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span id="local-6989586621679107714"><span id="local-6989586621679107715"><span class="annot"><a href="#local-6989586621679107714"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107715"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107714"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-165"></span><span>    </span><span id="local-6989586621679107718"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679107718"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span id="local-6989586621679107719"><span class="annot"><span class="annottext">&lt;$ :: forall a b. a -&gt; TomlState b -&gt; TomlState a
+</span><span class="hs-operator hs-var hs-var hs-var hs-var">&lt;$</span></span></span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span class="hs-special">{</span><span id="local-6989586621679107720"><span class="annot"><span class="annottext">TOML -&gt; (Maybe b, TOML)
+unTomlState :: forall a. TomlState a -&gt; TOML -&gt; (Maybe a, TOML)
+unTomlState :: TOML -&gt; (Maybe b, TOML)
+</span><a href="Toml.Codec.Types.html#unTomlState"><span class="hs-glyph hs-var hs-var">..</span></a></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+forall a. (TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+</span><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-var">TomlState</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Maybe b -&gt; Maybe a) -&gt; (Maybe b, TOML) -&gt; (Maybe a, TOML)
+forall a b c. (a -&gt; b) -&gt; (a, c) -&gt; (b, c)
+forall (p :: * -&gt; * -&gt; *) a b c.
+Bifunctor p =&gt;
+(a -&gt; b) -&gt; p a c -&gt; p b c
+</span><span class="hs-identifier hs-var">first</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(b -&gt; a) -&gt; Maybe b -&gt; Maybe a
+forall a b. (a -&gt; b) -&gt; Maybe a -&gt; Maybe b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; b -&gt; a
+forall a b. a -&gt; b -&gt; a
+</span><span class="hs-identifier hs-var">const</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679107718"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">((Maybe b, TOML) -&gt; (Maybe a, TOML))
+-&gt; (TOML -&gt; (Maybe b, TOML)) -&gt; TOML -&gt; (Maybe a, TOML)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TOML -&gt; (Maybe b, TOML)
+</span><a href="#local-6989586621679107720"><span class="hs-identifier hs-var">unTomlState</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-166"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="hs-pragma">(</span><span class="hs-pragma">&lt;$</span><span class="hs-pragma">)</span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-167"></span><span>
+</span><span id="line-168"></span><span class="annot"><span class="hs-comment">-- | @since 1.3.0.0</span></span><span>
+</span><span id="line-169"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679107727"><span id="local-6989586621679107730"><span id="local-6989586621679107733"><span class="annot"><span class="hs-identifier hs-type">Applicative</span></span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-170"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">pure</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span id="local-6989586621679107735"><span class="annot"><a href="#local-6989586621679107735"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107735"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-171"></span><span>    </span><span id="local-6989586621679107736"><span class="annot"><span class="annottext">pure :: forall a. a -&gt; TomlState a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">pure</span></span></span><span> </span><span id="local-6989586621679107737"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679107737"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+forall a. (TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+</span><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-var">TomlState</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679107737"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">,</span><span class="hs-special">)</span><span>
+</span><span id="line-172"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><span class="hs-pragma hs-type">pure</span></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-173"></span><span>
+</span><span id="line-174"></span><span>    </span><span class="annot"><span class="hs-operator hs-type">(&lt;*&gt;)</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span id="local-6989586621679107738"><span id="local-6989586621679107739"><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679107738"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679107739"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107738"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107739"><span class="hs-identifier hs-type">b</span></a></span></span></span><span>
+</span><span id="line-175"></span><span>    </span><span id="local-6989586621679107742"><span class="annot"><span class="annottext">TomlState (a -&gt; b)
+</span><a href="#local-6989586621679107742"><span class="hs-identifier hs-var">tsF</span></a></span></span><span> </span><span id="local-6989586621679107743"><span class="annot"><span class="annottext">&lt;*&gt; :: forall a b. TomlState (a -&gt; b) -&gt; TomlState a -&gt; TomlState b
+</span><span class="hs-operator hs-var hs-var hs-var hs-var">&lt;*&gt;</span></span></span><span> </span><span id="local-6989586621679107744"><span class="annot"><span class="annottext">TomlState a
+</span><a href="#local-6989586621679107744"><span class="hs-identifier hs-var">tsA</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(TOML -&gt; (Maybe b, TOML)) -&gt; TomlState b
+forall a. (TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+</span><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-var">TomlState</span></a></span><span> </span><span class="annot"><span class="annottext">((TOML -&gt; (Maybe b, TOML)) -&gt; TomlState b)
+-&gt; (TOML -&gt; (Maybe b, TOML)) -&gt; TomlState b
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679107745"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107745"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-176"></span><span>        </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679107746"><span class="annot"><span class="annottext">Maybe (a -&gt; b)
+</span><a href="#local-6989586621679107746"><span class="hs-identifier hs-var">mF</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679107747"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107747"><span class="hs-identifier hs-var">tF</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlState (a -&gt; b) -&gt; TOML -&gt; (Maybe (a -&gt; b), TOML)
+forall a. TomlState a -&gt; TOML -&gt; (Maybe a, TOML)
+</span><a href="Toml.Codec.Types.html#unTomlState"><span class="hs-identifier hs-var">unTomlState</span></a></span><span> </span><span class="annot"><span class="annottext">TomlState (a -&gt; b)
+</span><a href="#local-6989586621679107742"><span class="hs-identifier hs-var">tsF</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107745"><span class="hs-identifier hs-var">t</span></a></span><span>
+</span><span id="line-177"></span><span>            </span><span class="hs-special">(</span><span id="local-6989586621679107748"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679107748"><span class="hs-identifier hs-var">mA</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679107749"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107749"><span class="hs-identifier hs-var">tA</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlState a -&gt; TOML -&gt; (Maybe a, TOML)
+forall a. TomlState a -&gt; TOML -&gt; (Maybe a, TOML)
+</span><a href="Toml.Codec.Types.html#unTomlState"><span class="hs-identifier hs-var">unTomlState</span></a></span><span> </span><span class="annot"><span class="annottext">TomlState a
+</span><a href="#local-6989586621679107744"><span class="hs-identifier hs-var">tsA</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107747"><span class="hs-identifier hs-var">tF</span></a></span><span>
+</span><span id="line-178"></span><span>        </span><span class="hs-keyword">in</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe (a -&gt; b)
+</span><a href="#local-6989586621679107746"><span class="hs-identifier hs-var">mF</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (a -&gt; b) -&gt; Maybe a -&gt; Maybe b
+forall a b. Maybe (a -&gt; b) -&gt; Maybe a -&gt; Maybe b
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;*&gt;</span></span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679107748"><span class="hs-identifier hs-var">mA</span></a></span><span> </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107749"><span class="hs-identifier hs-var">tA</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-179"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="hs-pragma">(</span><span class="hs-pragma">&lt;*&gt;</span><span class="hs-pragma">)</span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-180"></span><span>
+</span><span id="line-181"></span><span class="annot"><span class="hs-comment">-- | @since 1.3.0.0</span></span><span>
+</span><span id="line-182"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679107755"><span id="local-6989586621679107758"><span class="annot"><span class="hs-identifier hs-type">Alternative</span></span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-183"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">empty</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span id="local-6989586621679107760"><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107760"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-184"></span><span>    </span><span id="local-6989586621679107761"><span class="annot"><span class="annottext">empty :: forall a. TomlState a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">empty</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+forall a. (TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+</span><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-var">TomlState</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">,</span><span class="hs-special">)</span><span>
+</span><span id="line-185"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><span class="hs-pragma hs-type">empty</span></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-186"></span><span>
+</span><span id="line-187"></span><span>    </span><span class="annot"><span class="hs-operator hs-type">(&lt;|&gt;)</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span id="local-6989586621679107762"><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107762"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107762"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107762"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-188"></span><span>    </span><span id="local-6989586621679107763"><span class="annot"><span class="annottext">TomlState a
+</span><a href="#local-6989586621679107763"><span class="hs-identifier hs-var">ts1</span></a></span></span><span> </span><span id="local-6989586621679107764"><span class="annot"><span class="annottext">&lt;|&gt; :: forall a. TomlState a -&gt; TomlState a -&gt; TomlState a
+</span><span class="hs-operator hs-var hs-var hs-var hs-var">&lt;|&gt;</span></span></span><span> </span><span id="local-6989586621679107765"><span class="annot"><span class="annottext">TomlState a
+</span><a href="#local-6989586621679107765"><span class="hs-identifier hs-var">ts2</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+forall a. (TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+</span><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-var">TomlState</span></a></span><span> </span><span class="annot"><span class="annottext">((TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a)
+-&gt; (TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679107766"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107766"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679107767"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679107767"><span class="hs-identifier hs-var">m1</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679107768"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107768"><span class="hs-identifier hs-var">t1</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlState a -&gt; TOML -&gt; (Maybe a, TOML)
+forall a. TomlState a -&gt; TOML -&gt; (Maybe a, TOML)
+</span><a href="Toml.Codec.Types.html#unTomlState"><span class="hs-identifier hs-var">unTomlState</span></a></span><span> </span><span class="annot"><span class="annottext">TomlState a
+</span><a href="#local-6989586621679107763"><span class="hs-identifier hs-var">ts1</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107766"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="hs-keyword">in</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679107767"><span class="hs-identifier hs-var">m1</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-189"></span><span>        </span><span class="annot"><span class="annottext">Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">TomlState a -&gt; TOML -&gt; (Maybe a, TOML)
+forall a. TomlState a -&gt; TOML -&gt; (Maybe a, TOML)
+</span><a href="Toml.Codec.Types.html#unTomlState"><span class="hs-identifier hs-var">unTomlState</span></a></span><span> </span><span class="annot"><span class="annottext">TomlState a
+</span><a href="#local-6989586621679107765"><span class="hs-identifier hs-var">ts2</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107766"><span class="hs-identifier hs-var">t</span></a></span><span>
+</span><span id="line-190"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><span class="hs-identifier">_</span></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679107767"><span class="hs-identifier hs-var">m1</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107768"><span class="hs-identifier hs-var">t1</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-191"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="hs-pragma">(</span><span class="hs-pragma">&lt;|&gt;</span><span class="hs-pragma">)</span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-192"></span><span>
+</span><span id="line-193"></span><span class="annot"><span class="hs-comment">-- | @since 1.3.0.0</span></span><span>
+</span><span id="line-194"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679107773"><span class="annot"><span class="hs-identifier hs-type">Monad</span></span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-195"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">return</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span id="local-6989586621679107778"><span class="annot"><a href="#local-6989586621679107778"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107778"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-196"></span><span>    </span><span id="local-6989586621679107780"><span class="annot"><span class="annottext">return :: forall a. a -&gt; TomlState a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">return</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a -&gt; TomlState a
+forall a. a -&gt; TomlState a
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span>
+</span><span id="line-197"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><span class="hs-pragma hs-type">return</span></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-198"></span><span>
+</span><span id="line-199"></span><span>    </span><span class="annot"><span class="hs-operator hs-type">(&gt;&gt;=)</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span id="local-6989586621679107781"><span id="local-6989586621679107782"><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107781"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679107781"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107782"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107782"><span class="hs-identifier hs-type">b</span></a></span></span></span><span>
+</span><span id="line-200"></span><span>    </span><span id="local-6989586621679107783"><span class="annot"><span class="annottext">TomlState a
+</span><a href="#local-6989586621679107783"><span class="hs-identifier hs-var">tsA</span></a></span></span><span> </span><span id="local-6989586621679107784"><span class="annot"><span class="annottext">&gt;&gt;= :: forall a b. TomlState a -&gt; (a -&gt; TomlState b) -&gt; TomlState b
+</span><span class="hs-operator hs-var hs-var hs-var hs-var">&gt;&gt;=</span></span></span><span> </span><span id="local-6989586621679107785"><span class="annot"><span class="annottext">a -&gt; TomlState b
+</span><a href="#local-6989586621679107785"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(TOML -&gt; (Maybe b, TOML)) -&gt; TomlState b
+forall a. (TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+</span><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-var">TomlState</span></a></span><span> </span><span class="annot"><span class="annottext">((TOML -&gt; (Maybe b, TOML)) -&gt; TomlState b)
+-&gt; (TOML -&gt; (Maybe b, TOML)) -&gt; TomlState b
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679107786"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107786"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">let</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679107787"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679107787"><span class="hs-identifier hs-var">mA</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679107788"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107788"><span class="hs-identifier hs-var">newT</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlState a -&gt; TOML -&gt; (Maybe a, TOML)
+forall a. TomlState a -&gt; TOML -&gt; (Maybe a, TOML)
+</span><a href="Toml.Codec.Types.html#unTomlState"><span class="hs-identifier hs-var">unTomlState</span></a></span><span> </span><span class="annot"><span class="annottext">TomlState a
+</span><a href="#local-6989586621679107783"><span class="hs-identifier hs-var">tsA</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107786"><span class="hs-identifier hs-var">t</span></a></span><span> </span><span class="hs-keyword">in</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679107787"><span class="hs-identifier hs-var">mA</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-201"></span><span>        </span><span class="annot"><span class="annottext">Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe b
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107788"><span class="hs-identifier hs-var">newT</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-202"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679107789"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679107789"><span class="hs-identifier hs-var">a</span></a></span></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">TomlState b -&gt; TOML -&gt; (Maybe b, TOML)
+forall a. TomlState a -&gt; TOML -&gt; (Maybe a, TOML)
+</span><a href="Toml.Codec.Types.html#unTomlState"><span class="hs-identifier hs-var">unTomlState</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; TomlState b
+</span><a href="#local-6989586621679107785"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679107789"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107788"><span class="hs-identifier hs-var">newT</span></a></span><span>
+</span><span id="line-203"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="hs-pragma">(</span><span class="hs-pragma">&gt;&gt;=</span><span class="hs-pragma">)</span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-204"></span><span>
+</span><span id="line-205"></span><span class="annot"><span class="hs-comment">-- | @since 1.3.0.0</span></span><span>
+</span><span id="line-206"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679107594"><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679107594"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><span class="hs-operator hs-type">~</span></span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">MonadState</span></span><span> </span><span class="annot"><a href="#local-6989586621679107594"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-207"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">state</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span id="local-6989586621679107595"><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679107595"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107595"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-208"></span><span>    </span><span id="local-6989586621679107801"><span class="annot"><span class="annottext">state :: forall a. (TOML -&gt; (a, TOML)) -&gt; TomlState a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">state</span></span></span><span> </span><span id="local-6989586621679107802"><span class="annot"><span class="annottext">TOML -&gt; (a, TOML)
+</span><a href="#local-6989586621679107802"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+forall a. (TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+</span><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-var">TomlState</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(a -&gt; Maybe a) -&gt; (a, TOML) -&gt; (Maybe a, TOML)
+forall a b c. (a -&gt; b) -&gt; (a, c) -&gt; (b, c)
+forall (p :: * -&gt; * -&gt; *) a b c.
+Bifunctor p =&gt;
+(a -&gt; b) -&gt; p a c -&gt; p b c
+</span><span class="hs-identifier hs-var">first</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">((a, TOML) -&gt; (Maybe a, TOML))
+-&gt; (TOML -&gt; (a, TOML)) -&gt; TOML -&gt; (Maybe a, TOML)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TOML -&gt; (a, TOML)
+</span><a href="#local-6989586621679107802"><span class="hs-identifier hs-var">f</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-209"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><span class="hs-pragma hs-type">state</span></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-210"></span><span>
+</span><span id="line-211"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">get</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span>
+</span><span id="line-212"></span><span>    </span><span id="local-6989586621679107804"><span class="annot"><span class="annottext">get :: TomlState TOML
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">get</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(TOML -&gt; (Maybe TOML, TOML)) -&gt; TomlState TOML
+forall a. (TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+</span><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-var">TomlState</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679107805"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107805"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TOML -&gt; Maybe TOML
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107805"><span class="hs-identifier hs-var">t</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107805"><span class="hs-identifier hs-var">t</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-213"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><span class="hs-pragma hs-type">get</span></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-214"></span><span>
+</span><span id="line-215"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">put</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-216"></span><span>    </span><span id="local-6989586621679107807"><span class="annot"><span class="annottext">put :: TOML -&gt; TomlState ()
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">put</span></span></span><span> </span><span id="local-6989586621679107808"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107808"><span class="hs-identifier hs-var">t</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(TOML -&gt; (Maybe (), TOML)) -&gt; TomlState ()
+forall a. (TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+</span><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-var">TomlState</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span class="annot"><span class="annottext">TOML
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">() -&gt; Maybe ()
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679107808"><span class="hs-identifier hs-var">t</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-217"></span><span>    </span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><span class="hs-pragma hs-type">put</span></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-218"></span><span>
+</span><span id="line-219"></span><span class="annot"><span class="hs-comment">{- | Transform 'Either' into 'TomlState'.
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-223"></span><span id="local-6989586621679107597"><span id="local-6989586621679107598"><span class="annot"><a href="Toml.Codec.Types.html#eitherToTomlState"><span class="hs-identifier hs-type">eitherToTomlState</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="annot"><a href="#local-6989586621679107597"><span class="hs-identifier hs-type">e</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107598"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-type">TomlState</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107598"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-224"></span><span id="eitherToTomlState"><span class="annot"><span class="annottext">eitherToTomlState :: forall e a. Either e a -&gt; TomlState a
+</span><a href="Toml.Codec.Types.html#eitherToTomlState"><span class="hs-identifier hs-var hs-var">eitherToTomlState</span></a></span></span><span> </span><span id="local-6989586621679107809"><span class="annot"><span class="annottext">Either e a
+</span><a href="#local-6989586621679107809"><span class="hs-identifier hs-var">e</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+forall a. (TOML -&gt; (Maybe a, TOML)) -&gt; TomlState a
+</span><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier hs-var">TomlState</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(e -&gt; Maybe a) -&gt; (a -&gt; Maybe a) -&gt; Either e a -&gt; Maybe a
+forall a c b. (a -&gt; c) -&gt; (b -&gt; c) -&gt; Either a b -&gt; c
+</span><span class="hs-identifier hs-var">either</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe a -&gt; e -&gt; Maybe a
+forall a b. a -&gt; b -&gt; a
+</span><span class="hs-identifier hs-var">const</span></span><span> </span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Either e a
+</span><a href="#local-6989586621679107809"><span class="hs-identifier hs-var">e</span></a></span><span class="hs-special">,</span><span class="hs-special">)</span><span>
+</span><span id="line-225"></span></pre></body></html>

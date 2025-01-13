@@ -1,0 +1,1016 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE DeriveAnyClass  #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE PatternSynonyms #-}</span><span>
+</span><span id="line-3"></span><span>
+</span><span id="line-4"></span><span class="annot"><span class="hs-comment">{- |
+Module                  : Toml.Type.PrefixTree
+Copyright               : (c) 2018-2022 Kowainik
+SPDX-License-Identifier : MPL-2.0
+Maintainer              : Kowainik &lt;xrom.xkov@gmail.com&gt;
+Stability               : Stable
+Portability             : Portable
+
+Implementation of prefix tree for TOML AST.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-16"></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Toml.Type.PrefixTree</span><span>
+</span><span id="line-18"></span><span>    </span><span class="hs-special">(</span><span>
+</span><span id="line-19"></span><span>      </span><span class="annot"><span class="hs-comment">-- * Non-empty prefix tree</span></span><span>
+</span><span id="line-20"></span><span>      </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixTree"><span class="hs-identifier">PrefixTree</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-21"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#singleT"><span class="hs-identifier">singleT</span></a></span><span>
+</span><span id="line-22"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#insertT"><span class="hs-identifier">insertT</span></a></span><span>
+</span><span id="line-23"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#lookupT"><span class="hs-identifier">lookupT</span></a></span><span>
+</span><span id="line-24"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#toListT"><span class="hs-identifier">toListT</span></a></span><span>
+</span><span id="line-25"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#addPrefixT"><span class="hs-identifier">addPrefixT</span></a></span><span>
+</span><span id="line-26"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#differenceWithT"><span class="hs-identifier">differenceWithT</span></a></span><span>
+</span><span id="line-27"></span><span>
+</span><span id="line-28"></span><span>      </span><span class="annot"><span class="hs-comment">-- * Prefix map that stores roots of 'PrefixTree'</span></span><span>
+</span><span id="line-29"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier">PrefixMap</span></a></span><span>
+</span><span id="line-30"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#single"><span class="hs-identifier">single</span></a></span><span>
+</span><span id="line-31"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#insert"><span class="hs-identifier">insert</span></a></span><span>
+</span><span id="line-32"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#lookup"><span class="hs-identifier">lookup</span></a></span><span>
+</span><span id="line-33"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#fromList"><span class="hs-identifier">fromList</span></a></span><span>
+</span><span id="line-34"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#toList"><span class="hs-identifier">toList</span></a></span><span>
+</span><span id="line-35"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#differenceWith"><span class="hs-identifier">differenceWith</span></a></span><span>
+</span><span id="line-36"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-37"></span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Prelude</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">lookup</span></span><span class="hs-special">)</span><span>
+</span><span id="line-39"></span><span>
+</span><span id="line-40"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.DeepSeq</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">NFData</span></span><span class="hs-special">)</span><span>
+</span><span id="line-41"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Bifunctor</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">first</span></span><span class="hs-special">)</span><span>
+</span><span id="line-42"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Foldable</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">foldl'</span></span><span class="hs-special">)</span><span>
+</span><span id="line-43"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.HashMap.Strict</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">HashMap</span></span><span class="hs-special">)</span><span>
+</span><span id="line-44"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">GHC.Generics</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Generic</span></span><span class="hs-special">)</span><span>
+</span><span id="line-45"></span><span>
+</span><span id="line-46"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.Key.html"><span class="hs-identifier">Toml.Type.Key</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-keyword">pattern</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#%3A%7C%7C"><span class="hs-operator">(:||)</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier">Key</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#KeysDiff"><span class="hs-identifier">KeysDiff</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Piece"><span class="hs-identifier">Piece</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Prefix"><span class="hs-identifier">Prefix</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#keysDiff"><span class="hs-identifier">keysDiff</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#%3C%7C"><span class="hs-operator">(&lt;|)</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.HashMap.Strict</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">HashMap</span></span><span>
+</span><span id="line-49"></span><span>
+</span><span id="line-50"></span><span>
+</span><span id="line-51"></span><span class="annot"><span class="hs-comment">{- | Map of layer names and corresponding 'PrefixTree's.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-55"></span><span class="hs-keyword">type</span><span> </span><span id="PrefixMap"><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier hs-var">PrefixMap</span></a></span></span><span> </span><span id="local-6989586621679103807"><span class="annot"><a href="#local-6989586621679103807"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">HashMap</span></span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Piece"><span class="hs-identifier hs-type">Piece</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixTree"><span class="hs-identifier hs-type">PrefixTree</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103807"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-56"></span><span>
+</span><span id="line-57"></span><span class="annot"><span class="hs-comment">{- | Data structure to represent table tree for @toml@.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-61"></span><span class="hs-keyword">data</span><span> </span><span id="PrefixTree"><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixTree"><span class="hs-identifier hs-var">PrefixTree</span></a></span></span><span> </span><span id="local-6989586621679103714"><span class="annot"><a href="#local-6989586621679103714"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-62"></span><span>    </span><span class="hs-glyph">=</span><span> </span><span id="Leaf"><span class="annot"><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-var">Leaf</span></a></span></span><span>             </span><span class="annot"><span class="hs-comment">-- ^ End of a key.</span></span><span>
+</span><span id="line-63"></span><span>        </span><span class="hs-glyph">!</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span>           </span><span class="annot"><span class="hs-comment">-- ^ End piece of the key.</span></span><span>
+</span><span id="line-64"></span><span>        </span><span class="hs-glyph">!</span><span class="annot"><a href="#local-6989586621679103714"><span class="hs-identifier hs-type">a</span></a></span><span>             </span><span class="annot"><span class="hs-comment">-- ^ Value at the end.</span></span><span>
+</span><span id="line-65"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span id="Branch"><span class="annot"><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-var">Branch</span></a></span></span><span>           </span><span class="annot"><span class="hs-comment">-- ^ Values along pieces of a key.</span></span><span>
+</span><span id="line-66"></span><span>        </span><span class="hs-glyph">!</span><span class="annot"><a href="Toml.Type.Key.html#Prefix"><span class="hs-identifier hs-type">Prefix</span></a></span><span>        </span><span class="annot"><span class="hs-comment">-- ^ Greatest common key prefix.</span></span><span>
+</span><span id="line-67"></span><span>        </span><span class="hs-glyph">!</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679103714"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>     </span><span class="annot"><span class="hs-comment">-- ^ Possible value at that point.</span></span><span>
+</span><span id="line-68"></span><span>        </span><span class="hs-glyph">!</span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier hs-type">PrefixMap</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103714"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="hs-comment">-- ^ Values at suffixes of the prefix.</span></span><span>
+</span><span id="line-69"></span><span>    </span><span class="hs-keyword">deriving</span><span> </span><span class="annot"><span class="hs-keyword">stock</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679103812"><span id="local-6989586621679103827"><span id="local-6989586621679103831"><span class="annot"><span class="annottext">Int -&gt; PrefixTree a -&gt; ShowS
+[PrefixTree a] -&gt; ShowS
+PrefixTree a -&gt; String
+(Int -&gt; PrefixTree a -&gt; ShowS)
+-&gt; (PrefixTree a -&gt; String)
+-&gt; ([PrefixTree a] -&gt; ShowS)
+-&gt; Show (PrefixTree a)
+forall a. Show a =&gt; Int -&gt; PrefixTree a -&gt; ShowS
+forall a. Show a =&gt; [PrefixTree a] -&gt; ShowS
+forall a. Show a =&gt; PrefixTree a -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: forall a. Show a =&gt; Int -&gt; PrefixTree a -&gt; ShowS
+showsPrec :: Int -&gt; PrefixTree a -&gt; ShowS
+$cshow :: forall a. Show a =&gt; PrefixTree a -&gt; String
+show :: PrefixTree a -&gt; String
+$cshowList :: forall a. Show a =&gt; [PrefixTree a] -&gt; ShowS
+showList :: [PrefixTree a] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679103837"><span id="local-6989586621679103849"><span class="annot"><span class="annottext">PrefixTree a -&gt; PrefixTree a -&gt; Bool
+(PrefixTree a -&gt; PrefixTree a -&gt; Bool)
+-&gt; (PrefixTree a -&gt; PrefixTree a -&gt; Bool) -&gt; Eq (PrefixTree a)
+forall a. Eq a =&gt; PrefixTree a -&gt; PrefixTree a -&gt; Bool
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: forall a. Eq a =&gt; PrefixTree a -&gt; PrefixTree a -&gt; Bool
+== :: PrefixTree a -&gt; PrefixTree a -&gt; Bool
+$c/= :: forall a. Eq a =&gt; PrefixTree a -&gt; PrefixTree a -&gt; Bool
+/= :: PrefixTree a -&gt; PrefixTree a -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679103855"><span id="local-6989586621679103857"><span class="annot"><span class="annottext">(forall x. PrefixTree a -&gt; Rep (PrefixTree a) x)
+-&gt; (forall x. Rep (PrefixTree a) x -&gt; PrefixTree a)
+-&gt; Generic (PrefixTree a)
+forall x. Rep (PrefixTree a) x -&gt; PrefixTree a
+forall x. PrefixTree a -&gt; Rep (PrefixTree a) x
+forall a.
+(forall x. a -&gt; Rep a x) -&gt; (forall x. Rep a x -&gt; a) -&gt; Generic a
+forall a x. Rep (PrefixTree a) x -&gt; PrefixTree a
+forall a x. PrefixTree a -&gt; Rep (PrefixTree a) x
+$cfrom :: forall a x. PrefixTree a -&gt; Rep (PrefixTree a) x
+from :: forall x. PrefixTree a -&gt; Rep (PrefixTree a) x
+$cto :: forall a x. Rep (PrefixTree a) x -&gt; PrefixTree a
+to :: forall x. Rep (PrefixTree a) x -&gt; PrefixTree a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Generic</span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-70"></span><span>    </span><span class="hs-keyword">deriving</span><span> </span><span class="annot"><span class="hs-keyword">anyclass</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679103862"><span class="annot"><span class="annottext">PrefixTree a -&gt; ()
+(PrefixTree a -&gt; ()) -&gt; NFData (PrefixTree a)
+forall a. NFData a =&gt; PrefixTree a -&gt; ()
+forall a. (a -&gt; ()) -&gt; NFData a
+$crnf :: forall a. NFData a =&gt; PrefixTree a -&gt; ()
+rnf :: PrefixTree a -&gt; ()
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">NFData</span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-71"></span><span>
+</span><span id="line-72"></span><span class="annot"><span class="hs-comment">-- | @since 0.3</span></span><span>
+</span><span id="line-73"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679103706"><span id="local-6989586621679103897"><span id="local-6989586621679103901"><span class="annot"><span class="hs-identifier hs-type">Semigroup</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixTree"><span class="hs-identifier hs-type">PrefixTree</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103706"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-74"></span><span>    </span><span id="local-6989586621679103908"><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679103908"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span id="local-6989586621679103909"><span class="annot"><span class="annottext">&lt;&gt; :: PrefixTree a -&gt; PrefixTree a -&gt; PrefixTree a
+</span><span class="hs-operator hs-var hs-var hs-var hs-var">&lt;&gt;</span></span></span><span> </span><span id="local-6989586621679103910"><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679103910"><span class="hs-identifier hs-var">b</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(PrefixTree a -&gt; (Key, a) -&gt; PrefixTree a)
+-&gt; PrefixTree a -&gt; [(Key, a)] -&gt; PrefixTree a
+forall b a. (b -&gt; a -&gt; b) -&gt; b -&gt; [a] -&gt; b
+forall (t :: * -&gt; *) b a.
+Foldable t =&gt;
+(b -&gt; a -&gt; b) -&gt; b -&gt; t a -&gt; b
+</span><span class="hs-identifier hs-var">foldl'</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679103911"><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679103911"><span class="hs-identifier hs-var">tree</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679103912"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103912"><span class="hs-identifier hs-var">k</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679103913"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103913"><span class="hs-identifier hs-var">v</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixTree a -&gt; PrefixTree a
+forall a. Key -&gt; a -&gt; PrefixTree a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#insertT"><span class="hs-identifier hs-var">insertT</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103912"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103913"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679103911"><span class="hs-identifier hs-var">tree</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679103908"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">PrefixTree a -&gt; [(Key, a)]
+forall a. PrefixTree a -&gt; [(Key, a)]
+</span><a href="Toml.Type.PrefixTree.html#toListT"><span class="hs-identifier hs-var">toListT</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679103910"><span class="hs-identifier hs-var">b</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-75"></span><span>
+</span><span id="line-76"></span><span class="annot"><span class="hs-comment">{- | Push 'Prefix' inside the given 'PrefixTree'.
+
+@since 1.3.2.0
+-}</span></span><span>
+</span><span id="line-80"></span><span id="local-6989586621679103712"><span class="annot"><a href="Toml.Type.PrefixTree.html#addPrefixT"><span class="hs-identifier hs-type">addPrefixT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Prefix"><span class="hs-identifier hs-type">Prefix</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixTree"><span class="hs-identifier hs-type">PrefixTree</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103712"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixTree"><span class="hs-identifier hs-type">PrefixTree</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103712"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-81"></span><span id="addPrefixT"><span class="annot"><span class="annottext">addPrefixT :: forall a. Key -&gt; PrefixTree a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#addPrefixT"><span class="hs-identifier hs-var hs-var">addPrefixT</span></a></span></span><span> </span><span id="local-6989586621679103917"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103917"><span class="hs-identifier hs-var">pref</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">\</span><span class="hs-glyph">case</span><span>
+</span><span id="line-82"></span><span>    </span><span class="annot"><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-type">Leaf</span></a></span><span> </span><span id="local-6989586621679103918"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103918"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span id="local-6989586621679103919"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103919"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixTree a
+forall a. Key -&gt; a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-var">Leaf</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103917"><span class="hs-identifier hs-var">pref</span></a></span><span> </span><span class="annot"><span class="annottext">Key -&gt; Key -&gt; Key
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103918"><span class="hs-identifier hs-var">k</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103919"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-83"></span><span>    </span><span class="annot"><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-type">Branch</span></a></span><span> </span><span id="local-6989586621679103920"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103920"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span id="local-6989586621679103921"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679103921"><span class="hs-identifier hs-var">ma</span></a></span></span><span> </span><span id="local-6989586621679103922"><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679103922"><span class="hs-identifier hs-var">pma</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+forall a. Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-var">Branch</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103917"><span class="hs-identifier hs-var">pref</span></a></span><span> </span><span class="annot"><span class="annottext">Key -&gt; Key -&gt; Key
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103920"><span class="hs-identifier hs-var">k</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679103921"><span class="hs-identifier hs-var">ma</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679103922"><span class="hs-identifier hs-var">pma</span></a></span><span>
+</span><span id="line-84"></span><span>
+</span><span id="line-85"></span><span class="annot"><span class="hs-comment">{- | Convert branches to 'Leaf' or remove them at all.
+
+@since 1.3.2.0
+-}</span></span><span>
+</span><span id="line-89"></span><span id="local-6989586621679103715"><span class="annot"><a href="Toml.Type.PrefixTree.html#compressTree"><span class="hs-identifier hs-type">compressTree</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixTree"><span class="hs-identifier hs-type">PrefixTree</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103715"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixTree"><span class="hs-identifier hs-type">PrefixTree</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103715"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-90"></span><span id="compressTree"><span class="annot"><span class="annottext">compressTree :: forall a. PrefixTree a -&gt; Maybe (PrefixTree a)
+</span><a href="Toml.Type.PrefixTree.html#compressTree"><span class="hs-identifier hs-var hs-var">compressTree</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">\</span><span class="hs-glyph">case</span><span>
+</span><span id="line-91"></span><span>    </span><span id="local-6989586621679103926"><span class="annot"><span class="annottext">l :: PrefixTree a
+</span><a href="#local-6989586621679103926"><span class="hs-identifier hs-var">l</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-type">Leaf</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679103926"><span class="hs-identifier hs-var">l</span></a></span><span>
+</span><span id="line-92"></span><span>    </span><span id="local-6989586621679103927"><span class="annot"><span class="annottext">b :: PrefixTree a
+</span><a href="#local-6989586621679103927"><span class="hs-identifier hs-var">b</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-type">Branch</span></a></span><span> </span><span id="local-6989586621679103928"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103928"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679103929"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679103929"><span class="hs-identifier hs-var">ma</span></a></span></span><span> </span><span id="local-6989586621679103930"><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679103930"><span class="hs-identifier hs-var">pma</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">PrefixMap a -&gt; [(Piece, PrefixTree a)]
+forall k v. HashMap k v -&gt; [(k, v)]
+</span><span class="hs-identifier hs-var">HashMap.toList</span></span><span> </span><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679103930"><span class="hs-identifier hs-var">pma</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-93"></span><span>        </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679103929"><span class="hs-identifier hs-var">ma</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; (a -&gt; Maybe (PrefixTree a)) -&gt; Maybe (PrefixTree a)
+forall a b. Maybe a -&gt; (a -&gt; Maybe b) -&gt; Maybe b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679103932"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103932"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixTree a
+forall a. Key -&gt; a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-var">Leaf</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103928"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103932"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-94"></span><span>        </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Piece
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679103933"><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679103933"><span class="hs-identifier hs-var">child</span></a></span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679103929"><span class="hs-identifier hs-var">ma</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-95"></span><span>            </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679103927"><span class="hs-identifier hs-var">b</span></a></span><span>
+</span><span id="line-96"></span><span>            </span><span class="annot"><span class="annottext">Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. PrefixTree a -&gt; Maybe (PrefixTree a)
+</span><a href="Toml.Type.PrefixTree.html#compressTree"><span class="hs-identifier hs-var">compressTree</span></a></span><span> </span><span class="annot"><span class="annottext">(PrefixTree a -&gt; Maybe (PrefixTree a))
+-&gt; PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; PrefixTree a -&gt; PrefixTree a
+forall a. Key -&gt; PrefixTree a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#addPrefixT"><span class="hs-identifier hs-var">addPrefixT</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103928"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679103933"><span class="hs-identifier hs-var">child</span></a></span><span>
+</span><span id="line-97"></span><span>        </span><span class="annot"><span class="annottext">(Piece, PrefixTree a)
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span class="annot"><span class="annottext">(Piece, PrefixTree a)
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span class="annot"><span class="annottext">[(Piece, PrefixTree a)]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679103927"><span class="hs-identifier hs-var">b</span></a></span><span>
+</span><span id="line-98"></span><span>
+</span><span id="line-99"></span><span class="annot"><span class="hs-comment">{- | Creates a 'PrefixTree' of one key-value element.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-103"></span><span id="local-6989586621679103934"><span class="annot"><a href="Toml.Type.PrefixTree.html#singleT"><span class="hs-identifier hs-type">singleT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679103934"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixTree"><span class="hs-identifier hs-type">PrefixTree</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103934"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-104"></span><span id="singleT"><span class="annot"><span class="annottext">singleT :: forall a. Key -&gt; a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#singleT"><span class="hs-identifier hs-var hs-var">singleT</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixTree a
+forall a. Key -&gt; a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-var">Leaf</span></a></span><span>
+</span><span id="line-105"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#singleT"><span class="hs-pragma hs-type">singleT</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-106"></span><span>
+</span><span id="line-107"></span><span class="annot"><span class="hs-comment">{- | Creates a 'PrefixMap' of one key-value element.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-111"></span><span id="local-6989586621679103728"><span class="annot"><a href="Toml.Type.PrefixTree.html#single"><span class="hs-identifier hs-type">single</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679103728"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier hs-type">PrefixMap</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103728"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-112"></span><span id="single"><span class="annot"><span class="annottext">single :: forall a. Key -&gt; a -&gt; PrefixMap a
+</span><a href="Toml.Type.PrefixTree.html#single"><span class="hs-identifier hs-var hs-var">single</span></a></span></span><span> </span><span id="local-6989586621679103937"><span class="annot"><span class="annottext">k :: Key
+</span><a href="#local-6989586621679103937"><span class="hs-identifier hs-var">k</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span id="local-6989586621679103938"><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679103938"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="annot"><a href="Toml.Type.Key.html#%3A%7C%7C"><span class="hs-operator hs-type">:||</span></a></span><span> </span><span class="annot"><span class="annottext">[Piece]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Piece -&gt; PrefixTree a -&gt; HashMap Piece (PrefixTree a)
+forall k v. Hashable k =&gt; k -&gt; v -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HashMap.singleton</span></span><span> </span><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679103938"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">(PrefixTree a -&gt; HashMap Piece (PrefixTree a))
+-&gt; (a -&gt; PrefixTree a) -&gt; a -&gt; HashMap Piece (PrefixTree a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixTree a
+forall a. Key -&gt; a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#singleT"><span class="hs-identifier hs-var">singleT</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103937"><span class="hs-identifier hs-var">k</span></a></span><span>
+</span><span id="line-113"></span><span>
+</span><span id="line-114"></span><span class="annot"><span class="hs-comment">{- | Inserts key-value element into the given 'PrefixTree'.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-118"></span><span id="local-6989586621679103710"><span class="annot"><a href="Toml.Type.PrefixTree.html#insertT"><span class="hs-identifier hs-type">insertT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679103710"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixTree"><span class="hs-identifier hs-type">PrefixTree</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103710"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixTree"><span class="hs-identifier hs-type">PrefixTree</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103710"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-119"></span><span id="insertT"><span class="annot"><span class="annottext">insertT :: forall a. Key -&gt; a -&gt; PrefixTree a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#insertT"><span class="hs-identifier hs-var hs-var">insertT</span></a></span></span><span> </span><span id="local-6989586621679103950"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103950"><span class="hs-identifier hs-var">newK</span></a></span></span><span> </span><span id="local-6989586621679103951"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103951"><span class="hs-identifier hs-var">newV</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-type">Leaf</span></a></span><span> </span><span id="local-6989586621679103952"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103952"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span id="local-6989586621679103953"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103953"><span class="hs-identifier hs-var">v</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-120"></span><span>    </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Key -&gt; Key -&gt; KeysDiff
+</span><a href="Toml.Type.Key.html#keysDiff"><span class="hs-identifier hs-var">keysDiff</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103952"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103950"><span class="hs-identifier hs-var">newK</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-121"></span><span>        </span><span class="annot"><span class="annottext">KeysDiff
+</span><a href="Toml.Type.Key.html#Equal"><span class="hs-identifier hs-var">Equal</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixTree a
+forall a. Key -&gt; a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-var">Leaf</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103952"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103951"><span class="hs-identifier hs-var">newV</span></a></span><span>
+</span><span id="line-122"></span><span>        </span><span class="annot"><span class="annottext">KeysDiff
+</span><a href="Toml.Type.Key.html#NoPrefix"><span class="hs-identifier hs-var">NoPrefix</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; PrefixTree a
+forall a. HasCallStack =&gt; String -&gt; a
+</span><span class="hs-identifier hs-var">error</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Algorithm error: can't be equal prefixes in insertT:Leaf case&quot;</span></span><span>
+</span><span id="line-123"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#FstIsPref"><span class="hs-identifier hs-type">FstIsPref</span></a></span><span> </span><span id="local-6989586621679103958"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103958"><span class="hs-identifier hs-var">rK</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+forall a. Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-var">Branch</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103952"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103953"><span class="hs-identifier hs-var">v</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(PrefixMap a -&gt; PrefixTree a) -&gt; PrefixMap a -&gt; PrefixTree a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixMap a
+forall a. Key -&gt; a -&gt; PrefixMap a
+</span><a href="Toml.Type.PrefixTree.html#single"><span class="hs-identifier hs-var">single</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103958"><span class="hs-identifier hs-var">rK</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103951"><span class="hs-identifier hs-var">newV</span></a></span><span>
+</span><span id="line-124"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#SndIsPref"><span class="hs-identifier hs-type">SndIsPref</span></a></span><span> </span><span id="local-6989586621679103960"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103960"><span class="hs-identifier hs-var">lK</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+forall a. Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-var">Branch</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103950"><span class="hs-identifier hs-var">newK</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103951"><span class="hs-identifier hs-var">newV</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(PrefixMap a -&gt; PrefixTree a) -&gt; PrefixMap a -&gt; PrefixTree a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixMap a
+forall a. Key -&gt; a -&gt; PrefixMap a
+</span><a href="Toml.Type.PrefixTree.html#single"><span class="hs-identifier hs-var">single</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103960"><span class="hs-identifier hs-var">lK</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103953"><span class="hs-identifier hs-var">v</span></a></span><span>
+</span><span id="line-125"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#Diff"><span class="hs-identifier hs-type">Diff</span></a></span><span> </span><span id="local-6989586621679103962"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103962"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679103963"><span class="annot"><span class="annottext">k1 :: Key
+</span><a href="#local-6989586621679103963"><span class="hs-identifier hs-var">k1</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span id="local-6989586621679103964"><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679103964"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="annot"><a href="Toml.Type.Key.html#%3A%7C%7C"><span class="hs-operator hs-type">:||</span></a></span><span> </span><span class="annot"><span class="annottext">[Piece]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679103965"><span class="annot"><span class="annottext">k2 :: Key
+</span><a href="#local-6989586621679103965"><span class="hs-identifier hs-var">k2</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span id="local-6989586621679103966"><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679103966"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="annot"><a href="Toml.Type.Key.html#%3A%7C%7C"><span class="hs-operator hs-type">:||</span></a></span><span> </span><span class="annot"><span class="annottext">[Piece]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-126"></span><span>          </span><span class="annot"><span class="annottext">Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+forall a. Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-var">Branch</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103962"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="annot"><span class="annottext">(PrefixMap a -&gt; PrefixTree a) -&gt; PrefixMap a -&gt; PrefixTree a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[(Piece, PrefixTree a)] -&gt; PrefixMap a
+forall k v. (Eq k, Hashable k) =&gt; [(k, v)] -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HashMap.fromList</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679103964"><span class="hs-identifier hs-var">f</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixTree a
+forall a. Key -&gt; a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-var">Leaf</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103963"><span class="hs-identifier hs-var">k1</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103953"><span class="hs-identifier hs-var">v</span></a></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679103966"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixTree a
+forall a. Key -&gt; a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-var">Leaf</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103965"><span class="hs-identifier hs-var">k2</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103951"><span class="hs-identifier hs-var">newV</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-127"></span><span class="annot"><a href="Toml.Type.PrefixTree.html#insertT"><span class="hs-identifier hs-var">insertT</span></a></span><span> </span><span id="local-6989586621679103968"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103968"><span class="hs-identifier hs-var">newK</span></a></span></span><span> </span><span id="local-6989586621679103969"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103969"><span class="hs-identifier hs-var">newV</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-type">Branch</span></a></span><span> </span><span id="local-6989586621679103970"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103970"><span class="hs-identifier hs-var">pref</span></a></span></span><span> </span><span id="local-6989586621679103971"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679103971"><span class="hs-identifier hs-var">mv</span></a></span></span><span> </span><span id="local-6989586621679103972"><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679103972"><span class="hs-identifier hs-var">prefMap</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-128"></span><span>    </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Key -&gt; Key -&gt; KeysDiff
+</span><a href="Toml.Type.Key.html#keysDiff"><span class="hs-identifier hs-var">keysDiff</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103970"><span class="hs-identifier hs-var">pref</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103968"><span class="hs-identifier hs-var">newK</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-129"></span><span>        </span><span class="annot"><span class="annottext">KeysDiff
+</span><a href="Toml.Type.Key.html#Equal"><span class="hs-identifier hs-var">Equal</span></a></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+forall a. Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-var">Branch</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103970"><span class="hs-identifier hs-var">pref</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103969"><span class="hs-identifier hs-var">newV</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679103972"><span class="hs-identifier hs-var">prefMap</span></a></span><span>
+</span><span id="line-130"></span><span>        </span><span class="annot"><span class="annottext">KeysDiff
+</span><a href="Toml.Type.Key.html#NoPrefix"><span class="hs-identifier hs-var">NoPrefix</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; PrefixTree a
+forall a. HasCallStack =&gt; String -&gt; a
+</span><span class="hs-identifier hs-var">error</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Algorithm error: can't be equal prefixes in insertT:Branch case&quot;</span></span><span>
+</span><span id="line-131"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#FstIsPref"><span class="hs-identifier hs-type">FstIsPref</span></a></span><span> </span><span id="local-6989586621679103973"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103973"><span class="hs-identifier hs-var">rK</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+forall a. Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-var">Branch</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103970"><span class="hs-identifier hs-var">pref</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679103971"><span class="hs-identifier hs-var">mv</span></a></span><span> </span><span class="annot"><span class="annottext">(PrefixMap a -&gt; PrefixTree a) -&gt; PrefixMap a -&gt; PrefixTree a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixMap a -&gt; PrefixMap a
+forall a. Key -&gt; a -&gt; PrefixMap a -&gt; PrefixMap a
+</span><a href="Toml.Type.PrefixTree.html#insert"><span class="hs-identifier hs-var">insert</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103973"><span class="hs-identifier hs-var">rK</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103969"><span class="hs-identifier hs-var">newV</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679103972"><span class="hs-identifier hs-var">prefMap</span></a></span><span>
+</span><span id="line-132"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#SndIsPref"><span class="hs-identifier hs-type">SndIsPref</span></a></span><span> </span><span id="local-6989586621679103974"><span class="annot"><span class="annottext">lK :: Key
+</span><a href="#local-6989586621679103974"><span class="hs-identifier hs-var">lK</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span id="local-6989586621679103975"><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679103975"><span class="hs-identifier hs-var">piece</span></a></span></span><span> </span><span class="annot"><a href="Toml.Type.Key.html#%3A%7C%7C"><span class="hs-operator hs-type">:||</span></a></span><span> </span><span class="annot"><span class="annottext">[Piece]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-133"></span><span>            </span><span class="annot"><span class="annottext">Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+forall a. Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-var">Branch</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103968"><span class="hs-identifier hs-var">newK</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103969"><span class="hs-identifier hs-var">newV</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(PrefixMap a -&gt; PrefixTree a) -&gt; PrefixMap a -&gt; PrefixTree a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Piece -&gt; PrefixTree a -&gt; PrefixMap a
+forall k v. Hashable k =&gt; k -&gt; v -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HashMap.singleton</span></span><span> </span><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679103975"><span class="hs-identifier hs-var">piece</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+forall a. Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-var">Branch</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103974"><span class="hs-identifier hs-var">lK</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679103971"><span class="hs-identifier hs-var">mv</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679103972"><span class="hs-identifier hs-var">prefMap</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-134"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#Diff"><span class="hs-identifier hs-type">Diff</span></a></span><span> </span><span id="local-6989586621679103976"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103976"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679103977"><span class="annot"><span class="annottext">k1 :: Key
+</span><a href="#local-6989586621679103977"><span class="hs-identifier hs-var">k1</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span id="local-6989586621679103978"><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679103978"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="annot"><a href="Toml.Type.Key.html#%3A%7C%7C"><span class="hs-operator hs-type">:||</span></a></span><span> </span><span class="annot"><span class="annottext">[Piece]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679103979"><span class="annot"><span class="annottext">k2 :: Key
+</span><a href="#local-6989586621679103979"><span class="hs-identifier hs-var">k2</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span id="local-6989586621679103980"><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679103980"><span class="hs-identifier hs-var">s</span></a></span></span><span> </span><span class="annot"><a href="Toml.Type.Key.html#%3A%7C%7C"><span class="hs-operator hs-type">:||</span></a></span><span> </span><span class="annot"><span class="annottext">[Piece]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-135"></span><span>            </span><span class="annot"><span class="annottext">Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+forall a. Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-var">Branch</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103976"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="annot"><span class="annottext">(PrefixMap a -&gt; PrefixTree a) -&gt; PrefixMap a -&gt; PrefixTree a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[(Piece, PrefixTree a)] -&gt; PrefixMap a
+forall k v. (Eq k, Hashable k) =&gt; [(k, v)] -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HashMap.fromList</span></span><span> </span><span class="hs-special">[</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679103978"><span class="hs-identifier hs-var">f</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+forall a. Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-var">Branch</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103977"><span class="hs-identifier hs-var">k1</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679103971"><span class="hs-identifier hs-var">mv</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679103972"><span class="hs-identifier hs-var">prefMap</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-136"></span><span>                                                </span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679103980"><span class="hs-identifier hs-var">s</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixTree a
+forall a. Key -&gt; a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-var">Leaf</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103979"><span class="hs-identifier hs-var">k2</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103969"><span class="hs-identifier hs-var">newV</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-137"></span><span>                                                </span><span class="hs-special">]</span><span>
+</span><span id="line-138"></span><span>
+</span><span id="line-139"></span><span class="annot"><span class="hs-comment">{- | Inserts key-value element into the given 'PrefixMap'.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-143"></span><span id="local-6989586621679103743"><span class="annot"><a href="Toml.Type.PrefixTree.html#insert"><span class="hs-identifier hs-type">insert</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679103743"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier hs-type">PrefixMap</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103743"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier hs-type">PrefixMap</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103743"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-144"></span><span id="insert"><span class="annot"><span class="annottext">insert :: forall a. Key -&gt; a -&gt; PrefixMap a -&gt; PrefixMap a
+</span><a href="Toml.Type.PrefixTree.html#insert"><span class="hs-identifier hs-var hs-var">insert</span></a></span></span><span> </span><span id="local-6989586621679103987"><span class="annot"><span class="annottext">k :: Key
+</span><a href="#local-6989586621679103987"><span class="hs-identifier hs-var">k</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span id="local-6989586621679103988"><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679103988"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="annot"><a href="Toml.Type.Key.html#%3A%7C%7C"><span class="hs-operator hs-type">:||</span></a></span><span> </span><span class="annot"><span class="annottext">[Piece]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679103989"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103989"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span id="local-6989586621679103990"><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679103990"><span class="hs-identifier hs-var">prefMap</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Piece -&gt; PrefixMap a -&gt; Maybe (PrefixTree a)
+forall k v. (Eq k, Hashable k) =&gt; k -&gt; HashMap k v -&gt; Maybe v
+</span><span class="hs-identifier hs-var">HashMap.lookup</span></span><span> </span><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679103988"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679103990"><span class="hs-identifier hs-var">prefMap</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-145"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679103992"><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679103992"><span class="hs-identifier hs-var">tree</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Piece -&gt; PrefixTree a -&gt; PrefixMap a -&gt; PrefixMap a
+forall k v.
+(Eq k, Hashable k) =&gt;
+k -&gt; v -&gt; HashMap k v -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HashMap.insert</span></span><span> </span><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679103988"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixTree a -&gt; PrefixTree a
+forall a. Key -&gt; a -&gt; PrefixTree a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#insertT"><span class="hs-identifier hs-var">insertT</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103987"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103989"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679103992"><span class="hs-identifier hs-var">tree</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679103990"><span class="hs-identifier hs-var">prefMap</span></a></span><span>
+</span><span id="line-146"></span><span>    </span><span class="annot"><span class="annottext">Maybe (PrefixTree a)
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>   </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Piece -&gt; PrefixTree a -&gt; PrefixMap a -&gt; PrefixMap a
+forall k v.
+(Eq k, Hashable k) =&gt;
+k -&gt; v -&gt; HashMap k v -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HashMap.insert</span></span><span> </span><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679103988"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixTree a
+forall a. Key -&gt; a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#singleT"><span class="hs-identifier hs-var">singleT</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103987"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103989"><span class="hs-identifier hs-var">v</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679103990"><span class="hs-identifier hs-var">prefMap</span></a></span><span>
+</span><span id="line-147"></span><span>
+</span><span id="line-148"></span><span class="annot"><span class="hs-comment">{- | Looks up the value at a key in the 'PrefixTree'.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-152"></span><span id="local-6989586621679103749"><span class="annot"><a href="Toml.Type.PrefixTree.html#lookupT"><span class="hs-identifier hs-type">lookupT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixTree"><span class="hs-identifier hs-type">PrefixTree</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103749"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679103749"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-153"></span><span id="lookupT"><span class="annot"><span class="annottext">lookupT :: forall a. Key -&gt; PrefixTree a -&gt; Maybe a
+</span><a href="Toml.Type.PrefixTree.html#lookupT"><span class="hs-identifier hs-var hs-var">lookupT</span></a></span></span><span> </span><span id="local-6989586621679103995"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103995"><span class="hs-identifier hs-var">lk</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-type">Leaf</span></a></span><span> </span><span id="local-6989586621679103996"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103996"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span id="local-6989586621679103997"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103997"><span class="hs-identifier hs-var">v</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103995"><span class="hs-identifier hs-var">lk</span></a></span><span> </span><span class="annot"><span class="annottext">Key -&gt; Key -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103996"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679103997"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-154"></span><span class="annot"><a href="Toml.Type.PrefixTree.html#lookupT"><span class="hs-identifier hs-var">lookupT</span></a></span><span> </span><span id="local-6989586621679103998"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103998"><span class="hs-identifier hs-var">lk</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-type">Branch</span></a></span><span> </span><span id="local-6989586621679103999"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103999"><span class="hs-identifier hs-var">pref</span></a></span></span><span> </span><span id="local-6989586621679104000"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679104000"><span class="hs-identifier hs-var">mv</span></a></span></span><span> </span><span id="local-6989586621679104001"><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679104001"><span class="hs-identifier hs-var">prefMap</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-155"></span><span>    </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Key -&gt; Key -&gt; KeysDiff
+</span><a href="Toml.Type.Key.html#keysDiff"><span class="hs-identifier hs-var">keysDiff</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103999"><span class="hs-identifier hs-var">pref</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679103998"><span class="hs-identifier hs-var">lk</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-156"></span><span>        </span><span class="annot"><span class="annottext">KeysDiff
+</span><a href="Toml.Type.Key.html#Equal"><span class="hs-identifier hs-var">Equal</span></a></span><span>       </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679104000"><span class="hs-identifier hs-var">mv</span></a></span><span>
+</span><span id="line-157"></span><span>        </span><span class="annot"><span class="annottext">KeysDiff
+</span><a href="Toml.Type.Key.html#NoPrefix"><span class="hs-identifier hs-var">NoPrefix</span></a></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-158"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#Diff"><span class="hs-identifier hs-type">Diff</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-159"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#SndIsPref"><span class="hs-identifier hs-type">SndIsPref</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe a
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-160"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#FstIsPref"><span class="hs-identifier hs-type">FstIsPref</span></a></span><span> </span><span id="local-6989586621679104002"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104002"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Key -&gt; PrefixMap a -&gt; Maybe a
+forall a. Key -&gt; PrefixMap a -&gt; Maybe a
+</span><a href="Toml.Type.PrefixTree.html#lookup"><span class="hs-identifier hs-var">lookup</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104002"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679104001"><span class="hs-identifier hs-var">prefMap</span></a></span><span>
+</span><span id="line-161"></span><span>
+</span><span id="line-162"></span><span class="annot"><span class="hs-comment">{- | Looks up the value at a key in the 'PrefixMap'.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-166"></span><span id="local-6989586621679103751"><span class="annot"><a href="Toml.Type.PrefixTree.html#lookup"><span class="hs-identifier hs-type">lookup</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier hs-type">PrefixMap</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103751"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679103751"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-167"></span><span id="lookup"><span class="annot"><span class="annottext">lookup :: forall a. Key -&gt; PrefixMap a -&gt; Maybe a
+</span><a href="Toml.Type.PrefixTree.html#lookup"><span class="hs-identifier hs-var hs-var">lookup</span></a></span></span><span> </span><span id="local-6989586621679104006"><span class="annot"><span class="annottext">k :: Key
+</span><a href="#local-6989586621679104006"><span class="hs-identifier hs-var">k</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span id="local-6989586621679104007"><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679104007"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span class="annot"><a href="Toml.Type.Key.html#%3A%7C%7C"><span class="hs-operator hs-type">:||</span></a></span><span> </span><span class="annot"><span class="annottext">[Piece]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679104008"><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679104008"><span class="hs-identifier hs-var">prefMap</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Piece -&gt; PrefixMap a -&gt; Maybe (PrefixTree a)
+forall k v. (Eq k, Hashable k) =&gt; k -&gt; HashMap k v -&gt; Maybe v
+</span><span class="hs-identifier hs-var">HashMap.lookup</span></span><span> </span><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679104007"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679104008"><span class="hs-identifier hs-var">prefMap</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe (PrefixTree a) -&gt; (PrefixTree a -&gt; Maybe a) -&gt; Maybe a
+forall a b. Maybe a -&gt; (a -&gt; Maybe b) -&gt; Maybe b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; PrefixTree a -&gt; Maybe a
+forall a. Key -&gt; PrefixTree a -&gt; Maybe a
+</span><a href="Toml.Type.PrefixTree.html#lookupT"><span class="hs-identifier hs-var">lookupT</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104006"><span class="hs-identifier hs-var">k</span></a></span><span>
+</span><span id="line-168"></span><span>
+</span><span id="line-169"></span><span class="annot"><span class="hs-comment">{- | Constructs 'PrefixMap' structure from the given list of 'Key' and value pairs.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-173"></span><span id="local-6989586621679103753"><span class="annot"><a href="Toml.Type.PrefixTree.html#fromList"><span class="hs-identifier hs-type">fromList</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679103753"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier hs-type">PrefixMap</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103753"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-174"></span><span id="fromList"><span class="annot"><span class="annottext">fromList :: forall a. [(Key, a)] -&gt; PrefixMap a
+</span><a href="Toml.Type.PrefixTree.html#fromList"><span class="hs-identifier hs-var hs-var">fromList</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(PrefixMap a -&gt; (Key, a) -&gt; PrefixMap a)
+-&gt; PrefixMap a -&gt; [(Key, a)] -&gt; PrefixMap a
+forall b a. (b -&gt; a -&gt; b) -&gt; b -&gt; [a] -&gt; b
+forall (t :: * -&gt; *) b a.
+Foldable t =&gt;
+(b -&gt; a -&gt; b) -&gt; b -&gt; t a -&gt; b
+</span><span class="hs-identifier hs-var">foldl'</span></span><span> </span><span class="annot"><span class="annottext">PrefixMap a -&gt; (Key, a) -&gt; PrefixMap a
+forall a. PrefixMap a -&gt; (Key, a) -&gt; PrefixMap a
+</span><a href="#local-6989586621679104014"><span class="hs-identifier hs-var">insertPair</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixMap a
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-175"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-176"></span><span>    </span><span id="local-6989586621679103757"><span class="annot"><a href="#local-6989586621679104014"><span class="hs-identifier hs-type">insertPair</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier hs-type">PrefixMap</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103757"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679103757"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier hs-type">PrefixMap</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103757"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-177"></span><span>    </span><span id="local-6989586621679104014"><span class="annot"><span class="annottext">insertPair :: forall a. PrefixMap a -&gt; (Key, a) -&gt; PrefixMap a
+</span><a href="#local-6989586621679104014"><span class="hs-identifier hs-var hs-var">insertPair</span></a></span></span><span> </span><span id="local-6989586621679104015"><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679104015"><span class="hs-identifier hs-var">prefMap</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679104016"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104016"><span class="hs-identifier hs-var">k</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679104017"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104017"><span class="hs-identifier hs-var">v</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixMap a -&gt; PrefixMap a
+forall a. Key -&gt; a -&gt; PrefixMap a -&gt; PrefixMap a
+</span><a href="Toml.Type.PrefixTree.html#insert"><span class="hs-identifier hs-var">insert</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104016"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104017"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679104015"><span class="hs-identifier hs-var">prefMap</span></a></span><span>
+</span><span id="line-178"></span><span>
+</span><span id="line-179"></span><span class="annot"><span class="hs-comment">{- | Converts 'PrefixTree' to the list of pairs.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-183"></span><span id="local-6989586621679103711"><span class="annot"><a href="Toml.Type.PrefixTree.html#toListT"><span class="hs-identifier hs-type">toListT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixTree"><span class="hs-identifier hs-type">PrefixTree</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103711"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679103711"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span></span><span>
+</span><span id="line-184"></span><span id="toListT"><span class="annot"><span class="annottext">toListT :: forall a. PrefixTree a -&gt; [(Key, a)]
+</span><a href="Toml.Type.PrefixTree.html#toListT"><span class="hs-identifier hs-var hs-var">toListT</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-type">Leaf</span></a></span><span> </span><span id="local-6989586621679104019"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104019"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span id="local-6989586621679104020"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104020"><span class="hs-identifier hs-var">v</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104019"><span class="hs-identifier hs-var">k</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104020"><span class="hs-identifier hs-var">v</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-185"></span><span class="annot"><a href="Toml.Type.PrefixTree.html#toListT"><span class="hs-identifier hs-var">toListT</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-type">Branch</span></a></span><span> </span><span id="local-6989586621679104021"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104021"><span class="hs-identifier hs-var">pref</span></a></span></span><span> </span><span id="local-6989586621679104022"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679104022"><span class="hs-identifier hs-var">ma</span></a></span></span><span> </span><span id="local-6989586621679104023"><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679104023"><span class="hs-identifier hs-var">prefMap</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679104022"><span class="hs-identifier hs-var">ma</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-186"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679104024"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104024"><span class="hs-identifier hs-var">a</span></a></span></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="hs-glyph">:</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104021"><span class="hs-identifier hs-var">pref</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104024"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-187"></span><span>    </span><span class="annot"><span class="annottext">Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[(Key, a)] -&gt; [(Key, a)]
+forall a. a -&gt; a
+</span><span class="hs-identifier hs-var">id</span></span><span>
+</span><span id="line-188"></span><span>    </span><span class="annot"><span class="annottext">([(Key, a)] -&gt; [(Key, a)]) -&gt; [(Key, a)] -&gt; [(Key, a)]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">((Key, a) -&gt; (Key, a)) -&gt; [(Key, a)] -&gt; [(Key, a)]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span class="hs-special">(</span><span id="local-6989586621679104026"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104026"><span class="hs-identifier hs-var">k</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679104027"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104027"><span class="hs-identifier hs-var">v</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104021"><span class="hs-identifier hs-var">pref</span></a></span><span> </span><span class="annot"><span class="annottext">Key -&gt; Key -&gt; Key
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104026"><span class="hs-identifier hs-var">k</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104027"><span class="hs-identifier hs-var">v</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([(Key, a)] -&gt; [(Key, a)]) -&gt; [(Key, a)] -&gt; [(Key, a)]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">PrefixMap a -&gt; [(Key, a)]
+forall a. PrefixMap a -&gt; [(Key, a)]
+</span><a href="Toml.Type.PrefixTree.html#toList"><span class="hs-identifier hs-var">toList</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixMap a
+</span><a href="#local-6989586621679104023"><span class="hs-identifier hs-var">prefMap</span></a></span><span>
+</span><span id="line-189"></span><span>
+</span><span id="line-190"></span><span class="annot"><span class="hs-comment">{- | Converts 'PrefixMap' to the list of pairs.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-194"></span><span id="local-6989586621679103764"><span class="annot"><a href="Toml.Type.PrefixTree.html#toList"><span class="hs-identifier hs-type">toList</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier hs-type">PrefixMap</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103764"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679103764"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span></span><span>
+</span><span id="line-195"></span><span id="toList"><span class="annot"><span class="annottext">toList :: forall a. PrefixMap a -&gt; [(Key, a)]
+</span><a href="Toml.Type.PrefixTree.html#toList"><span class="hs-identifier hs-var hs-var">toList</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((Piece, PrefixTree a) -&gt; [(Key, a)])
+-&gt; [(Piece, PrefixTree a)] -&gt; [(Key, a)]
+forall (t :: * -&gt; *) a b. Foldable t =&gt; (a -&gt; [b]) -&gt; t a -&gt; [b]
+</span><span class="hs-identifier hs-var">concatMap</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span class="hs-special">(</span><span id="local-6989586621679104034"><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679104034"><span class="hs-identifier hs-var">p</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679104035"><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679104035"><span class="hs-identifier hs-var">tr</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(Key -&gt; Key) -&gt; (Key, a) -&gt; (Key, a)
+forall a b c. (a -&gt; b) -&gt; (a, c) -&gt; (b, c)
+forall (p :: * -&gt; * -&gt; *) a b c.
+Bifunctor p =&gt;
+(a -&gt; b) -&gt; p a c -&gt; p b c
+</span><span class="hs-identifier hs-var">first</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679104034"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Piece -&gt; Key -&gt; Key
+</span><a href="Toml.Type.Key.html#%3C%7C"><span class="hs-operator hs-var">&lt;|</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">((Key, a) -&gt; (Key, a)) -&gt; [(Key, a)] -&gt; [(Key, a)]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; [(Key, a)]
+forall a. PrefixTree a -&gt; [(Key, a)]
+</span><a href="Toml.Type.PrefixTree.html#toListT"><span class="hs-identifier hs-var">toListT</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679104035"><span class="hs-identifier hs-var">tr</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([(Piece, PrefixTree a)] -&gt; [(Key, a)])
+-&gt; (PrefixMap a -&gt; [(Piece, PrefixTree a)])
+-&gt; PrefixMap a
+-&gt; [(Key, a)]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">PrefixMap a -&gt; [(Piece, PrefixTree a)]
+forall k v. HashMap k v -&gt; [(k, v)]
+</span><span class="hs-identifier hs-var">HashMap.toList</span></span><span>
+</span><span id="line-196"></span><span>
+</span><span id="line-197"></span><span class="annot"><span class="hs-comment">{- | Difference of two 'PrefixMap's. Returns elements of the first 'PrefixMap'
+that are not existing in the second one.
+
+@since 1.3.2.0
+-}</span></span><span>
+</span><span id="line-202"></span><span id="local-6989586621679103777"><span id="local-6989586621679103778"><span class="annot"><a href="Toml.Type.PrefixTree.html#differenceWith"><span class="hs-identifier hs-type">differenceWith</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679103777"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679103778"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679103777"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier hs-type">PrefixMap</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103777"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier hs-type">PrefixMap</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103778"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixMap"><span class="hs-identifier hs-type">PrefixMap</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103777"><span class="hs-identifier hs-type">a</span></a></span></span></span><span>
+</span><span id="line-203"></span><span id="differenceWith"><span class="annot"><span class="annottext">differenceWith :: forall a b.
+(a -&gt; b -&gt; Maybe a) -&gt; PrefixMap a -&gt; PrefixMap b -&gt; PrefixMap a
+</span><a href="Toml.Type.PrefixTree.html#differenceWith"><span class="hs-identifier hs-var hs-var">differenceWith</span></a></span></span><span> </span><span id="local-6989586621679104039"><span class="annot"><span class="annottext">a -&gt; b -&gt; Maybe a
+</span><a href="#local-6989586621679104039"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(PrefixTree a -&gt; PrefixTree b -&gt; Maybe (PrefixTree a))
+-&gt; HashMap Piece (PrefixTree a)
+-&gt; HashMap Piece (PrefixTree b)
+-&gt; HashMap Piece (PrefixTree a)
+forall k v w.
+(Eq k, Hashable k) =&gt;
+(v -&gt; w -&gt; Maybe v) -&gt; HashMap k v -&gt; HashMap k w -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HashMap.differenceWith</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(a -&gt; b -&gt; Maybe a)
+-&gt; PrefixTree a -&gt; PrefixTree b -&gt; Maybe (PrefixTree a)
+forall a b.
+(a -&gt; b -&gt; Maybe a)
+-&gt; PrefixTree a -&gt; PrefixTree b -&gt; Maybe (PrefixTree a)
+</span><a href="Toml.Type.PrefixTree.html#differenceWithT"><span class="hs-identifier hs-var">differenceWithT</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; b -&gt; Maybe a
+</span><a href="#local-6989586621679104039"><span class="hs-identifier hs-var">f</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-204"></span><span>
+</span><span id="line-205"></span><span class="annot"><span class="hs-comment">{- | Difference of two 'PrefixTree's. Returns elements of the first 'PrefixTree'
+that are not existing in the second one.
+
+@since 1.3.2.0
+-}</span></span><span>
+</span><span id="line-210"></span><span id="local-6989586621679103784"><span id="local-6989586621679103785"><span class="annot"><a href="Toml.Type.PrefixTree.html#differenceWithT"><span class="hs-identifier hs-type">differenceWithT</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679103784"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679103785"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="#local-6989586621679103784"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixTree"><span class="hs-identifier hs-type">PrefixTree</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103784"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixTree"><span class="hs-identifier hs-type">PrefixTree</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103785"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#PrefixTree"><span class="hs-identifier hs-type">PrefixTree</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679103784"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span></span><span>
+</span><span id="line-211"></span><span id="differenceWithT"><span class="annot"><span class="annottext">differenceWithT :: forall a b.
+(a -&gt; b -&gt; Maybe a)
+-&gt; PrefixTree a -&gt; PrefixTree b -&gt; Maybe (PrefixTree a)
+</span><a href="Toml.Type.PrefixTree.html#differenceWithT"><span class="hs-identifier hs-var hs-var">differenceWithT</span></a></span></span><span> </span><span id="local-6989586621679104053"><span class="annot"><span class="annottext">a -&gt; b -&gt; Maybe a
+</span><a href="#local-6989586621679104053"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679104054"><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679104054"><span class="hs-identifier hs-var">pt1</span></a></span></span><span> </span><span id="local-6989586621679104055"><span class="annot"><span class="annottext">PrefixTree b
+</span><a href="#local-6989586621679104055"><span class="hs-identifier hs-var">pt2</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679104054"><span class="hs-identifier hs-var">pt1</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">PrefixTree b
+</span><a href="#local-6989586621679104055"><span class="hs-identifier hs-var">pt2</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-212"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-type">Leaf</span></a></span><span> </span><span id="local-6989586621679104056"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104056"><span class="hs-identifier hs-var">k1</span></a></span></span><span> </span><span id="local-6989586621679104057"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104057"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-type">Leaf</span></a></span><span> </span><span id="local-6989586621679104058"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104058"><span class="hs-identifier hs-var">k2</span></a></span></span><span> </span><span id="local-6989586621679104059"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679104059"><span class="hs-identifier hs-var">b</span></a></span></span><span class="hs-special">)</span><span>
+</span><span id="line-213"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104056"><span class="hs-identifier hs-var">k1</span></a></span><span> </span><span class="annot"><span class="annottext">Key -&gt; Key -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104058"><span class="hs-identifier hs-var">k2</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">a -&gt; b -&gt; Maybe a
+</span><a href="#local-6989586621679104053"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104057"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679104059"><span class="hs-identifier hs-var">b</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; (a -&gt; Maybe (PrefixTree a)) -&gt; Maybe (PrefixTree a)
+forall a b. Maybe a -&gt; (a -&gt; Maybe b) -&gt; Maybe b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679104060"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104060"><span class="hs-identifier hs-var">aNew</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixTree a
+forall a. Key -&gt; a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-var">Leaf</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104056"><span class="hs-identifier hs-var">k1</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104060"><span class="hs-identifier hs-var">aNew</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-214"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixTree a
+forall a. Key -&gt; a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-var">Leaf</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104056"><span class="hs-identifier hs-var">k1</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104057"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-215"></span><span>
+</span><span id="line-216"></span><span>    </span><span class="hs-special">(</span><span id="local-6989586621679104061"><span class="annot"><span class="annottext">l :: PrefixTree a
+</span><a href="#local-6989586621679104061"><span class="hs-identifier hs-var">l</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-type">Leaf</span></a></span><span> </span><span id="local-6989586621679104062"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104062"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span id="local-6989586621679104063"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104063"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-type">Branch</span></a></span><span> </span><span id="local-6989586621679104064"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104064"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679104065"><span class="annot"><span class="annottext">Maybe b
+</span><a href="#local-6989586621679104065"><span class="hs-identifier hs-var">mb</span></a></span></span><span> </span><span id="local-6989586621679104066"><span class="annot"><span class="annottext">PrefixMap b
+</span><a href="#local-6989586621679104066"><span class="hs-identifier hs-var">pmb</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Key -&gt; Key -&gt; KeysDiff
+</span><a href="Toml.Type.Key.html#keysDiff"><span class="hs-identifier hs-var">keysDiff</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104062"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104064"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-217"></span><span>        </span><span class="annot"><span class="annottext">KeysDiff
+</span><a href="Toml.Type.Key.html#Equal"><span class="hs-identifier hs-var">Equal</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe b
+</span><a href="#local-6989586621679104065"><span class="hs-identifier hs-var">mb</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe b -&gt; (b -&gt; Maybe a) -&gt; Maybe a
+forall a b. Maybe a -&gt; (a -&gt; Maybe b) -&gt; Maybe b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; b -&gt; Maybe a
+</span><a href="#local-6989586621679104053"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104063"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; (a -&gt; Maybe (PrefixTree a)) -&gt; Maybe (PrefixTree a)
+forall a b. Maybe a -&gt; (a -&gt; Maybe b) -&gt; Maybe b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679104067"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104067"><span class="hs-identifier hs-var">aNew</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Key -&gt; a -&gt; PrefixTree a
+forall a. Key -&gt; a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-var">Leaf</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104062"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104067"><span class="hs-identifier hs-var">aNew</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-218"></span><span>        </span><span class="annot"><span class="annottext">KeysDiff
+</span><a href="Toml.Type.Key.html#NoPrefix"><span class="hs-identifier hs-var">NoPrefix</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679104061"><span class="hs-identifier hs-var">l</span></a></span><span>
+</span><span id="line-219"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#FstIsPref"><span class="hs-identifier hs-type">FstIsPref</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679104061"><span class="hs-identifier hs-var">l</span></a></span><span>
+</span><span id="line-220"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#SndIsPref"><span class="hs-identifier hs-type">SndIsPref</span></a></span><span> </span><span id="local-6989586621679104068"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104068"><span class="hs-identifier hs-var">kSuf</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">HashMap Piece (PrefixTree a) -&gt; [(Piece, PrefixTree a)]
+forall k v. HashMap k v -&gt; [(k, v)]
+</span><span class="hs-identifier hs-var">HashMap.toList</span></span><span> </span><span class="annot"><span class="annottext">(HashMap Piece (PrefixTree a) -&gt; [(Piece, PrefixTree a)])
+-&gt; HashMap Piece (PrefixTree a) -&gt; [(Piece, PrefixTree a)]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(a -&gt; b -&gt; Maybe a)
+-&gt; HashMap Piece (PrefixTree a)
+-&gt; PrefixMap b
+-&gt; HashMap Piece (PrefixTree a)
+forall a b.
+(a -&gt; b -&gt; Maybe a) -&gt; PrefixMap a -&gt; PrefixMap b -&gt; PrefixMap a
+</span><a href="Toml.Type.PrefixTree.html#differenceWith"><span class="hs-identifier hs-var">differenceWith</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; b -&gt; Maybe a
+</span><a href="#local-6989586621679104053"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Key -&gt; a -&gt; HashMap Piece (PrefixTree a)
+forall a. Key -&gt; a -&gt; PrefixMap a
+</span><a href="Toml.Type.PrefixTree.html#single"><span class="hs-identifier hs-var">single</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104068"><span class="hs-identifier hs-var">kSuf</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104063"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">PrefixMap b
+</span><a href="#local-6989586621679104066"><span class="hs-identifier hs-var">pmb</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-221"></span><span>            </span><span class="hs-comment">-- zero elements</span><span>
+</span><span id="line-222"></span><span>            </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe (PrefixTree a)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-223"></span><span>            </span><span class="hs-comment">-- our single key</span><span>
+</span><span id="line-224"></span><span>            </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Piece
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679104069"><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679104069"><span class="hs-identifier hs-var">aNew</span></a></span></span><span class="hs-special">)</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(PrefixTree a -&gt; Maybe (PrefixTree a))
+-&gt; PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; PrefixTree a -&gt; PrefixTree a
+forall a. Key -&gt; PrefixTree a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#addPrefixT"><span class="hs-identifier hs-var">addPrefixT</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104062"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679104069"><span class="hs-identifier hs-var">aNew</span></a></span><span>
+</span><span id="line-225"></span><span>            </span><span class="hs-comment">-- shouldn't happen, but for some reasons</span><span>
+</span><span id="line-226"></span><span>            </span><span class="annot"><span class="annottext">(Piece, PrefixTree a)
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span class="annot"><span class="annottext">(Piece, PrefixTree a)
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span class="annot"><span class="annottext">[(Piece, PrefixTree a)]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe (PrefixTree a)
+forall a. Maybe a
+</span><span class="hs-identifier hs-var">Nothing</span></span><span>
+</span><span id="line-227"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#Diff"><span class="hs-identifier hs-type">Diff</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679104061"><span class="hs-identifier hs-var">l</span></a></span><span>
+</span><span id="line-228"></span><span>
+</span><span id="line-229"></span><span>    </span><span class="hs-special">(</span><span id="local-6989586621679104070"><span class="annot"><span class="annottext">br :: PrefixTree a
+</span><a href="#local-6989586621679104070"><span class="hs-identifier hs-var">br</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-type">Branch</span></a></span><span> </span><span id="local-6989586621679104071"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104071"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679104072"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679104072"><span class="hs-identifier hs-var">ma</span></a></span></span><span> </span><span id="local-6989586621679104073"><span class="annot"><span class="annottext">HashMap Piece (PrefixTree a)
+</span><a href="#local-6989586621679104073"><span class="hs-identifier hs-var">pma</span></a></span></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#Leaf"><span class="hs-identifier hs-type">Leaf</span></a></span><span> </span><span id="local-6989586621679104074"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104074"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span id="local-6989586621679104075"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679104075"><span class="hs-identifier hs-var">b</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Key -&gt; Key -&gt; KeysDiff
+</span><a href="Toml.Type.Key.html#keysDiff"><span class="hs-identifier hs-var">keysDiff</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104071"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104074"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-230"></span><span>        </span><span class="annot"><span class="annottext">KeysDiff
+</span><a href="Toml.Type.Key.html#Equal"><span class="hs-identifier hs-var">Equal</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. PrefixTree a -&gt; Maybe (PrefixTree a)
+</span><a href="Toml.Type.PrefixTree.html#compressTree"><span class="hs-identifier hs-var">compressTree</span></a></span><span> </span><span class="annot"><span class="annottext">(PrefixTree a -&gt; Maybe (PrefixTree a))
+-&gt; PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; Maybe a -&gt; HashMap Piece (PrefixTree a) -&gt; PrefixTree a
+forall a. Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-var">Branch</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104071"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679104072"><span class="hs-identifier hs-var">ma</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; (a -&gt; Maybe a) -&gt; Maybe a
+forall a b. Maybe a -&gt; (a -&gt; Maybe b) -&gt; Maybe b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679104076"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104076"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">a -&gt; b -&gt; Maybe a
+</span><a href="#local-6989586621679104053"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104076"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679104075"><span class="hs-identifier hs-var">b</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">HashMap Piece (PrefixTree a)
+</span><a href="#local-6989586621679104073"><span class="hs-identifier hs-var">pma</span></a></span><span>
+</span><span id="line-231"></span><span>        </span><span class="annot"><span class="annottext">KeysDiff
+</span><a href="Toml.Type.Key.html#NoPrefix"><span class="hs-identifier hs-var">NoPrefix</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679104070"><span class="hs-identifier hs-var">br</span></a></span><span>
+</span><span id="line-232"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#FstIsPref"><span class="hs-identifier hs-type">FstIsPref</span></a></span><span> </span><span id="local-6989586621679104077"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104077"><span class="hs-identifier hs-var">kSuf</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. PrefixTree a -&gt; Maybe (PrefixTree a)
+</span><a href="Toml.Type.PrefixTree.html#compressTree"><span class="hs-identifier hs-var">compressTree</span></a></span><span> </span><span class="annot"><span class="annottext">(PrefixTree a -&gt; Maybe (PrefixTree a))
+-&gt; PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; Maybe a -&gt; HashMap Piece (PrefixTree a) -&gt; PrefixTree a
+forall a. Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-var">Branch</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104071"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679104072"><span class="hs-identifier hs-var">ma</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(a -&gt; b -&gt; Maybe a)
+-&gt; HashMap Piece (PrefixTree a)
+-&gt; PrefixMap b
+-&gt; HashMap Piece (PrefixTree a)
+forall a b.
+(a -&gt; b -&gt; Maybe a) -&gt; PrefixMap a -&gt; PrefixMap b -&gt; PrefixMap a
+</span><a href="Toml.Type.PrefixTree.html#differenceWith"><span class="hs-identifier hs-var">differenceWith</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; b -&gt; Maybe a
+</span><a href="#local-6989586621679104053"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">HashMap Piece (PrefixTree a)
+</span><a href="#local-6989586621679104073"><span class="hs-identifier hs-var">pma</span></a></span><span> </span><span class="annot"><span class="annottext">(PrefixMap b -&gt; HashMap Piece (PrefixTree a))
+-&gt; PrefixMap b -&gt; HashMap Piece (PrefixTree a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; b -&gt; PrefixMap b
+forall a. Key -&gt; a -&gt; PrefixMap a
+</span><a href="Toml.Type.PrefixTree.html#single"><span class="hs-identifier hs-var">single</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104077"><span class="hs-identifier hs-var">kSuf</span></a></span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679104075"><span class="hs-identifier hs-var">b</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-233"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#SndIsPref"><span class="hs-identifier hs-type">SndIsPref</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679104070"><span class="hs-identifier hs-var">br</span></a></span><span>
+</span><span id="line-234"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#Diff"><span class="hs-identifier hs-type">Diff</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679104070"><span class="hs-identifier hs-var">br</span></a></span><span>
+</span><span id="line-235"></span><span>
+</span><span id="line-236"></span><span>    </span><span class="hs-special">(</span><span id="local-6989586621679104078"><span class="annot"><span class="annottext">b1 :: PrefixTree a
+</span><a href="#local-6989586621679104078"><span class="hs-identifier hs-var">b1</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-type">Branch</span></a></span><span> </span><span id="local-6989586621679104079"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104079"><span class="hs-identifier hs-var">p1</span></a></span></span><span> </span><span id="local-6989586621679104080"><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679104080"><span class="hs-identifier hs-var">ma</span></a></span></span><span> </span><span id="local-6989586621679104081"><span class="annot"><span class="annottext">HashMap Piece (PrefixTree a)
+</span><a href="#local-6989586621679104081"><span class="hs-identifier hs-var">pma</span></a></span></span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-type">Branch</span></a></span><span> </span><span id="local-6989586621679104082"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104082"><span class="hs-identifier hs-var">p2</span></a></span></span><span> </span><span id="local-6989586621679104083"><span class="annot"><span class="annottext">Maybe b
+</span><a href="#local-6989586621679104083"><span class="hs-identifier hs-var">mb</span></a></span></span><span> </span><span id="local-6989586621679104084"><span class="annot"><span class="annottext">PrefixMap b
+</span><a href="#local-6989586621679104084"><span class="hs-identifier hs-var">pmb</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Key -&gt; Key -&gt; KeysDiff
+</span><a href="Toml.Type.Key.html#keysDiff"><span class="hs-identifier hs-var">keysDiff</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104079"><span class="hs-identifier hs-var">p1</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104082"><span class="hs-identifier hs-var">p2</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-237"></span><span>        </span><span class="annot"><span class="annottext">KeysDiff
+</span><a href="Toml.Type.Key.html#Equal"><span class="hs-identifier hs-var">Equal</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. PrefixTree a -&gt; Maybe (PrefixTree a)
+</span><a href="Toml.Type.PrefixTree.html#compressTree"><span class="hs-identifier hs-var">compressTree</span></a></span><span> </span><span class="annot"><span class="annottext">(PrefixTree a -&gt; Maybe (PrefixTree a))
+-&gt; PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-238"></span><span>            </span><span class="annot"><span class="annottext">Key -&gt; Maybe a -&gt; HashMap Piece (PrefixTree a) -&gt; PrefixTree a
+forall a. Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-var">Branch</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104079"><span class="hs-identifier hs-var">p1</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679104080"><span class="hs-identifier hs-var">ma</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a -&gt; (a -&gt; Maybe a) -&gt; Maybe a
+forall a b. Maybe a -&gt; (a -&gt; Maybe b) -&gt; Maybe b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679104085"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104085"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Maybe b
+</span><a href="#local-6989586621679104083"><span class="hs-identifier hs-var">mb</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe b -&gt; (b -&gt; Maybe a) -&gt; Maybe a
+forall a b. Maybe a -&gt; (a -&gt; Maybe b) -&gt; Maybe b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679104086"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679104086"><span class="hs-identifier hs-var">b</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">a -&gt; b -&gt; Maybe a
+</span><a href="#local-6989586621679104053"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679104085"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679104086"><span class="hs-identifier hs-var">b</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(a -&gt; b -&gt; Maybe a)
+-&gt; HashMap Piece (PrefixTree a)
+-&gt; PrefixMap b
+-&gt; HashMap Piece (PrefixTree a)
+forall a b.
+(a -&gt; b -&gt; Maybe a) -&gt; PrefixMap a -&gt; PrefixMap b -&gt; PrefixMap a
+</span><a href="Toml.Type.PrefixTree.html#differenceWith"><span class="hs-identifier hs-var">differenceWith</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; b -&gt; Maybe a
+</span><a href="#local-6989586621679104053"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">HashMap Piece (PrefixTree a)
+</span><a href="#local-6989586621679104081"><span class="hs-identifier hs-var">pma</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixMap b
+</span><a href="#local-6989586621679104084"><span class="hs-identifier hs-var">pmb</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-239"></span><span>        </span><span class="annot"><span class="annottext">KeysDiff
+</span><a href="Toml.Type.Key.html#NoPrefix"><span class="hs-identifier hs-var">NoPrefix</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679104078"><span class="hs-identifier hs-var">b1</span></a></span><span>
+</span><span id="line-240"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#FstIsPref"><span class="hs-identifier hs-type">FstIsPref</span></a></span><span> </span><span id="local-6989586621679104087"><span class="annot"><span class="annottext">p2Suf :: Key
+</span><a href="#local-6989586621679104087"><span class="hs-identifier hs-var">p2Suf</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span id="local-6989586621679104088"><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679104088"><span class="hs-identifier hs-var">p2Head</span></a></span></span><span> </span><span class="annot"><a href="Toml.Type.Key.html#%3A%7C%7C"><span class="hs-operator hs-type">:||</span></a></span><span> </span><span class="annot"><span class="annottext">[Piece]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. PrefixTree a -&gt; Maybe (PrefixTree a)
+</span><a href="Toml.Type.PrefixTree.html#compressTree"><span class="hs-identifier hs-var">compressTree</span></a></span><span> </span><span class="annot"><span class="annottext">(PrefixTree a -&gt; Maybe (PrefixTree a))
+-&gt; PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-241"></span><span>            </span><span class="annot"><span class="annottext">Key -&gt; Maybe a -&gt; HashMap Piece (PrefixTree a) -&gt; PrefixTree a
+forall a. Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-var">Branch</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104079"><span class="hs-identifier hs-var">p1</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679104080"><span class="hs-identifier hs-var">ma</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(a -&gt; b -&gt; Maybe a)
+-&gt; HashMap Piece (PrefixTree a)
+-&gt; PrefixMap b
+-&gt; HashMap Piece (PrefixTree a)
+forall a b.
+(a -&gt; b -&gt; Maybe a) -&gt; PrefixMap a -&gt; PrefixMap b -&gt; PrefixMap a
+</span><a href="Toml.Type.PrefixTree.html#differenceWith"><span class="hs-identifier hs-var">differenceWith</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; b -&gt; Maybe a
+</span><a href="#local-6989586621679104053"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="annot"><span class="annottext">HashMap Piece (PrefixTree a)
+</span><a href="#local-6989586621679104081"><span class="hs-identifier hs-var">pma</span></a></span><span> </span><span class="annot"><span class="annottext">(PrefixMap b -&gt; HashMap Piece (PrefixTree a))
+-&gt; PrefixMap b -&gt; HashMap Piece (PrefixTree a)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Piece -&gt; PrefixTree b -&gt; PrefixMap b
+forall k v. Hashable k =&gt; k -&gt; v -&gt; HashMap k v
+</span><span class="hs-identifier hs-var">HashMap.singleton</span></span><span> </span><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679104088"><span class="hs-identifier hs-var">p2Head</span></a></span><span> </span><span class="annot"><span class="annottext">(PrefixTree b -&gt; PrefixMap b) -&gt; PrefixTree b -&gt; PrefixMap b
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; Maybe b -&gt; PrefixMap b -&gt; PrefixTree b
+forall a. Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-var">Branch</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104087"><span class="hs-identifier hs-var">p2Suf</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe b
+</span><a href="#local-6989586621679104083"><span class="hs-identifier hs-var">mb</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixMap b
+</span><a href="#local-6989586621679104084"><span class="hs-identifier hs-var">pmb</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-242"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#SndIsPref"><span class="hs-identifier hs-type">SndIsPref</span></a></span><span> </span><span id="local-6989586621679104089"><span class="annot"><span class="annottext">p1Suf :: Key
+</span><a href="#local-6989586621679104089"><span class="hs-identifier hs-var">p1Suf</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span id="local-6989586621679104090"><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679104090"><span class="hs-identifier hs-var">p1Head</span></a></span></span><span> </span><span class="annot"><a href="Toml.Type.Key.html#%3A%7C%7C"><span class="hs-operator hs-type">:||</span></a></span><span> </span><span class="annot"><span class="annottext">[Piece]
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Piece -&gt; PrefixMap b -&gt; Maybe (PrefixTree b)
+forall k v. (Eq k, Hashable k) =&gt; k -&gt; HashMap k v -&gt; Maybe v
+</span><span class="hs-identifier hs-var">HashMap.lookup</span></span><span> </span><span class="annot"><span class="annottext">Piece
+</span><a href="#local-6989586621679104090"><span class="hs-identifier hs-var">p1Head</span></a></span><span> </span><span class="annot"><span class="annottext">PrefixMap b
+</span><a href="#local-6989586621679104084"><span class="hs-identifier hs-var">pmb</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-243"></span><span>            </span><span class="annot"><span class="annottext">Maybe (PrefixTree b)
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679104078"><span class="hs-identifier hs-var">b1</span></a></span><span>
+</span><span id="line-244"></span><span>            </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679104091"><span class="annot"><span class="annottext">PrefixTree b
+</span><a href="#local-6989586621679104091"><span class="hs-identifier hs-var">ch</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Key -&gt; PrefixTree a -&gt; PrefixTree a
+forall a. Key -&gt; PrefixTree a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#addPrefixT"><span class="hs-identifier hs-var">addPrefixT</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104082"><span class="hs-identifier hs-var">p2</span></a></span><span> </span><span class="annot"><span class="annottext">(PrefixTree a -&gt; PrefixTree a)
+-&gt; Maybe (PrefixTree a) -&gt; Maybe (PrefixTree a)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">(a -&gt; b -&gt; Maybe a)
+-&gt; PrefixTree a -&gt; PrefixTree b -&gt; Maybe (PrefixTree a)
+forall a b.
+(a -&gt; b -&gt; Maybe a)
+-&gt; PrefixTree a -&gt; PrefixTree b -&gt; Maybe (PrefixTree a)
+</span><a href="Toml.Type.PrefixTree.html#differenceWithT"><span class="hs-identifier hs-var">differenceWithT</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; b -&gt; Maybe a
+</span><a href="#local-6989586621679104053"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Key -&gt; Maybe a -&gt; HashMap Piece (PrefixTree a) -&gt; PrefixTree a
+forall a. Key -&gt; Maybe a -&gt; PrefixMap a -&gt; PrefixTree a
+</span><a href="Toml.Type.PrefixTree.html#Branch"><span class="hs-identifier hs-var">Branch</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679104089"><span class="hs-identifier hs-var">p1Suf</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe a
+</span><a href="#local-6989586621679104080"><span class="hs-identifier hs-var">ma</span></a></span><span> </span><span class="annot"><span class="annottext">HashMap Piece (PrefixTree a)
+</span><a href="#local-6989586621679104081"><span class="hs-identifier hs-var">pma</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">PrefixTree b
+</span><a href="#local-6989586621679104091"><span class="hs-identifier hs-var">ch</span></a></span><span>
+</span><span id="line-245"></span><span>        </span><span class="annot"><a href="Toml.Type.Key.html#Diff"><span class="hs-identifier hs-type">Diff</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">PrefixTree a -&gt; Maybe (PrefixTree a)
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">PrefixTree a
+</span><a href="#local-6989586621679104078"><span class="hs-identifier hs-var">b1</span></a></span><span>
+</span><span id="line-246"></span></pre></body></html>

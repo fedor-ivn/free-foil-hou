@@ -1,0 +1,379 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="annot"><span class="hs-comment">{- |
+Module                  : Toml.Codec.Code
+Copyright               : (c) 2018-2022 Kowainik
+SPDX-License-Identifier : MPL-2.0
+Maintainer              : Kowainik &lt;xrom.xkov@gmail.com&gt;
+Stability               : Stable
+Portability             : Portable
+
+Conversion from textual representation of @TOML@ values to the Haskell data
+types by the given 'TomlCodec'.
+
+This module includes coding functions like 'decode' and 'encode'.
+-}</span></span><span>
+</span><span id="line-14"></span><span>
+</span><span id="line-15"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Toml.Codec.Code</span><span>
+</span><span id="line-16"></span><span>       </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Decode</span></span><span>
+</span><span id="line-17"></span><span>         </span><span class="annot"><a href="Toml.Codec.Code.html#decode"><span class="hs-identifier">decode</span></a></span><span>
+</span><span id="line-18"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Code.html#decodeExact"><span class="hs-identifier">decodeExact</span></a></span><span>
+</span><span id="line-19"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Code.html#decodeValidation"><span class="hs-identifier">decodeValidation</span></a></span><span>
+</span><span id="line-20"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Code.html#decodeFileEither"><span class="hs-identifier">decodeFileEither</span></a></span><span>
+</span><span id="line-21"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Code.html#decodeFile"><span class="hs-identifier">decodeFile</span></a></span><span>
+</span><span id="line-22"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Code.html#decodeFileExact"><span class="hs-identifier">decodeFileExact</span></a></span><span>
+</span><span id="line-23"></span><span>         </span><span class="annot"><span class="hs-comment">-- * Encode</span></span><span>
+</span><span id="line-24"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Code.html#encode"><span class="hs-identifier">encode</span></a></span><span>
+</span><span id="line-25"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Code.html#encodeToFile"><span class="hs-identifier">encodeToFile</span></a></span><span>
+</span><span id="line-26"></span><span>         </span><span class="annot"><span class="hs-comment">-- * Run</span></span><span>
+</span><span id="line-27"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Code.html#runTomlCodec"><span class="hs-identifier">runTomlCodec</span></a></span><span>
+</span><span id="line-28"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Code.html#execTomlCodec"><span class="hs-identifier">execTomlCodec</span></a></span><span>
+</span><span id="line-29"></span><span>       </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Exception</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">throwIO</span></span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.IO.Class</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">MonadIO</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-33"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Text</span></span><span class="hs-special">)</span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Validation</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Validation</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">validationToEither</span></span><span class="hs-special">)</span><span>
+</span><span id="line-35"></span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Error.html"><span class="hs-identifier">Toml.Codec.Error</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Error.html#LoadTomlException"><span class="hs-identifier">LoadTomlException</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Error.html#TomlDecodeError"><span class="hs-identifier">TomlDecodeError</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Error.html#prettyTomlDecodeErrors"><span class="hs-identifier">prettyTomlDecodeErrors</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-37"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html"><span class="hs-identifier">Toml.Codec.Types</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Types.html#Codec"><span class="hs-identifier">Codec</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier">TomlCodec</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlState"><span class="hs-identifier">TomlState</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Parser.html"><span class="hs-identifier">Toml.Parser</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Parser.html#parse"><span class="hs-identifier">parse</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-39"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.html"><span class="hs-identifier">Toml.Type</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier">TOML</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#tomlDiff"><span class="hs-identifier">tomlDiff</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-40"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.Printer.html"><span class="hs-identifier">Toml.Type.Printer</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Printer.html#pretty"><span class="hs-identifier">pretty</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-41"></span><span>
+</span><span id="line-42"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Text.IO</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">TIO</span></span><span>
+</span><span id="line-43"></span><span>
+</span><span id="line-44"></span><span>
+</span><span id="line-45"></span><span class="annot"><span class="hs-comment">{- | Convert textual representation of @TOML@ into user data type by the
+provided codec.
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-50"></span><span id="local-6989586621679108073"><span class="annot"><a href="Toml.Codec.Code.html#decodeValidation"><span class="hs-identifier hs-type">decodeValidation</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679108073"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Validation</span></span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Toml.Codec.Error.html#TomlDecodeError"><span class="hs-identifier hs-type">TomlDecodeError</span></a></span><span class="hs-special">]</span><span> </span><span class="annot"><a href="#local-6989586621679108073"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-51"></span><span id="decodeValidation"><span class="annot"><span class="annottext">decodeValidation :: forall a. TomlCodec a -&gt; Text -&gt; Validation [TomlDecodeError] a
+</span><a href="Toml.Codec.Code.html#decodeValidation"><span class="hs-identifier hs-var hs-var">decodeValidation</span></a></span></span><span> </span><span id="local-6989586621679108167"><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108167"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span id="local-6989586621679108168"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679108168"><span class="hs-identifier hs-var">text</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Text -&gt; Either TomlParseError TOML
+</span><a href="Toml.Parser.html#parse"><span class="hs-identifier hs-var">parse</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679108168"><span class="hs-identifier hs-var">text</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-52"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Left</span></span><span> </span><span id="local-6989586621679108169"><span class="annot"><span class="annottext">TomlParseError
+</span><a href="#local-6989586621679108169"><span class="hs-identifier hs-var">err</span></a></span></span><span>   </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[TomlDecodeError] -&gt; Validation [TomlDecodeError] a
+forall e a. e -&gt; Validation e a
+</span><span class="hs-identifier hs-var">Failure</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">TomlParseError -&gt; TomlDecodeError
+</span><a href="Toml.Codec.Error.html#ParseError"><span class="hs-identifier hs-var">ParseError</span></a></span><span> </span><span class="annot"><span class="annottext">TomlParseError
+</span><a href="#local-6989586621679108169"><span class="hs-identifier hs-var">err</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-53"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Right</span></span><span> </span><span id="local-6989586621679108172"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679108172"><span class="hs-identifier hs-var">toml</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">TomlCodec a -&gt; TOML -&gt; Validation [TomlDecodeError] a
+forall a. TomlCodec a -&gt; TOML -&gt; Validation [TomlDecodeError] a
+</span><a href="Toml.Codec.Code.html#runTomlCodec"><span class="hs-identifier hs-var">runTomlCodec</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108167"><span class="hs-identifier hs-var">codec</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679108172"><span class="hs-identifier hs-var">toml</span></a></span><span>
+</span><span id="line-54"></span><span>
+</span><span id="line-55"></span><span class="annot"><span class="hs-comment">{- | Convert textual representation of @TOML@ into user data type by the
+provided codec.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-60"></span><span id="local-6989586621679108084"><span class="annot"><a href="Toml.Codec.Code.html#decode"><span class="hs-identifier hs-type">decode</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679108084"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Toml.Codec.Error.html#TomlDecodeError"><span class="hs-identifier hs-type">TomlDecodeError</span></a></span><span class="hs-special">]</span><span> </span><span class="annot"><a href="#local-6989586621679108084"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-61"></span><span id="decode"><span class="annot"><span class="annottext">decode :: forall a. TomlCodec a -&gt; Text -&gt; Either [TomlDecodeError] a
+</span><a href="Toml.Codec.Code.html#decode"><span class="hs-identifier hs-var hs-var">decode</span></a></span></span><span> </span><span id="local-6989586621679108173"><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108173"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Validation [TomlDecodeError] a -&gt; Either [TomlDecodeError] a
+forall e a. Validation e a -&gt; Either e a
+</span><span class="hs-identifier hs-var">validationToEither</span></span><span> </span><span class="annot"><span class="annottext">(Validation [TomlDecodeError] a -&gt; Either [TomlDecodeError] a)
+-&gt; (Text -&gt; Validation [TomlDecodeError] a)
+-&gt; Text
+-&gt; Either [TomlDecodeError] a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec a -&gt; Text -&gt; Validation [TomlDecodeError] a
+forall a. TomlCodec a -&gt; Text -&gt; Validation [TomlDecodeError] a
+</span><a href="Toml.Codec.Code.html#decodeValidation"><span class="hs-identifier hs-var">decodeValidation</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108173"><span class="hs-identifier hs-var">codec</span></a></span><span>
+</span><span id="line-62"></span><span>
+</span><span id="line-63"></span><span class="annot"><span class="hs-comment">{- | Convert textual representation of @TOML@ into user data type by the
+provided codec.
+
+Unlike 'decode', this function returns 'NotExactDecode' error in case if given
+@TOML@ has redundant fields and other elements.
+
+@since 1.3.2.0
+-}</span></span><span>
+</span><span id="line-71"></span><span id="local-6989586621679108176"><span class="annot"><a href="Toml.Codec.Code.html#decodeExact"><span class="hs-identifier hs-type">decodeExact</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679108176"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Toml.Codec.Error.html#TomlDecodeError"><span class="hs-identifier hs-type">TomlDecodeError</span></a></span><span class="hs-special">]</span><span> </span><span class="annot"><a href="#local-6989586621679108176"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-72"></span><span id="decodeExact"><span class="annot"><span class="annottext">decodeExact :: forall a. TomlCodec a -&gt; Text -&gt; Either [TomlDecodeError] a
+</span><a href="Toml.Codec.Code.html#decodeExact"><span class="hs-identifier hs-var hs-var">decodeExact</span></a></span></span><span> </span><span id="local-6989586621679108181"><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108181"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span id="local-6989586621679108182"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679108182"><span class="hs-identifier hs-var">text</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Text -&gt; Either TomlParseError TOML
+</span><a href="Toml.Parser.html#parse"><span class="hs-identifier hs-var">parse</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679108182"><span class="hs-identifier hs-var">text</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-73"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Left</span></span><span> </span><span id="local-6989586621679108183"><span class="annot"><span class="annottext">TomlParseError
+</span><a href="#local-6989586621679108183"><span class="hs-identifier hs-var">err</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[TomlDecodeError] -&gt; Either [TomlDecodeError] a
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">TomlParseError -&gt; TomlDecodeError
+</span><a href="Toml.Codec.Error.html#ParseError"><span class="hs-identifier hs-var">ParseError</span></a></span><span> </span><span class="annot"><span class="annottext">TomlParseError
+</span><a href="#local-6989586621679108183"><span class="hs-identifier hs-var">err</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-74"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Right</span></span><span> </span><span id="local-6989586621679108184"><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679108184"><span class="hs-identifier hs-var">toml</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">TomlCodec a -&gt; TOML -&gt; Validation [TomlDecodeError] a
+forall a. TomlCodec a -&gt; TOML -&gt; Validation [TomlDecodeError] a
+</span><a href="Toml.Codec.Code.html#runTomlCodec"><span class="hs-identifier hs-var">runTomlCodec</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108181"><span class="hs-identifier hs-var">codec</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679108184"><span class="hs-identifier hs-var">toml</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-75"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Failure</span></span><span> </span><span id="local-6989586621679108185"><span class="annot"><span class="annottext">[TomlDecodeError]
+</span><a href="#local-6989586621679108185"><span class="hs-identifier hs-var">errs</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[TomlDecodeError] -&gt; Either [TomlDecodeError] a
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="annot"><span class="annottext">[TomlDecodeError]
+</span><a href="#local-6989586621679108185"><span class="hs-identifier hs-var">errs</span></a></span><span>
+</span><span id="line-76"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Success</span></span><span> </span><span id="local-6989586621679108187"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679108187"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-77"></span><span>            </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679108188"><span class="annot"><span class="annottext">tomlExpected :: TOML
+</span><a href="#local-6989586621679108188"><span class="hs-identifier hs-var hs-var">tomlExpected</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlCodec a -&gt; a -&gt; TOML
+forall a. TomlCodec a -&gt; a -&gt; TOML
+</span><a href="Toml.Codec.Code.html#execTomlCodec"><span class="hs-identifier hs-var">execTomlCodec</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108181"><span class="hs-identifier hs-var">codec</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679108187"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-78"></span><span>                </span><span id="local-6989586621679108189"><span class="annot"><span class="annottext">aDiff :: TOML
+</span><a href="#local-6989586621679108189"><span class="hs-identifier hs-var hs-var">aDiff</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TOML -&gt; TOML -&gt; TOML
+</span><a href="Toml.Type.TOML.html#tomlDiff"><span class="hs-identifier hs-var">tomlDiff</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679108184"><span class="hs-identifier hs-var">toml</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679108188"><span class="hs-identifier hs-var">tomlExpected</span></a></span><span> </span><span class="hs-keyword">in</span><span>
+</span><span id="line-79"></span><span>            </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679108189"><span class="hs-identifier hs-var">aDiff</span></a></span><span> </span><span class="annot"><span class="annottext">TOML -&gt; TOML -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">TOML
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-80"></span><span>            </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">a -&gt; Either [TomlDecodeError] a
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679108187"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-81"></span><span>            </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">[TomlDecodeError] -&gt; Either [TomlDecodeError] a
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">TOML -&gt; TomlDecodeError
+</span><a href="Toml.Codec.Error.html#NotExactDecode"><span class="hs-identifier hs-var">NotExactDecode</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+</span><a href="#local-6989586621679108189"><span class="hs-identifier hs-var">aDiff</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-82"></span><span>
+</span><span id="line-83"></span><span class="annot"><span class="hs-comment">{- | Similar to 'decodeValidation', but takes a path to a file with textual @TOML@
+values from which it decodes them with the provided codec.
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-88"></span><span class="annot"><a href="Toml.Codec.Code.html#decodeFileValidation"><span class="hs-identifier hs-type">decodeFileValidation</span></a></span><span>
+</span><span id="line-89"></span><span>    </span><span class="hs-glyph">::</span><span> </span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679108099"><span class="annot"><a href="#local-6989586621679108099"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span id="local-6989586621679108097"><span class="annot"><a href="#local-6989586621679108097"><span class="hs-identifier hs-type">m</span></a></span></span><span> </span><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">MonadIO</span></span><span> </span><span class="annot"><a href="#local-6989586621679108097"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-90"></span><span>    </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679108099"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-91"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span>
+</span><span id="line-92"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679108097"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Validation</span></span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Toml.Codec.Error.html#TomlDecodeError"><span class="hs-identifier hs-type">TomlDecodeError</span></a></span><span class="hs-special">]</span><span> </span><span class="annot"><a href="#local-6989586621679108099"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-93"></span><span id="decodeFileValidation"><span class="annot"><span class="annottext">decodeFileValidation :: forall a (m :: * -&gt; *).
+MonadIO m =&gt;
+TomlCodec a -&gt; FilePath -&gt; m (Validation [TomlDecodeError] a)
+</span><a href="Toml.Codec.Code.html#decodeFileValidation"><span class="hs-identifier hs-var hs-var">decodeFileValidation</span></a></span></span><span> </span><span id="local-6989586621679108200"><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108200"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Text -&gt; Validation [TomlDecodeError] a)
+-&gt; m Text -&gt; m (Validation [TomlDecodeError] a)
+forall a b. (a -&gt; b) -&gt; m a -&gt; m b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TomlCodec a -&gt; Text -&gt; Validation [TomlDecodeError] a
+forall a. TomlCodec a -&gt; Text -&gt; Validation [TomlDecodeError] a
+</span><a href="Toml.Codec.Code.html#decodeValidation"><span class="hs-identifier hs-var">decodeValidation</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108200"><span class="hs-identifier hs-var">codec</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(m Text -&gt; m (Validation [TomlDecodeError] a))
+-&gt; (FilePath -&gt; m Text)
+-&gt; FilePath
+-&gt; m (Validation [TomlDecodeError] a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">IO Text -&gt; m Text
+forall a. IO a -&gt; m a
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">liftIO</span></span><span> </span><span class="annot"><span class="annottext">(IO Text -&gt; m Text) -&gt; (FilePath -&gt; IO Text) -&gt; FilePath -&gt; m Text
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">FilePath -&gt; IO Text
+</span><span class="hs-identifier hs-var">TIO.readFile</span></span><span>
+</span><span id="line-94"></span><span>
+</span><span id="line-95"></span><span class="annot"><span class="hs-comment">{- | Similar to 'decode', but takes a path to a file with textual @TOML@
+values from which it decodes them with the provided codec.
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-100"></span><span class="annot"><a href="Toml.Codec.Code.html#decodeFileEither"><span class="hs-identifier hs-type">decodeFileEither</span></a></span><span>
+</span><span id="line-101"></span><span>    </span><span class="hs-glyph">::</span><span> </span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679108111"><span class="annot"><a href="#local-6989586621679108111"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span id="local-6989586621679108110"><span class="annot"><a href="#local-6989586621679108110"><span class="hs-identifier hs-type">m</span></a></span></span><span> </span><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">MonadIO</span></span><span> </span><span class="annot"><a href="#local-6989586621679108110"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-102"></span><span>    </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679108111"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-103"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span>
+</span><span id="line-104"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679108110"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Toml.Codec.Error.html#TomlDecodeError"><span class="hs-identifier hs-type">TomlDecodeError</span></a></span><span class="hs-special">]</span><span> </span><span class="annot"><a href="#local-6989586621679108111"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-105"></span><span id="decodeFileEither"><span class="annot"><span class="annottext">decodeFileEither :: forall a (m :: * -&gt; *).
+MonadIO m =&gt;
+TomlCodec a -&gt; FilePath -&gt; m (Either [TomlDecodeError] a)
+</span><a href="Toml.Codec.Code.html#decodeFileEither"><span class="hs-identifier hs-var hs-var">decodeFileEither</span></a></span></span><span> </span><span id="local-6989586621679108209"><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108209"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Validation [TomlDecodeError] a -&gt; Either [TomlDecodeError] a)
+-&gt; m (Validation [TomlDecodeError] a)
+-&gt; m (Either [TomlDecodeError] a)
+forall a b. (a -&gt; b) -&gt; m a -&gt; m b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">Validation [TomlDecodeError] a -&gt; Either [TomlDecodeError] a
+forall e a. Validation e a -&gt; Either e a
+</span><span class="hs-identifier hs-var">validationToEither</span></span><span> </span><span class="annot"><span class="annottext">(m (Validation [TomlDecodeError] a)
+ -&gt; m (Either [TomlDecodeError] a))
+-&gt; (FilePath -&gt; m (Validation [TomlDecodeError] a))
+-&gt; FilePath
+-&gt; m (Either [TomlDecodeError] a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec a -&gt; FilePath -&gt; m (Validation [TomlDecodeError] a)
+forall a (m :: * -&gt; *).
+MonadIO m =&gt;
+TomlCodec a -&gt; FilePath -&gt; m (Validation [TomlDecodeError] a)
+</span><a href="Toml.Codec.Code.html#decodeFileValidation"><span class="hs-identifier hs-var">decodeFileValidation</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108209"><span class="hs-identifier hs-var">codec</span></a></span><span>
+</span><span id="line-106"></span><span>
+</span><span id="line-107"></span><span class="annot"><span class="hs-comment">{- | Similar to 'decodeExact', but takes a path to a file with textual @TOML@
+values from which it decodes them with the provided codec.
+
+@since 1.3.2.0
+-}</span></span><span>
+</span><span id="line-112"></span><span class="annot"><a href="Toml.Codec.Code.html#decodeFileExact"><span class="hs-identifier hs-type">decodeFileExact</span></a></span><span>
+</span><span id="line-113"></span><span>    </span><span class="hs-glyph">::</span><span> </span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679108210"><span class="annot"><a href="#local-6989586621679108210"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span id="local-6989586621679108211"><span class="annot"><a href="#local-6989586621679108211"><span class="hs-identifier hs-type">m</span></a></span></span><span> </span><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">MonadIO</span></span><span> </span><span class="annot"><a href="#local-6989586621679108211"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-114"></span><span>    </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679108210"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-115"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span>
+</span><span id="line-116"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679108211"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Toml.Codec.Error.html#TomlDecodeError"><span class="hs-identifier hs-type">TomlDecodeError</span></a></span><span class="hs-special">]</span><span> </span><span class="annot"><a href="#local-6989586621679108210"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-117"></span><span id="decodeFileExact"><span class="annot"><span class="annottext">decodeFileExact :: forall a (m :: * -&gt; *).
+MonadIO m =&gt;
+TomlCodec a -&gt; FilePath -&gt; m (Either [TomlDecodeError] a)
+</span><a href="Toml.Codec.Code.html#decodeFileExact"><span class="hs-identifier hs-var hs-var">decodeFileExact</span></a></span></span><span> </span><span id="local-6989586621679108218"><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108218"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Text -&gt; Either [TomlDecodeError] a)
+-&gt; m Text -&gt; m (Either [TomlDecodeError] a)
+forall a b. (a -&gt; b) -&gt; m a -&gt; m b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TomlCodec a -&gt; Text -&gt; Either [TomlDecodeError] a
+forall a. TomlCodec a -&gt; Text -&gt; Either [TomlDecodeError] a
+</span><a href="Toml.Codec.Code.html#decodeExact"><span class="hs-identifier hs-var">decodeExact</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108218"><span class="hs-identifier hs-var">codec</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(m Text -&gt; m (Either [TomlDecodeError] a))
+-&gt; (FilePath -&gt; m Text)
+-&gt; FilePath
+-&gt; m (Either [TomlDecodeError] a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">IO Text -&gt; m Text
+forall a. IO a -&gt; m a
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">liftIO</span></span><span> </span><span class="annot"><span class="annottext">(IO Text -&gt; m Text) -&gt; (FilePath -&gt; IO Text) -&gt; FilePath -&gt; m Text
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">FilePath -&gt; IO Text
+</span><span class="hs-identifier hs-var">TIO.readFile</span></span><span>
+</span><span id="line-118"></span><span>
+</span><span id="line-119"></span><span class="annot"><span class="hs-comment">{- | Similar to 'decodeFileEither', throws 'LoadTomlException' in case of parse
+errors ('TomlDecodeError').
+
+@since 0.3.1
+-}</span></span><span>
+</span><span id="line-124"></span><span class="annot"><a href="Toml.Codec.Code.html#decodeFile"><span class="hs-identifier hs-type">decodeFile</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679108117"><span class="annot"><a href="#local-6989586621679108117"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span id="local-6989586621679108116"><span class="annot"><a href="#local-6989586621679108116"><span class="hs-identifier hs-type">m</span></a></span></span><span> </span><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">MonadIO</span></span><span> </span><span class="annot"><a href="#local-6989586621679108116"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679108117"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679108116"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679108117"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-125"></span><span id="decodeFile"><span class="annot"><span class="annottext">decodeFile :: forall a (m :: * -&gt; *). MonadIO m =&gt; TomlCodec a -&gt; FilePath -&gt; m a
+</span><a href="Toml.Codec.Code.html#decodeFile"><span class="hs-identifier hs-var hs-var">decodeFile</span></a></span></span><span> </span><span id="local-6989586621679108229"><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108229"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span id="local-6989586621679108230"><span class="annot"><span class="annottext">FilePath
+</span><a href="#local-6989586621679108230"><span class="hs-identifier hs-var">filePath</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlCodec a -&gt; FilePath -&gt; m (Either [TomlDecodeError] a)
+forall a (m :: * -&gt; *).
+MonadIO m =&gt;
+TomlCodec a -&gt; FilePath -&gt; m (Either [TomlDecodeError] a)
+</span><a href="Toml.Codec.Code.html#decodeFileEither"><span class="hs-identifier hs-var">decodeFileEither</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108229"><span class="hs-identifier hs-var">codec</span></a></span><span> </span><span class="annot"><span class="annottext">FilePath
+</span><a href="#local-6989586621679108230"><span class="hs-identifier hs-var">filePath</span></a></span><span> </span><span class="annot"><span class="annottext">m (Either [TomlDecodeError] a)
+-&gt; (Either [TomlDecodeError] a -&gt; m a) -&gt; m a
+forall a b. m a -&gt; (a -&gt; m b) -&gt; m b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Either [TomlDecodeError] a -&gt; m a
+</span><a href="#local-6989586621679108231"><span class="hs-identifier hs-var">errorWhenLeft</span></a></span><span>
+</span><span id="line-126"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-127"></span><span>    </span><span class="annot"><a href="#local-6989586621679108231"><span class="hs-identifier hs-type">errorWhenLeft</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Toml.Codec.Error.html#TomlDecodeError"><span class="hs-identifier hs-type">TomlDecodeError</span></a></span><span class="hs-special">]</span><span> </span><span class="annot"><a href="#local-6989586621679108117"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679108116"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679108117"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-128"></span><span>    </span><span id="local-6989586621679108231"><span class="annot"><span class="annottext">errorWhenLeft :: Either [TomlDecodeError] a -&gt; m a
+</span><a href="#local-6989586621679108231"><span class="hs-identifier hs-var hs-var">errorWhenLeft</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Left</span></span><span> </span><span id="local-6989586621679108232"><span class="annot"><span class="annottext">[TomlDecodeError]
+</span><a href="#local-6989586621679108232"><span class="hs-identifier hs-var">errs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-129"></span><span>        </span><span class="annot"><span class="annottext">IO a -&gt; m a
+forall a. IO a -&gt; m a
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">liftIO</span></span><span>
+</span><span id="line-130"></span><span>        </span><span class="annot"><span class="annottext">(IO a -&gt; m a) -&gt; IO a -&gt; m a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">LoadTomlException -&gt; IO a
+forall e a. Exception e =&gt; e -&gt; IO a
+</span><span class="hs-identifier hs-var">throwIO</span></span><span>
+</span><span id="line-131"></span><span>        </span><span class="annot"><span class="annottext">(LoadTomlException -&gt; IO a) -&gt; LoadTomlException -&gt; IO a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">FilePath -&gt; Text -&gt; LoadTomlException
+</span><a href="Toml.Codec.Error.html#LoadTomlException"><span class="hs-identifier hs-var">LoadTomlException</span></a></span><span> </span><span class="annot"><span class="annottext">FilePath
+</span><a href="#local-6989586621679108230"><span class="hs-identifier hs-var">filePath</span></a></span><span>
+</span><span id="line-132"></span><span>        </span><span class="annot"><span class="annottext">(Text -&gt; LoadTomlException) -&gt; Text -&gt; LoadTomlException
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[TomlDecodeError] -&gt; Text
+</span><a href="Toml.Codec.Error.html#prettyTomlDecodeErrors"><span class="hs-identifier hs-var">prettyTomlDecodeErrors</span></a></span><span> </span><span class="annot"><span class="annottext">[TomlDecodeError]
+</span><a href="#local-6989586621679108232"><span class="hs-identifier hs-var">errs</span></a></span><span>
+</span><span id="line-133"></span><span>    </span><span class="annot"><a href="#local-6989586621679108231"><span class="hs-identifier hs-var">errorWhenLeft</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Right</span></span><span> </span><span id="local-6989586621679108233"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679108233"><span class="hs-identifier hs-var">pc</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a -&gt; m a
+forall a. a -&gt; m a
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679108233"><span class="hs-identifier hs-var">pc</span></a></span><span>
+</span><span id="line-134"></span><span>
+</span><span id="line-135"></span><span class="annot"><span class="hs-comment">{- | Convert data type to the textual representation of @TOML@ values.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-139"></span><span id="local-6989586621679108131"><span class="annot"><a href="Toml.Codec.Code.html#encode"><span class="hs-identifier hs-type">encode</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679108131"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679108131"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span></span><span>
+</span><span id="line-140"></span><span id="encode"><span class="annot"><span class="annottext">encode :: forall a. TomlCodec a -&gt; a -&gt; Text
+</span><a href="Toml.Codec.Code.html#encode"><span class="hs-identifier hs-var hs-var">encode</span></a></span></span><span> </span><span id="local-6989586621679108234"><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108234"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span id="local-6989586621679108235"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679108235"><span class="hs-identifier hs-var">obj</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TOML -&gt; Text
+</span><a href="Toml.Type.Printer.html#pretty"><span class="hs-identifier hs-var">pretty</span></a></span><span> </span><span class="annot"><span class="annottext">(TOML -&gt; Text) -&gt; TOML -&gt; Text
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec a -&gt; a -&gt; TOML
+forall a. TomlCodec a -&gt; a -&gt; TOML
+</span><a href="Toml.Codec.Code.html#execTomlCodec"><span class="hs-identifier hs-var">execTomlCodec</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108234"><span class="hs-identifier hs-var">codec</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679108235"><span class="hs-identifier hs-var">obj</span></a></span><span>
+</span><span id="line-141"></span><span>
+</span><span id="line-142"></span><span class="annot"><span class="hs-comment">{- | Convert data type to the textual representation of @TOML@ values.
+and write it info the given file.
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-147"></span><span class="annot"><a href="Toml.Codec.Code.html#encodeToFile"><span class="hs-identifier hs-type">encodeToFile</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679108134"><span class="annot"><a href="#local-6989586621679108134"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span id="local-6989586621679108133"><span class="annot"><a href="#local-6989586621679108133"><span class="hs-identifier hs-type">m</span></a></span></span><span> </span><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">MonadIO</span></span><span> </span><span class="annot"><a href="#local-6989586621679108133"><span class="hs-identifier hs-type">m</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679108134"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679108134"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679108133"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span>
+</span><span id="line-148"></span><span id="encodeToFile"><span class="annot"><span class="annottext">encodeToFile :: forall a (m :: * -&gt; *).
+MonadIO m =&gt;
+TomlCodec a -&gt; FilePath -&gt; a -&gt; m Text
+</span><a href="Toml.Codec.Code.html#encodeToFile"><span class="hs-identifier hs-var hs-var">encodeToFile</span></a></span></span><span> </span><span id="local-6989586621679108242"><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108242"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span id="local-6989586621679108243"><span class="annot"><span class="annottext">FilePath
+</span><a href="#local-6989586621679108243"><span class="hs-identifier hs-var">filePath</span></a></span></span><span> </span><span id="local-6989586621679108244"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679108244"><span class="hs-identifier hs-var">obj</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679108245"><span class="hs-identifier hs-var">content</span></a></span><span> </span><span class="annot"><span class="annottext">Text -&gt; m () -&gt; m Text
+forall a b. a -&gt; m b -&gt; m a
+forall (f :: * -&gt; *) a b. Functor f =&gt; a -&gt; f b -&gt; f a
+</span><span class="hs-operator hs-var">&lt;$</span></span><span> </span><span class="annot"><span class="annottext">IO () -&gt; m ()
+forall a. IO a -&gt; m a
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">liftIO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">FilePath -&gt; Text -&gt; IO ()
+</span><span class="hs-identifier hs-var">TIO.writeFile</span></span><span> </span><span class="annot"><span class="annottext">FilePath
+</span><a href="#local-6989586621679108243"><span class="hs-identifier hs-var">filePath</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679108245"><span class="hs-identifier hs-var">content</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-149"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-150"></span><span>    </span><span class="annot"><a href="#local-6989586621679108245"><span class="hs-identifier hs-type">content</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span>
+</span><span id="line-151"></span><span>    </span><span id="local-6989586621679108245"><span class="annot"><span class="annottext">content :: Text
+</span><a href="#local-6989586621679108245"><span class="hs-identifier hs-var hs-var">content</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlCodec a -&gt; a -&gt; Text
+forall a. TomlCodec a -&gt; a -&gt; Text
+</span><a href="Toml.Codec.Code.html#encode"><span class="hs-identifier hs-var">encode</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108242"><span class="hs-identifier hs-var">codec</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679108244"><span class="hs-identifier hs-var">obj</span></a></span><span>
+</span><span id="line-152"></span><span>
+</span><span id="line-153"></span><span class="annot"><span class="hs-comment">-- | Convert toml into user data type.</span></span><span>
+</span><span id="line-154"></span><span id="local-6989586621679108083"><span class="annot"><a href="Toml.Codec.Code.html#runTomlCodec"><span class="hs-identifier hs-type">runTomlCodec</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679108083"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Validation</span></span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Toml.Codec.Error.html#TomlDecodeError"><span class="hs-identifier hs-type">TomlDecodeError</span></a></span><span class="hs-special">]</span><span> </span><span class="annot"><a href="#local-6989586621679108083"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-155"></span><span id="runTomlCodec"><span class="annot"><span class="annottext">runTomlCodec :: forall a. TomlCodec a -&gt; TOML -&gt; Validation [TomlDecodeError] a
+</span><a href="Toml.Codec.Code.html#runTomlCodec"><span class="hs-identifier hs-var hs-var">runTomlCodec</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Codec a a -&gt; TomlEnv a
+forall i o. Codec i o -&gt; TomlEnv o
+</span><a href="Toml.Codec.Types.html#codecRead"><span class="hs-identifier hs-var">codecRead</span></a></span><span>
+</span><span id="line-156"></span><span>
+</span><span id="line-157"></span><span class="annot"><span class="hs-comment">-- | Runs 'codecWrite' of 'TomlCodec' and returns intermediate TOML AST.</span></span><span>
+</span><span id="line-158"></span><span id="local-6989586621679108094"><span class="annot"><a href="Toml.Codec.Code.html#execTomlCodec"><span class="hs-identifier hs-type">execTomlCodec</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679108094"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679108094"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span></span><span>
+</span><span id="line-159"></span><span id="execTomlCodec"><span class="annot"><span class="annottext">execTomlCodec :: forall a. TomlCodec a -&gt; a -&gt; TOML
+</span><a href="Toml.Codec.Code.html#execTomlCodec"><span class="hs-identifier hs-var hs-var">execTomlCodec</span></a></span></span><span> </span><span id="local-6989586621679108251"><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108251"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span id="local-6989586621679108252"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679108252"><span class="hs-identifier hs-var">obj</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Maybe a, TOML) -&gt; TOML
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span> </span><span class="annot"><span class="annottext">((Maybe a, TOML) -&gt; TOML) -&gt; (Maybe a, TOML) -&gt; TOML
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">TomlState a -&gt; TOML -&gt; (Maybe a, TOML)
+forall a. TomlState a -&gt; TOML -&gt; (Maybe a, TOML)
+</span><a href="Toml.Codec.Types.html#unTomlState"><span class="hs-identifier hs-var">unTomlState</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">TomlCodec a -&gt; a -&gt; TomlState a
+forall i o. Codec i o -&gt; i -&gt; TomlState o
+</span><a href="Toml.Codec.Types.html#codecWrite"><span class="hs-identifier hs-var">codecWrite</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679108251"><span class="hs-identifier hs-var">codec</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679108252"><span class="hs-identifier hs-var">obj</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">TOML
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-160"></span></pre></body></html>

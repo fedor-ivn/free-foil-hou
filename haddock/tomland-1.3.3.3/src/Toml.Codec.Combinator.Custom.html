@@ -1,0 +1,344 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="annot"><span class="hs-comment">{- |
+Module                  : Toml.Codec.Combinator.Custom
+Copyright               : (c) 2018-2022 Kowainik
+SPDX-License-Identifier : MPL-2.0
+Maintainer              : Kowainik &lt;xrom.xkov@gmail.com&gt;
+Stability               : Stable
+Portability             : Portable
+
+Contains TOML-specific custom combinators for converting between TOML and
+special user data types.
+
+See examples below of the situations you may need the following combinators.
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-16"></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Toml.Codec.Combinator.Custom</span><span>
+</span><span id="line-18"></span><span>    </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * 'Text' combinators</span></span><span>
+</span><span id="line-19"></span><span>      </span><span class="annot"><a href="Toml.Codec.Combinator.Custom.html#textBy"><span class="hs-identifier">textBy</span></a></span><span>
+</span><span id="line-20"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Custom.html#read"><span class="hs-identifier">read</span></a></span><span>
+</span><span id="line-21"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Custom.html#enumBounded"><span class="hs-identifier">enumBounded</span></a></span><span>
+</span><span id="line-22"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Custom.html#hardcoded"><span class="hs-identifier">hardcoded</span></a></span><span>
+</span><span id="line-23"></span><span>
+</span><span id="line-24"></span><span>      </span><span class="annot"><span class="hs-comment">-- * Validation</span></span><span>
+</span><span id="line-25"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Custom.html#validate"><span class="hs-identifier">validate</span></a></span><span>
+</span><span id="line-26"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Custom.html#validateIf"><span class="hs-identifier">validateIf</span></a></span><span>
+</span><span id="line-27"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Prelude</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">read</span></span><span class="hs-special">)</span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Category</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-operator">(&gt;&gt;&gt;)</span></span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Text</span></span><span class="hs-special">)</span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.html"><span class="hs-identifier">Toml.Codec.BiMap</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.BiMap.html#TomlBiMap"><span class="hs-identifier">TomlBiMap</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.Conversion.html"><span class="hs-identifier">Toml.Codec.BiMap.Conversion</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.BiMap.Conversion.html#_EnumBounded"><span class="hs-identifier">_EnumBounded</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.Conversion.html#_Read"><span class="hs-identifier">_Read</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.Conversion.html#_TextBy"><span class="hs-identifier">_TextBy</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.Conversion.html#_Validate"><span class="hs-identifier">_Validate</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.Conversion.html#_Hardcoded"><span class="hs-identifier">_Hardcoded</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Common.html"><span class="hs-identifier">Toml.Codec.Combinator.Common</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Combinator.Common.html#match"><span class="hs-identifier">match</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-37"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html"><span class="hs-identifier">Toml.Codec.Types</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier">TomlCodec</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.AnyValue.html"><span class="hs-identifier">Toml.Type.AnyValue</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier">AnyValue</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-39"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.Key.html"><span class="hs-identifier">Toml.Type.Key</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier">Key</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-40"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.Printer.html"><span class="hs-identifier">Toml.Type.Printer</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Printer.html#prettyKey"><span class="hs-identifier">prettyKey</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-41"></span><span>
+</span><span id="line-42"></span><span>
+</span><span id="line-43"></span><span class="annot"><span class="hs-comment">{- | Codec for text values with custom error messages for parsing.
+
+__Example:__
+
+We have the following type that represents the image format:
+
+@
+__data__ Format
+    = Jpeg
+    | Png
+    | Gif
+    __deriving__ ('Show', 'Read', 'Enum')
+@
+
+But we want to be able to decode and encode this data type through the custom
+text representation, that can be formilised in the following functions:
+
+@
+showFormat :: Format -&gt; 'Text'
+showFormat = \case
+    Jpeg -&gt; &quot;.jpeg&quot;
+    Png  -&gt; &quot;.png&quot;
+    Gif  -&gt; &quot;.gif&quot;
+
+parseFormat :: 'Text' -&gt; 'Either' 'Text' Format
+parseFormat = __\case__
+    &quot;.jpeg&quot; -&gt; 'Right' Jpeg
+    &quot;.png&quot;  -&gt; 'Right' Png
+    &quot;.gif&quot;  -&gt; 'Right' Gif
+    other   -&gt; 'Left' $ &quot;Unsupported format: &quot; &lt;&gt; other
+@
+
+To write the codec for @Format@ data type using the above rules we can use
+'textBy' combinator:
+
+@
+formatCodec :: 'Key' -&gt; 'TomlCodec' Format
+formatCodec = 'textBy' showFormat parseFormat
+@
+
+And now with the @formatCodec &quot;foo&quot;@ we can have the following line in our
+@TOML@ perfectly encoded:
+
+@
+foo = &quot;.gif&quot;
+@
+
+But the @foo = &quot;jif&quot;@ will lead to the following error:
+
+@
+tomland decode error:  Unsupported format: jif
+@
+
+@since 1.0.0
+-}</span></span><span>
+</span><span id="line-98"></span><span id="local-6989586621679109545"><span class="annot"><a href="Toml.Codec.Combinator.Custom.html#textBy"><span class="hs-identifier hs-type">textBy</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679109545"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="annot"><a href="#local-6989586621679109545"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679109545"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-99"></span><span id="textBy"><span class="annot"><span class="annottext">textBy :: forall a.
+(a -&gt; Text) -&gt; (Text -&gt; Either Text a) -&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Custom.html#textBy"><span class="hs-identifier hs-var hs-var">textBy</span></a></span></span><span> </span><span id="local-6989586621679109599"><span class="annot"><span class="annottext">a -&gt; Text
+</span><a href="#local-6989586621679109599"><span class="hs-identifier hs-var">to</span></a></span></span><span> </span><span id="local-6989586621679109600"><span class="annot"><span class="annottext">Text -&gt; Either Text a
+</span><a href="#local-6989586621679109600"><span class="hs-identifier hs-var">from</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+forall a. TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Common.html#match"><span class="hs-identifier hs-var">match</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(a -&gt; Text) -&gt; (Text -&gt; Either Text a) -&gt; TomlBiMap a AnyValue
+forall a.
+(a -&gt; Text) -&gt; (Text -&gt; Either Text a) -&gt; TomlBiMap a AnyValue
+</span><a href="Toml.Codec.BiMap.Conversion.html#_TextBy"><span class="hs-identifier hs-var">_TextBy</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; Text
+</span><a href="#local-6989586621679109599"><span class="hs-identifier hs-var">to</span></a></span><span> </span><span class="annot"><span class="annottext">Text -&gt; Either Text a
+</span><a href="#local-6989586621679109600"><span class="hs-identifier hs-var">from</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-100"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Custom.html#textBy"><span class="hs-pragma hs-type">textBy</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-101"></span><span>
+</span><span id="line-102"></span><span>
+</span><span id="line-103"></span><span class="annot"><span class="hs-comment">{- | Codec for values with a 'Read' and 'Show' instance.
+
+__Example:__
+
+We have the following type that represents the image format:
+
+@
+__data__ Format
+    = Jpeg
+    | Png
+    | Gif
+    deriving (Show, Read, Enum)
+@
+
+And we want to be able to decode and encode this data type through the 'Show'
+and 'Read' instances.
+
+To write the codec for @Format@ data type using the existing instances we can
+use 'read' combinator. And now with the @Toml.'read' &quot;foo&quot;@ we can have the
+following line in our @TOML@ perfectly encoded:
+
+@
+foo = &quot;Gif&quot;
+@
+
+But the @foo = &quot;.gif&quot;@ will lead to the following error:
+
+@
+tomland decode error:  Prelude.read: no parse
+@
+
+@since 0.5.0
+-}</span></span><span>
+</span><span id="line-136"></span><span id="local-6989586621679109554"><span class="annot"><a href="Toml.Codec.Combinator.Custom.html#read"><span class="hs-identifier hs-type">read</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679109554"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Read</span></span><span> </span><span class="annot"><a href="#local-6989586621679109554"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679109554"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-137"></span><span id="read"><span class="annot"><span class="annottext">read :: forall a. (Show a, Read a) =&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Custom.html#read"><span class="hs-identifier hs-var hs-var">read</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+forall a. TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Common.html#match"><span class="hs-identifier hs-var">match</span></a></span><span> </span><span class="annot"><span class="annottext">TomlBiMap a AnyValue
+forall a. (Show a, Read a) =&gt; TomlBiMap a AnyValue
+</span><a href="Toml.Codec.BiMap.Conversion.html#_Read"><span class="hs-identifier hs-var">_Read</span></a></span><span>
+</span><span id="line-138"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Custom.html#read"><span class="hs-pragma hs-type">read</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-139"></span><span>
+</span><span id="line-140"></span><span class="annot"><span class="hs-comment">{- | Codec for general nullary sum data types with a 'Bounded', 'Enum', and
+'Show' instance. This codec is similar to 'read' but provides much better error
+messages than 'read' for nullary sum types.
+
+E.g. for the same @Format@ example from 'read' function, but with the
+@Toml.'enumBounded' &quot;foo&quot;@ codec the error for @foo = \&quot;Jif\&quot;@ in the @TOML@ file
+will look like this:
+
+@
+tomland decode error:  Value is 'Jif' but expected one of: Jpeg, Png, Gif
+@
+
+@since 1.1.0.0
+-}</span></span><span>
+</span><span id="line-154"></span><span id="local-6989586621679109557"><span class="annot"><a href="Toml.Codec.Combinator.Custom.html#enumBounded"><span class="hs-identifier hs-type">enumBounded</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Bounded</span></span><span> </span><span class="annot"><a href="#local-6989586621679109557"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Enum</span></span><span> </span><span class="annot"><a href="#local-6989586621679109557"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679109557"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679109557"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-155"></span><span id="enumBounded"><span class="annot"><span class="annottext">enumBounded :: forall a. (Bounded a, Enum a, Show a) =&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Custom.html#enumBounded"><span class="hs-identifier hs-var hs-var">enumBounded</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+forall a. TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Common.html#match"><span class="hs-identifier hs-var">match</span></a></span><span> </span><span class="annot"><span class="annottext">TomlBiMap a AnyValue
+forall a. (Show a, Enum a, Bounded a) =&gt; TomlBiMap a AnyValue
+</span><a href="Toml.Codec.BiMap.Conversion.html#_EnumBounded"><span class="hs-identifier hs-var">_EnumBounded</span></a></span><span>
+</span><span id="line-156"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Custom.html#enumBounded"><span class="hs-pragma hs-type">enumBounded</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-157"></span><span>
+</span><span id="line-158"></span><span class="annot"><span class="hs-comment">{- | Codec for hardcoded provided values and its 'BiMap'.
+
+If you want to decode a single key-value pair where only one value is allowed.
+Like in the example below:
+
+@
+scope = &quot;all&quot;
+@
+
+To decode that you could use the following function:
+
+@
+Toml.hardcoded &quot;all&quot; Toml._Text &quot;scope&quot;
+@
+
+in case if the value in @TOML@ is not the same as hardcoded, you will get the following error:
+
+@
+tomland decode error:  BiMap error in key 'scope' : Value '&quot;foo&quot;' doesn't align with the hardcoded value '&quot;all&quot;'
+@
+
+@since 1.3.2.0
+-}</span></span><span>
+</span><span id="line-181"></span><span id="local-6989586621679109560"><span class="annot"><a href="Toml.Codec.Combinator.Custom.html#hardcoded"><span class="hs-identifier hs-type">hardcoded</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="#local-6989586621679109560"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="#local-6989586621679109560"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679109560"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.html#TomlBiMap"><span class="hs-identifier hs-type">TomlBiMap</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679109560"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier hs-type">AnyValue</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679109560"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-182"></span><span id="hardcoded"><span class="annot"><span class="annottext">hardcoded :: forall a.
+(Show a, Eq a) =&gt;
+a -&gt; TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Custom.html#hardcoded"><span class="hs-identifier hs-var hs-var">hardcoded</span></a></span></span><span> </span><span id="local-6989586621679109617"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679109617"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span id="local-6989586621679109618"><span class="annot"><span class="annottext">TomlBiMap a AnyValue
+</span><a href="#local-6989586621679109618"><span class="hs-identifier hs-var">aBm</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+forall a. TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Common.html#match"><span class="hs-identifier hs-var">match</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; TomlBiMap a a
+forall a. (Show a, Eq a) =&gt; a -&gt; TomlBiMap a a
+</span><a href="Toml.Codec.BiMap.Conversion.html#_Hardcoded"><span class="hs-identifier hs-var">_Hardcoded</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679109617"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">TomlBiMap a a -&gt; TomlBiMap a AnyValue -&gt; TomlBiMap a AnyValue
+forall {k} (cat :: k -&gt; k -&gt; *) (a :: k) (b :: k) (c :: k).
+Category cat =&gt;
+cat a b -&gt; cat b c -&gt; cat a c
+</span><span class="hs-operator hs-var">&gt;&gt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">TomlBiMap a AnyValue
+</span><a href="#local-6989586621679109618"><span class="hs-identifier hs-var">aBm</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-183"></span><span>
+</span><span id="line-184"></span><span class="annot"><span class="hs-comment">{- | Codec that checks the 'BiMap' on the given predicate.
+The predicate function returns the value, if the validation is successful, or
+the 'Text' of the error that should be returned in case of validation failure.
+
+__Example:__
+
+Let's imagine that we want to have the list in @TOML@ that could only
+have even 'Int's inside. In this case, you can write the following codec:
+
+@
+allEven :: ['Int'] -&gt; 'Either' 'Text' ['Int']
+allEven xs =
+    if all even xs
+    then 'Right' xs
+    else 'Left' &quot;This is wrong, I asked you for even only :(&quot;
+
+allEvenCodec :: 'TomlCodec' ['Int']
+allEvenCodec = Toml.'validate' allEven (Toml._Array Toml._Int) \&quot;myEvenList\&quot;
+@
+
+Then in your @TOML@ file you can have:
+
+@
+myEvenList = [2, 4, 6]
+@
+
+But the following one will lead to the error:
+
+@
+myEvenList = [1, 2, 3]
+@
+
+@
+tomland decode error:  This is wrong, I asked you for even only :(
+@
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-222"></span><span id="local-6989586621679109572"><span class="annot"><a href="Toml.Codec.Combinator.Custom.html#validate"><span class="hs-identifier hs-type">validate</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679109572"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="annot"><a href="#local-6989586621679109572"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.html#TomlBiMap"><span class="hs-identifier hs-type">TomlBiMap</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679109572"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier hs-type">AnyValue</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679109572"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-223"></span><span id="validate"><span class="annot"><span class="annottext">validate :: forall a.
+(a -&gt; Either Text a) -&gt; TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Custom.html#validate"><span class="hs-identifier hs-var hs-var">validate</span></a></span></span><span> </span><span id="local-6989586621679109619"><span class="annot"><span class="annottext">a -&gt; Either Text a
+</span><a href="#local-6989586621679109619"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679109620"><span class="annot"><span class="annottext">TomlBiMap a AnyValue
+</span><a href="#local-6989586621679109620"><span class="hs-identifier hs-var">biMap</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+forall a. TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Common.html#match"><span class="hs-identifier hs-var">match</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(a -&gt; Either Text a)
+-&gt; TomlBiMap a AnyValue -&gt; TomlBiMap a AnyValue
+forall a.
+(a -&gt; Either Text a)
+-&gt; TomlBiMap a AnyValue -&gt; TomlBiMap a AnyValue
+</span><a href="Toml.Codec.BiMap.Conversion.html#_Validate"><span class="hs-identifier hs-var">_Validate</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; Either Text a
+</span><a href="#local-6989586621679109619"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">TomlBiMap a AnyValue
+</span><a href="#local-6989586621679109620"><span class="hs-identifier hs-var">biMap</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-224"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Custom.html#validate"><span class="hs-pragma hs-type">validate</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-225"></span><span>
+</span><span id="line-226"></span><span class="annot"><span class="hs-comment">{- | Similar to 'validate' but takes the predicate that returnes 'Bool'.
+The error in case of the validation failure looks like this:
+
+@
+Value does not pass the validation for key: KEY_NAME
+@
+
+__Example:__
+
+Let's imagine that we want to have the 'Text' field in @TOML@ that could only
+have 3 chars in it. In this case, you can write the following codec:
+
+@
+my3charTextCodec :: TomlCodec Text
+my3CharTextCodec = Toml.'validateIf' ((==) 3 . Text.length) Toml._Text &quot;myKeyName&quot;
+@
+
+The in your @TOML@ file you can have:
+
+@
+myKeyName = &quot;abc&quot;
+@
+
+But the following one will lead to the error:
+
+@
+myKeyName = &quot;I have more than enough&quot;
+@
+
+@
+tomland decode error:  Value does not pass the validation for key: myKeyName
+@
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-261"></span><span class="annot"><a href="Toml.Codec.Combinator.Custom.html#validateIf"><span class="hs-identifier hs-type">validateIf</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679109575"><span class="annot"><a href="#local-6989586621679109575"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679109575"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.html#TomlBiMap"><span class="hs-identifier hs-type">TomlBiMap</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679109575"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier hs-type">AnyValue</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679109575"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-262"></span><span id="validateIf"><span class="annot"><span class="annottext">validateIf :: forall a. (a -&gt; Bool) -&gt; TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Custom.html#validateIf"><span class="hs-identifier hs-var hs-var">validateIf</span></a></span></span><span> </span><span id="local-6989586621679109625"><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679109625"><span class="hs-identifier hs-var">p</span></a></span></span><span> </span><span id="local-6989586621679109626"><span class="annot"><span class="annottext">TomlBiMap a AnyValue
+</span><a href="#local-6989586621679109626"><span class="hs-identifier hs-var">biMap</span></a></span></span><span> </span><span id="local-6989586621679109627"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679109627"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(a -&gt; Either Text a) -&gt; TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+forall a.
+(a -&gt; Either Text a) -&gt; TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Custom.html#validate"><span class="hs-identifier hs-var">validate</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; Either Text a
+</span><a href="#local-6989586621679109628"><span class="hs-identifier hs-var">validateEither</span></a></span><span> </span><span class="annot"><span class="annottext">TomlBiMap a AnyValue
+</span><a href="#local-6989586621679109626"><span class="hs-identifier hs-var">biMap</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679109627"><span class="hs-identifier hs-var">k</span></a></span><span>
+</span><span id="line-263"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-264"></span><span>    </span><span class="annot"><a href="#local-6989586621679109628"><span class="hs-identifier hs-type">validateEither</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679109575"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span> </span><span class="annot"><a href="#local-6989586621679109575"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-265"></span><span>    </span><span id="local-6989586621679109628"><span class="annot"><span class="annottext">validateEither :: a -&gt; Either Text a
+</span><a href="#local-6989586621679109628"><span class="hs-identifier hs-var hs-var">validateEither</span></a></span></span><span> </span><span id="local-6989586621679109629"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679109629"><span class="hs-identifier hs-var">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-266"></span><span>        </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">a -&gt; Bool
+</span><a href="#local-6989586621679109625"><span class="hs-identifier hs-var">p</span></a></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679109629"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-267"></span><span>        </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">a -&gt; Either Text a
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679109629"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-268"></span><span>        </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">Text -&gt; Either Text a
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="annot"><span class="annottext">(Text -&gt; Either Text a) -&gt; Text -&gt; Either Text a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;Value does not pass the validation for key: &quot;</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; Text -&gt; Text
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; Text
+</span><a href="Toml.Type.Printer.html#prettyKey"><span class="hs-identifier hs-var">prettyKey</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679109627"><span class="hs-identifier hs-var">k</span></a></span><span>
+</span><span id="line-269"></span></pre></body></html>

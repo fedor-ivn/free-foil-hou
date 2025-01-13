@@ -1,0 +1,246 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="annot"><span class="hs-comment">{- |
+Module                  : Toml.Codec.Combinator.Monoid
+Copyright               : (c) 2018-2022 Kowainik
+SPDX-License-Identifier : MPL-2.0
+Maintainer              : Kowainik &lt;xrom.xkov@gmail.com&gt;
+Stability               : Stable
+Portability             : Portable
+
+TOML-specific combinators for converting between TOML and Haskell 'Monoid'
+wrapper data types. These codecs are especially handy when you are implementing
+the [Partial Options Monoid](https://medium.com/@jonathangfischoff/the-partial-options-monoid-pattern-31914a71fc67)
+pattern.
+
++-----------------------+------------+----------------------------+---------------------+
+|     Haskell Type      |   @TOML@   |        'TomlCodec'         | Default on          |
+|                       |            |                            | missing field       |
++=======================+============+============================+=====================+
+| __'All'__             | @a = true@ | @'all' &quot;a&quot;@                | @'All' 'True'@      |
++-----------------------+------------+----------------------------+---------------------+
+| __'Any'__             | @a = true@ | @'any' &quot;a&quot;@                | @'Any' 'False'@     |
++-----------------------+------------+----------------------------+---------------------+
+| __@'Sum' 'Int'@__     | @a = 11@   | @'sum' 'Toml.int' &quot;a&quot;@     | @'Sum' 0@           |
++-----------------------+------------+----------------------------+---------------------+
+| __@'Product' 'Int'@__ | @a = 11@   | @'product' 'Toml.int' &quot;a&quot;@ | @'Product' 1@       |
++-----------------------+------------+----------------------------+---------------------+
+| __@'First' 'Int'@__   | @a = 42@   | @'first' 'Toml.int' &quot;a&quot;@   | @'First' 'Nothing'@ |
++-----------------------+------------+----------------------------+---------------------+
+| __@'Last' 'Bool'@__   | @a = true@ | @'last' 'Toml.bool' &quot;a&quot;@   | @'Last' 'Nothing'@  |
++-----------------------+------------+----------------------------+---------------------+
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Toml.Codec.Combinator.Monoid</span><span>
+</span><span id="line-35"></span><span>    </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Codecs for 'Monoid's</span></span><span>
+</span><span id="line-36"></span><span>      </span><span class="annot"><span class="hs-comment">-- ** Bool wrappers</span></span><span>
+</span><span id="line-37"></span><span>      </span><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#all"><span class="hs-identifier">all</span></a></span><span>
+</span><span id="line-38"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#any"><span class="hs-identifier">any</span></a></span><span>
+</span><span id="line-39"></span><span>      </span><span class="annot"><span class="hs-comment">-- ** 'Num' wrappers</span></span><span>
+</span><span id="line-40"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#sum"><span class="hs-identifier">sum</span></a></span><span>
+</span><span id="line-41"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#product"><span class="hs-identifier">product</span></a></span><span>
+</span><span id="line-42"></span><span>      </span><span class="annot"><span class="hs-comment">-- ** 'Maybe' wrappers</span></span><span>
+</span><span id="line-43"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#first"><span class="hs-identifier">first</span></a></span><span>
+</span><span id="line-44"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#last"><span class="hs-identifier">last</span></a></span><span>
+</span><span id="line-45"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-46"></span><span>
+</span><span id="line-47"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Prelude</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">all</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">any</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">last</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">product</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">sum</span></span><span class="hs-special">)</span><span>
+</span><span id="line-48"></span><span>
+</span><span id="line-49"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Monoid</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">All</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Any</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">First</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Last</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Product</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">Sum</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-50"></span><span>
+</span><span id="line-51"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Primitive.html"><span class="hs-identifier">Toml.Codec.Combinator.Primitive</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Combinator.Primitive.html#bool"><span class="hs-identifier">bool</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-52"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Di.html"><span class="hs-identifier">Toml.Codec.Di</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Di.html#dimap"><span class="hs-identifier">dimap</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Di.html#dioptional"><span class="hs-identifier">dioptional</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Di.html#diwrap"><span class="hs-identifier">diwrap</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-53"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html"><span class="hs-identifier">Toml.Codec.Types</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier">TomlCodec</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-54"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.Key.html"><span class="hs-identifier">Toml.Type.Key</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier">Key</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-55"></span><span>
+</span><span id="line-56"></span><span>
+</span><span id="line-57"></span><span class="annot"><span class="hs-comment">{- | Codec for 'All' wrapper for boolean values.
+Returns @'All' 'True'@ on missing fields.
+
+Decodes to @'All' 'True'@ when the key is not present.
+
+@since 1.2.1.0
+-}</span></span><span>
+</span><span id="line-64"></span><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#all"><span class="hs-identifier hs-type">all</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">All</span></span><span>
+</span><span id="line-65"></span><span id="all"><span class="annot"><span class="annottext">all :: Key -&gt; TomlCodec All
+</span><a href="Toml.Codec.Combinator.Monoid.html#all"><span class="hs-identifier hs-var hs-var">all</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(All -&gt; Maybe Bool)
+-&gt; (Maybe Bool -&gt; All) -&gt; TomlCodec (Maybe Bool) -&gt; TomlCodec All
+forall b a. (b -&gt; a) -&gt; (a -&gt; b) -&gt; TomlCodec a -&gt; TomlCodec b
+</span><a href="Toml.Codec.Di.html#dimap"><span class="hs-identifier hs-var">dimap</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; Maybe Bool
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; Maybe Bool) -&gt; (All -&gt; Bool) -&gt; All -&gt; Maybe Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">All -&gt; Bool
+</span><span class="hs-identifier hs-var">getAll</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">All -&gt; (Bool -&gt; All) -&gt; Maybe Bool -&gt; All
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="annot"><span class="annottext">All
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; All
+</span><span class="hs-identifier hs-var">All</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(TomlCodec (Maybe Bool) -&gt; TomlCodec All)
+-&gt; (Key -&gt; TomlCodec (Maybe Bool)) -&gt; Key -&gt; TomlCodec All
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec Bool -&gt; TomlCodec (Maybe Bool)
+forall a. TomlCodec a -&gt; TomlCodec (Maybe a)
+</span><a href="Toml.Codec.Di.html#dioptional"><span class="hs-identifier hs-var">dioptional</span></a></span><span> </span><span class="annot"><span class="annottext">(TomlCodec Bool -&gt; TomlCodec (Maybe Bool))
+-&gt; (Key -&gt; TomlCodec Bool) -&gt; Key -&gt; TomlCodec (Maybe Bool)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; TomlCodec Bool
+</span><a href="Toml.Codec.Combinator.Primitive.html#bool"><span class="hs-identifier hs-var">bool</span></a></span><span>
+</span><span id="line-66"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#all"><span class="hs-pragma hs-type">all</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-67"></span><span>
+</span><span id="line-68"></span><span class="annot"><span class="hs-comment">{- | Codec for 'Any' wrapper for boolean values.
+Returns @'Any' 'False'@ on missing fields.
+
+Decodes to @'Any' 'False'@ when the key is not present.
+
+@since 1.2.1.0
+-}</span></span><span>
+</span><span id="line-75"></span><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#any"><span class="hs-identifier hs-type">any</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Any</span></span><span>
+</span><span id="line-76"></span><span id="any"><span class="annot"><span class="annottext">any :: Key -&gt; TomlCodec Any
+</span><a href="Toml.Codec.Combinator.Monoid.html#any"><span class="hs-identifier hs-var hs-var">any</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Any -&gt; Maybe Bool)
+-&gt; (Maybe Bool -&gt; Any) -&gt; TomlCodec (Maybe Bool) -&gt; TomlCodec Any
+forall b a. (b -&gt; a) -&gt; (a -&gt; b) -&gt; TomlCodec a -&gt; TomlCodec b
+</span><a href="Toml.Codec.Di.html#dimap"><span class="hs-identifier hs-var">dimap</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; Maybe Bool
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(Bool -&gt; Maybe Bool) -&gt; (Any -&gt; Bool) -&gt; Any -&gt; Maybe Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Any -&gt; Bool
+</span><span class="hs-identifier hs-var">getAny</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Any -&gt; (Bool -&gt; Any) -&gt; Maybe Bool -&gt; Any
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="annot"><span class="annottext">Any
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Any
+</span><span class="hs-identifier hs-var">Any</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(TomlCodec (Maybe Bool) -&gt; TomlCodec Any)
+-&gt; (Key -&gt; TomlCodec (Maybe Bool)) -&gt; Key -&gt; TomlCodec Any
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec Bool -&gt; TomlCodec (Maybe Bool)
+forall a. TomlCodec a -&gt; TomlCodec (Maybe a)
+</span><a href="Toml.Codec.Di.html#dioptional"><span class="hs-identifier hs-var">dioptional</span></a></span><span> </span><span class="annot"><span class="annottext">(TomlCodec Bool -&gt; TomlCodec (Maybe Bool))
+-&gt; (Key -&gt; TomlCodec Bool) -&gt; Key -&gt; TomlCodec (Maybe Bool)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; TomlCodec Bool
+</span><a href="Toml.Codec.Combinator.Primitive.html#bool"><span class="hs-identifier hs-var">bool</span></a></span><span>
+</span><span id="line-77"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#any"><span class="hs-pragma hs-type">any</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-78"></span><span>
+</span><span id="line-79"></span><span class="annot"><span class="hs-comment">{- | Codec for 'Sum' wrapper for given converter's values.
+
+Decodes to @'Sum' 0@ when the key is not present.
+
+@since 1.2.1.0
+-}</span></span><span>
+</span><span id="line-85"></span><span id="local-6989586621679109268"><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#sum"><span class="hs-identifier hs-type">sum</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Num</span></span><span> </span><span class="annot"><a href="#local-6989586621679109268"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679109268"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Sum</span></span><span> </span><span class="annot"><a href="#local-6989586621679109268"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-86"></span><span id="sum"><span class="annot"><span class="annottext">sum :: forall a. Num a =&gt; (Key -&gt; TomlCodec a) -&gt; Key -&gt; TomlCodec (Sum a)
+</span><a href="Toml.Codec.Combinator.Monoid.html#sum"><span class="hs-identifier hs-var hs-var">sum</span></a></span></span><span> </span><span id="local-6989586621679109322"><span class="annot"><span class="annottext">Key -&gt; TomlCodec a
+</span><a href="#local-6989586621679109322"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Sum a -&gt; Maybe a)
+-&gt; (Maybe a -&gt; Sum a) -&gt; TomlCodec (Maybe a) -&gt; TomlCodec (Sum a)
+forall b a. (b -&gt; a) -&gt; (a -&gt; b) -&gt; TomlCodec a -&gt; TomlCodec b
+</span><a href="Toml.Codec.Di.html#dimap"><span class="hs-identifier hs-var">dimap</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(a -&gt; Maybe a) -&gt; (Sum a -&gt; a) -&gt; Sum a -&gt; Maybe a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Sum a -&gt; a
+forall a. Sum a -&gt; a
+</span><span class="hs-identifier hs-var">getSum</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Sum a -&gt; (a -&gt; Sum a) -&gt; Maybe a -&gt; Sum a
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="annot"><span class="annottext">Sum a
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; Sum a
+forall a. a -&gt; Sum a
+</span><span class="hs-identifier hs-var">Sum</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(TomlCodec (Maybe a) -&gt; TomlCodec (Sum a))
+-&gt; (Key -&gt; TomlCodec (Maybe a)) -&gt; Key -&gt; TomlCodec (Sum a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec a -&gt; TomlCodec (Maybe a)
+forall a. TomlCodec a -&gt; TomlCodec (Maybe a)
+</span><a href="Toml.Codec.Di.html#dioptional"><span class="hs-identifier hs-var">dioptional</span></a></span><span> </span><span class="annot"><span class="annottext">(TomlCodec a -&gt; TomlCodec (Maybe a))
+-&gt; (Key -&gt; TomlCodec a) -&gt; Key -&gt; TomlCodec (Maybe a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; TomlCodec a
+</span><a href="#local-6989586621679109322"><span class="hs-identifier hs-var">codec</span></a></span><span>
+</span><span id="line-87"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#sum"><span class="hs-pragma hs-type">sum</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-88"></span><span>
+</span><span id="line-89"></span><span class="annot"><span class="hs-comment">{- | Codec for 'Product' wrapper for given converter's values.
+
+Decodes to @'Product' 1@ when the key is not present.
+
+@since 1.2.1.0
+-}</span></span><span>
+</span><span id="line-95"></span><span id="local-6989586621679109274"><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#product"><span class="hs-identifier hs-type">product</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Num</span></span><span> </span><span class="annot"><a href="#local-6989586621679109274"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679109274"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Product</span></span><span> </span><span class="annot"><a href="#local-6989586621679109274"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-96"></span><span id="product"><span class="annot"><span class="annottext">product :: forall a.
+Num a =&gt;
+(Key -&gt; TomlCodec a) -&gt; Key -&gt; TomlCodec (Product a)
+</span><a href="Toml.Codec.Combinator.Monoid.html#product"><span class="hs-identifier hs-var hs-var">product</span></a></span></span><span> </span><span id="local-6989586621679109327"><span class="annot"><span class="annottext">Key -&gt; TomlCodec a
+</span><a href="#local-6989586621679109327"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Product a -&gt; Maybe a)
+-&gt; (Maybe a -&gt; Product a)
+-&gt; TomlCodec (Maybe a)
+-&gt; TomlCodec (Product a)
+forall b a. (b -&gt; a) -&gt; (a -&gt; b) -&gt; TomlCodec a -&gt; TomlCodec b
+</span><a href="Toml.Codec.Di.html#dimap"><span class="hs-identifier hs-var">dimap</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">a -&gt; Maybe a
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">(a -&gt; Maybe a) -&gt; (Product a -&gt; a) -&gt; Product a -&gt; Maybe a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Product a -&gt; a
+forall a. Product a -&gt; a
+</span><span class="hs-identifier hs-var">getProduct</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Product a -&gt; (a -&gt; Product a) -&gt; Maybe a -&gt; Product a
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="annot"><span class="annottext">Product a
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span> </span><span class="annot"><span class="annottext">a -&gt; Product a
+forall a. a -&gt; Product a
+</span><span class="hs-identifier hs-var">Product</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(TomlCodec (Maybe a) -&gt; TomlCodec (Product a))
+-&gt; (Key -&gt; TomlCodec (Maybe a)) -&gt; Key -&gt; TomlCodec (Product a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec a -&gt; TomlCodec (Maybe a)
+forall a. TomlCodec a -&gt; TomlCodec (Maybe a)
+</span><a href="Toml.Codec.Di.html#dioptional"><span class="hs-identifier hs-var">dioptional</span></a></span><span> </span><span class="annot"><span class="annottext">(TomlCodec a -&gt; TomlCodec (Maybe a))
+-&gt; (Key -&gt; TomlCodec a) -&gt; Key -&gt; TomlCodec (Maybe a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; TomlCodec a
+</span><a href="#local-6989586621679109327"><span class="hs-identifier hs-var">codec</span></a></span><span>
+</span><span id="line-97"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#product"><span class="hs-pragma hs-type">product</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-98"></span><span>
+</span><span id="line-99"></span><span class="annot"><span class="hs-comment">{- | Codec for 'First' wrapper for given converter's values.
+
+Decodes to @'First' 'Nothing'@ when the key is not present.
+
+@since 1.2.1.0
+-}</span></span><span>
+</span><span id="line-105"></span><span id="local-6989586621679109280"><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#first"><span class="hs-identifier hs-type">first</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679109280"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">First</span></span><span> </span><span class="annot"><a href="#local-6989586621679109280"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-106"></span><span id="first"><span class="annot"><span class="annottext">first :: forall a. (Key -&gt; TomlCodec a) -&gt; Key -&gt; TomlCodec (First a)
+</span><a href="Toml.Codec.Combinator.Monoid.html#first"><span class="hs-identifier hs-var hs-var">first</span></a></span></span><span> </span><span id="local-6989586621679109330"><span class="annot"><span class="annottext">Key -&gt; TomlCodec a
+</span><a href="#local-6989586621679109330"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlCodec (Maybe a) -&gt; TomlCodec (First a)
+forall b a. Coercible a b =&gt; TomlCodec a -&gt; TomlCodec b
+</span><a href="Toml.Codec.Di.html#diwrap"><span class="hs-identifier hs-var">diwrap</span></a></span><span> </span><span class="annot"><span class="annottext">(TomlCodec (Maybe a) -&gt; TomlCodec (First a))
+-&gt; (Key -&gt; TomlCodec (Maybe a)) -&gt; Key -&gt; TomlCodec (First a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec a -&gt; TomlCodec (Maybe a)
+forall a. TomlCodec a -&gt; TomlCodec (Maybe a)
+</span><a href="Toml.Codec.Di.html#dioptional"><span class="hs-identifier hs-var">dioptional</span></a></span><span> </span><span class="annot"><span class="annottext">(TomlCodec a -&gt; TomlCodec (Maybe a))
+-&gt; (Key -&gt; TomlCodec a) -&gt; Key -&gt; TomlCodec (Maybe a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; TomlCodec a
+</span><a href="#local-6989586621679109330"><span class="hs-identifier hs-var">codec</span></a></span><span>
+</span><span id="line-107"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#first"><span class="hs-pragma hs-type">first</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-108"></span><span>
+</span><span id="line-109"></span><span class="annot"><span class="hs-comment">{- | Codec for 'Last' wrapper for given converter's values.
+
+Decodes to @'Last' 'Nothing'@ when the key is not present.
+
+@since 1.2.1.0
+-}</span></span><span>
+</span><span id="line-115"></span><span id="local-6989586621679109287"><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#last"><span class="hs-identifier hs-type">last</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679109287"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Last</span></span><span> </span><span class="annot"><a href="#local-6989586621679109287"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span>
+</span><span id="line-116"></span><span id="last"><span class="annot"><span class="annottext">last :: forall a. (Key -&gt; TomlCodec a) -&gt; Key -&gt; TomlCodec (Last a)
+</span><a href="Toml.Codec.Combinator.Monoid.html#last"><span class="hs-identifier hs-var hs-var">last</span></a></span></span><span> </span><span id="local-6989586621679109332"><span class="annot"><span class="annottext">Key -&gt; TomlCodec a
+</span><a href="#local-6989586621679109332"><span class="hs-identifier hs-var">codec</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlCodec (Maybe a) -&gt; TomlCodec (Last a)
+forall b a. Coercible a b =&gt; TomlCodec a -&gt; TomlCodec b
+</span><a href="Toml.Codec.Di.html#diwrap"><span class="hs-identifier hs-var">diwrap</span></a></span><span> </span><span class="annot"><span class="annottext">(TomlCodec (Maybe a) -&gt; TomlCodec (Last a))
+-&gt; (Key -&gt; TomlCodec (Maybe a)) -&gt; Key -&gt; TomlCodec (Last a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec a -&gt; TomlCodec (Maybe a)
+forall a. TomlCodec a -&gt; TomlCodec (Maybe a)
+</span><a href="Toml.Codec.Di.html#dioptional"><span class="hs-identifier hs-var">dioptional</span></a></span><span> </span><span class="annot"><span class="annottext">(TomlCodec a -&gt; TomlCodec (Maybe a))
+-&gt; (Key -&gt; TomlCodec a) -&gt; Key -&gt; TomlCodec (Maybe a)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; TomlCodec a
+</span><a href="#local-6989586621679109332"><span class="hs-identifier hs-var">codec</span></a></span><span>
+</span><span id="line-117"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html#last"><span class="hs-pragma hs-type">last</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-118"></span></pre></body></html>
