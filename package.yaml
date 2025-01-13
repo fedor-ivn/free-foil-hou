@@ -82,3 +82,13 @@ tests:
       - hspec
       - hspec-discover
       - QuickCheck
+
+  doctests:
+    source-dirs:
+      - src/
+      - test/doctests
+    main: Main.hs
+    other-modules: []
+    dependencies:
+      - free-foil-hou
+      - doctest-parallel
