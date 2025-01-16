@@ -1,0 +1,23 @@
+comment "--" ;
+
+layout toplevel ;
+
+token VarIdent (lower (letter | digit | '_' | '\'')*) ;
+token MetaVarIdent (upper (letter | digit | '_' | '\'')*) ;
+token Id (lower (letter | digit | '_' | '\'')*) ;
+
+-- A Program is a list of Commands
+AProgram. Program ::= [Command] ;
+
+-- Commands for checking and computing
+CommandCompute. Command ::= "compute" Term ;
+terminator Command ";" ;
+
+-- Terms in the lambda calculus
+Lam.     Term  ::= "λ" Id "." Term ;
+App.     Term1 ::= Term1 Term2 ; -- x y z  =  (x y) z  ≠  x (y z)
+Var.     Term2 ::= VarIdent ;
+MetaVar. Term2 ::= MetaVarIdent ;
+_.       Term  ::= Term1 ;
+_.       Term1 ::= Term2 ;
+_.       Term2 ::= "(" Term ")" ;
