@@ -6,11 +6,17 @@ module Language.Lambda.FCU.FCUSyntax.Abs where
 newtype Id = Id String
   deriving (Eq, Ord, Show, Read)
 
+newtype MetavarId = MetavarId String
+  deriving (Eq, Ord, Show, Read)
+
+newtype ConstructorId = ConstructorId String
+  deriving (Eq, Ord, Show, Read)
+
 data Term
-    = WTerm Id
+    = WTerm MetavarId
     | OTerm Id
-    | Constructor Id
+    | CTerm ConstructorId
     | AppTerm Term Term
-    | CompTerm Id Term
+    | AbsTerm Id Term
   deriving (Eq, Ord, Show, Read)
 
