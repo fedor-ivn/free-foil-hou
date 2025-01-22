@@ -2,22 +2,15 @@ comment "--" ;
 
 layout toplevel ;
 
-token VarIdent (lower (letter | digit | '_' | '\'')*) ;
-token MetaVarIdent (upper (letter | digit | '_' | '\'')*) ;
-token Id (lower (letter | digit | '_' | '\'')*) ;
+-- Identifiers
+token Id (letter (letter | digit | '_' | '\'')*) ;
 
--- A Program is a list of Commands
-AProgram. Program ::= [Command] ;
+-- Terms in your Haskell representation
+WTerm.       Term ::= "W" Id ;                   -- W Id
+OTerm.       Term ::= "O" Id ;                   -- O Id
+Constructor. Term ::= "Constructor" Id ;         -- Constructor Id
+AppTerm.     Term ::= Term ":@" Term ;           -- Term :@ Term
+CompTerm.    Term ::= Id ":.:" Term ;            -- Id :.: Term
 
--- Commands for checking and computing
-CommandCompute. Command ::= "compute" Term ;
-terminator Command ";" ;
-
--- Terms in the lambda calculus
-Lam.     Term  ::= "λ" Id "." Term ;
-App.     Term1 ::= Term1 Term2 ; -- x y z  =  (x y) z  ≠  x (y z)
-Var.     Term2 ::= VarIdent ;
-MetaVar. Term2 ::= MetaVarIdent ;
-_.       Term  ::= Term1 ;
-_.       Term1 ::= Term2 ;
-_.       Term2 ::= "(" Term ")" ;
+-- Parentheses for grouping terms
+_.           Term ::= "(" Term ")" ;

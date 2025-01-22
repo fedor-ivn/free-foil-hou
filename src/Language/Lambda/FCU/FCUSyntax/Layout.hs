@@ -218,10 +218,11 @@ sToken p s = PT p (TS s i)
     i = case s of
       "(" -> 1
       ")" -> 2
-      "." -> 3
-      ";" -> 4
-      "compute" -> 5
-      "\955" -> 6
+      ":.:" -> 3
+      ":@" -> 4
+      "Constructor" -> 5
+      "O" -> 6
+      "W" -> 7
       _ -> error $ "not a reserved word: " ++ show s
 
 -- | Get the position of a token.

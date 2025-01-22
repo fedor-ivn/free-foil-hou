@@ -9,25 +9,14 @@ type Result = Err String
 failure :: Show a => a -> Result
 failure x = Bad $ "Undefined case: " ++ show x
 
-transVarIdent :: VarIdent -> Result
-transVarIdent x = case x of
-  VarIdent string -> failure x
-transMetaVarIdent :: MetaVarIdent -> Result
-transMetaVarIdent x = case x of
-  MetaVarIdent string -> failure x
 transId :: Id -> Result
 transId x = case x of
   Id string -> failure x
-transProgram :: Program -> Result
-transProgram x = case x of
-  AProgram commands -> failure x
-transCommand :: Command -> Result
-transCommand x = case x of
-  CommandCompute term -> failure x
 transTerm :: Term -> Result
 transTerm x = case x of
-  Lam id term -> failure x
-  App term1 term2 -> failure x
-  Var varident -> failure x
-  MetaVar metavarident -> failure x
+  WTerm id -> failure x
+  OTerm id -> failure x
+  Constructor id -> failure x
+  AppTerm term1 term2 -> failure x
+  CompTerm id term -> failure x
 
