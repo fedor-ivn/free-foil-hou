@@ -88,32 +88,14 @@ instance Print Integer where
 instance Print Double where
   prt _ x = doc (shows x)
 
-instance Print Language.Lambda.FCU.FCUSyntax.Abs.VarIdent where
-  prt _ (Language.Lambda.FCU.FCUSyntax.Abs.VarIdent i) = doc (showString i)
-
-instance Print Language.Lambda.FCU.FCUSyntax.Abs.MetaVarIdent where
-  prt _ (Language.Lambda.FCU.FCUSyntax.Abs.MetaVarIdent i) = doc (showString i)
-
 instance Print Language.Lambda.FCU.FCUSyntax.Abs.Id where
   prt _ (Language.Lambda.FCU.FCUSyntax.Abs.Id i) = doc (showString i)
 
-instance Print Language.Lambda.FCU.FCUSyntax.Abs.Program where
-  prt i e = case e of
-    Language.Lambda.FCU.FCUSyntax.Abs.AProgram commands -> prPrec i 0 (concatD [prt 0 commands])
-
-instance Print Language.Lambda.FCU.FCUSyntax.Abs.Command where
-  prt i e = case e of
-    Language.Lambda.FCU.FCUSyntax.Abs.CommandCompute term -> prPrec i 0 (concatD [doc (showString "compute"), prt 0 term])
-  prtList _ [] = concatD []
-  prtList _ (x:xs) = concatD [prt 0 x, doc (showString ";"), prt 0 xs]
-
-instance Print [Language.Lambda.FCU.FCUSyntax.Abs.Command] where
-  prt = prtList
-
 instance Print Language.Lambda.FCU.FCUSyntax.Abs.Term where
   prt i e = case e of
-    Language.Lambda.FCU.FCUSyntax.Abs.Lam id term -> prPrec i 0 (concatD [doc (showString "\955"), prt 0 id, doc (showString "."), prt 0 term])
-    Language.Lambda.FCU.FCUSyntax.Abs.App term1 term2 -> prPrec i 1 (concatD [prt 1 term1, prt 2 term2])
-    Language.Lambda.FCU.FCUSyntax.Abs.Var varident -> prPrec i 2 (concatD [prt 0 varident])
-    Language.Lambda.FCU.FCUSyntax.Abs.MetaVar metavarident -> prPrec i 2 (concatD [prt 0 metavarident])
+    Language.Lambda.FCU.FCUSyntax.Abs.WTerm id -> prPrec i 0 (concatD [doc (showString "W"), prt 0 id])
+    Language.Lambda.FCU.FCUSyntax.Abs.OTerm id -> prPrec i 0 (concatD [doc (showString "O"), prt 0 id])
+    Language.Lambda.FCU.FCUSyntax.Abs.Constructor id -> prPrec i 0 (concatD [doc (showString "Constructor"), prt 0 id])
+    Language.Lambda.FCU.FCUSyntax.Abs.AppTerm term1 term2 -> prPrec i 0 (concatD [prt 0 term1, doc (showString ":@"), prt 0 term2])
+    Language.Lambda.FCU.FCUSyntax.Abs.CompTerm id term -> prPrec i 0 (concatD [prt 0 id, doc (showString ":.:"), prt 0 term])
 

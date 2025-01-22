@@ -3,7 +3,7 @@
 {
 {-# OPTIONS -fno-warn-incomplete-patterns #-}
 {-# OPTIONS_GHC -w #-}
-module Language.Lambda.FCUSyntax.Lex where
+module Language.Lambda.FCU.FCUSyntax.Lex where
 
 
 
@@ -21,7 +21,7 @@ $i = [$l $d _ ']     -- identifier character
 $u = [. \n]          -- universal: any character
 
 @rsyms =    -- symbols and non-identifier-like reserved words
-   \; | \. | \( | \)
+   \: \@ | \: \. \: | \( | \)
 
 :-
 "--" [.]* ; -- Toss single line comments
@@ -29,11 +29,7 @@ $u = [. \n]          -- universal: any character
 $white+ ;
 @rsyms
     { tok (\p s -> PT p (eitherResIdent (TV . share) s)) }
-$s ($l | $d | \_ | \')*
-    { tok (\p s -> PT p (eitherResIdent (T_VarIdent . share) s)) }
-$c ($l | $d | \_ | \')*
-    { tok (\p s -> PT p (eitherResIdent (T_MetaVarIdent . share) s)) }
-$s ($l | $d | \_ | \')*
+$l ($l | $d | \_ | \')*
     { tok (\p s -> PT p (eitherResIdent (T_Id . share) s)) }
 
 $l $i*
@@ -58,8 +54,6 @@ data Tok =
  | TV !String         -- identifiers
  | TD !String         -- double precision float literals
  | TC !String         -- character literals
- | T_VarIdent !String
- | T_MetaVarIdent !String
  | T_Id !String
 
  deriving (Eq,Show,Ord)
@@ -98,8 +92,6 @@ prToken t = case t of
   PT _ (TD s)   -> s
   PT _ (TC s)   -> s
   Err _         -> "#error"
-  PT _ (T_VarIdent s) -> s
-  PT _ (T_MetaVarIdent s) -> s
   PT _ (T_Id s) -> s
 
 
@@ -114,7 +106,7 @@ eitherResIdent tv s = treeFind resWords
                               | s == a = t
 
 resWords :: BTree
-resWords = b ";" 4 (b ")" 2 (b "(" 1 N N) (b "." 3 N N)) (b "\955" 6 (b "compute" 5 N N) N)
+resWords = b ":@" 4 (b ")" 2 (b "(" 1 N N) (b ":.:" 3 N N)) (b "O" 6 (b "Constructor" 5 N N) (b "W" 7 N N))
    where b s n = let bs = id s
                   in B bs (TS bs n)
 

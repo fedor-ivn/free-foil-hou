@@ -3,22 +3,14 @@
 
 module Language.Lambda.FCU.FCUSyntax.Abs where
 
-newtype VarIdent = VarIdent String
-  deriving (Eq, Ord, Show, Read)
-
-newtype MetaVarIdent = MetaVarIdent String
-  deriving (Eq, Ord, Show, Read)
-
 newtype Id = Id String
   deriving (Eq, Ord, Show, Read)
 
-data Program = AProgram [Command]
-  deriving (Eq, Ord, Show, Read)
-
-data Command = CommandCompute Term
-  deriving (Eq, Ord, Show, Read)
-
 data Term
-    = Lam Id Term | App Term Term | Var VarIdent | MetaVar MetaVarIdent
+    = WTerm Id
+    | OTerm Id
+    | Constructor Id
+    | AppTerm Term Term
+    | CompTerm Id Term
   deriving (Eq, Ord, Show, Read)
 
