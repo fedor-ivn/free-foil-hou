@@ -17,22 +17,27 @@ import Language.Lambda.FCU.FCUSyntax.ErrM
   ')' { PT _ (TS _ 2) }
   ':.:' { PT _ (TS _ 3) }
   ':@' { PT _ (TS _ 4) }
-  'Constructor' { PT _ (TS _ 5) }
-  'O' { PT _ (TS _ 6) }
-  'W' { PT _ (TS _ 7) }
   L_Id { PT _ (T_Id $$) }
+  L_MetavarId { PT _ (T_MetavarId $$) }
+  L_ConstructorId { PT _ (T_ConstructorId $$) }
 
 %%
 
 Id :: { Id}
 Id  : L_Id { Id ($1)}
 
+MetavarId :: { MetavarId}
+MetavarId  : L_MetavarId { MetavarId ($1)}
+
+ConstructorId :: { ConstructorId}
+ConstructorId  : L_ConstructorId { ConstructorId ($1)}
+
 Term :: { Term }
-Term : 'W' Id { Language.Lambda.FCU.FCUSyntax.Abs.WTerm $2 }
-     | 'O' Id { Language.Lambda.FCU.FCUSyntax.Abs.OTerm $2 }
-     | 'Constructor' Id { Language.Lambda.FCU.FCUSyntax.Abs.Constructor $2 }
+Term : MetavarId { Language.Lambda.FCU.FCUSyntax.Abs.WTerm $1 }
+     | Id { Language.Lambda.FCU.FCUSyntax.Abs.OTerm $1 }
+     | ConstructorId { Language.Lambda.FCU.FCUSyntax.Abs.CTerm $1 }
      | Term ':@' Term { Language.Lambda.FCU.FCUSyntax.Abs.AppTerm $1 $3 }
-     | Id ':.:' Term { Language.Lambda.FCU.FCUSyntax.Abs.CompTerm $1 $3 }
+     | Id ':.:' Term { Language.Lambda.FCU.FCUSyntax.Abs.AbsTerm $1 $3 }
      | '(' Term ')' { $2 }
 {
 

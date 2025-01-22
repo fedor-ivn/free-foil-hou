@@ -12,11 +12,17 @@ failure x = Bad $ "Undefined case: " ++ show x
 transId :: Id -> Result
 transId x = case x of
   Id string -> failure x
+transMetavarId :: MetavarId -> Result
+transMetavarId x = case x of
+  MetavarId string -> failure x
+transConstructorId :: ConstructorId -> Result
+transConstructorId x = case x of
+  ConstructorId string -> failure x
 transTerm :: Term -> Result
 transTerm x = case x of
-  WTerm id -> failure x
+  WTerm metavarid -> failure x
   OTerm id -> failure x
-  Constructor id -> failure x
+  CTerm constructorid -> failure x
   AppTerm term1 term2 -> failure x
-  CompTerm id term -> failure x
+  AbsTerm id term -> failure x
 

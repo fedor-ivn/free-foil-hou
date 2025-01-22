@@ -91,11 +91,17 @@ instance Print Double where
 instance Print Language.Lambda.FCU.FCUSyntax.Abs.Id where
   prt _ (Language.Lambda.FCU.FCUSyntax.Abs.Id i) = doc (showString i)
 
+instance Print Language.Lambda.FCU.FCUSyntax.Abs.MetavarId where
+  prt _ (Language.Lambda.FCU.FCUSyntax.Abs.MetavarId i) = doc (showString i)
+
+instance Print Language.Lambda.FCU.FCUSyntax.Abs.ConstructorId where
+  prt _ (Language.Lambda.FCU.FCUSyntax.Abs.ConstructorId i) = doc (showString i)
+
 instance Print Language.Lambda.FCU.FCUSyntax.Abs.Term where
   prt i e = case e of
-    Language.Lambda.FCU.FCUSyntax.Abs.WTerm id -> prPrec i 0 (concatD [doc (showString "W"), prt 0 id])
-    Language.Lambda.FCU.FCUSyntax.Abs.OTerm id -> prPrec i 0 (concatD [doc (showString "O"), prt 0 id])
-    Language.Lambda.FCU.FCUSyntax.Abs.Constructor id -> prPrec i 0 (concatD [doc (showString "Constructor"), prt 0 id])
+    Language.Lambda.FCU.FCUSyntax.Abs.WTerm metavarid -> prPrec i 0 (concatD [prt 0 metavarid])
+    Language.Lambda.FCU.FCUSyntax.Abs.OTerm id -> prPrec i 0 (concatD [prt 0 id])
+    Language.Lambda.FCU.FCUSyntax.Abs.CTerm constructorid -> prPrec i 0 (concatD [prt 0 constructorid])
     Language.Lambda.FCU.FCUSyntax.Abs.AppTerm term1 term2 -> prPrec i 0 (concatD [prt 0 term1, doc (showString ":@"), prt 0 term2])
-    Language.Lambda.FCU.FCUSyntax.Abs.CompTerm id term -> prPrec i 0 (concatD [prt 0 id, doc (showString ":.:"), prt 0 term])
+    Language.Lambda.FCU.FCUSyntax.Abs.AbsTerm id term -> prPrec i 0 (concatD [prt 0 id, doc (showString ":.:"), prt 0 term])
 

@@ -29,8 +29,12 @@ $u = [. \n]          -- universal: any character
 $white+ ;
 @rsyms
     { tok (\p s -> PT p (eitherResIdent (TV . share) s)) }
-$l ($l | $d | \_ | \')*
+$s ($s | $d)*
     { tok (\p s -> PT p (eitherResIdent (T_Id . share) s)) }
+$c ($c | $d)*
+    { tok (\p s -> PT p (eitherResIdent (T_MetavarId . share) s)) }
+$c $s *
+    { tok (\p s -> PT p (eitherResIdent (T_ConstructorId . share) s)) }
 
 $l $i*
     { tok (\p s -> PT p (eitherResIdent (TV . share) s)) }
@@ -55,6 +59,8 @@ data Tok =
  | TD !String         -- double precision float literals
  | TC !String         -- character literals
  | T_Id !String
+ | T_MetavarId !String
+ | T_ConstructorId !String
 
  deriving (Eq,Show,Ord)
 
@@ -93,6 +99,8 @@ prToken t = case t of
   PT _ (TC s)   -> s
   Err _         -> "#error"
   PT _ (T_Id s) -> s
+  PT _ (T_MetavarId s) -> s
+  PT _ (T_ConstructorId s) -> s
 
 
 data BTree = N | B String Tok BTree BTree deriving (Show)
@@ -106,7 +114,7 @@ eitherResIdent tv s = treeFind resWords
                               | s == a = t
 
 resWords :: BTree
-resWords = b ":@" 4 (b ")" 2 (b "(" 1 N N) (b ":.:" 3 N N)) (b "O" 6 (b "Constructor" 5 N N) (b "W" 7 N N))
+resWords = b ":.:" 3 (b ")" 2 (b "(" 1 N N) N) (b ":@" 4 N N)
    where b s n = let bs = id s
                   in B bs (TS bs n)
 
