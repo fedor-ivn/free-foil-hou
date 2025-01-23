@@ -1,10 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Lambda.FCU.Restrictions where
+module Language.Lambda.FCU.FCUImplSW.Restrictions where
 
-import Language.Lambda.FCU.RTerms (RTerm (..), isRTerm)
-import Language.Lambda.FCU.Substitutions (Substitutions)
-import Language.Lambda.FCU.Terms (Id, Term (..))
+import Language.Lambda.FCU.FCUImplSW.RTerms (RTerm (..), isRTerm)
+import Language.Lambda.FCU.FCUImplSW.Substitutions (Substitutions)
+import Language.Lambda.FCU.FCUImplSW.Terms (Id, Term (..))
 
 -- >>> argumentRestriction ["X" :@ "a" :@ "b" :@ "c", "X" :@ "a" :@ "b" :@ "c"]
 -- False

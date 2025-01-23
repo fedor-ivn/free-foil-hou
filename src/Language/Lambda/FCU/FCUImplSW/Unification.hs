@@ -1,17 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Lambda.FCU.Unification
+module Language.Lambda.FCU.FCUImplSW.Unification
   ( unify,
   )
 where
 
-import Language.Lambda.FCU.Discharge (discharge)
-import Language.Lambda.FCU.Prune (abst, eqsel, hnf, prune)
-import Language.Lambda.FCU.RTerms (RTerm (..), toRTerm)
-import Language.Lambda.FCU.Restrictions (argumentRestriction, globalRestriction, localRestriction)
-import Language.Lambda.FCU.Strip (strip, unstrip)
-import Language.Lambda.FCU.Substitutions (devar, mkvars, rename)
-import Language.Lambda.FCU.Terms (Id, Term (..), newMetaVarId, permutate, subset)
+import Language.Lambda.FCU.FCUImplSW.Discharge (discharge)
+import Language.Lambda.FCU.FCUImplSW.Prune (abst, eqsel, hnf, prune)
+import Language.Lambda.FCU.FCUImplSW.RTerms (RTerm (..), toRTerm)
+import Language.Lambda.FCU.FCUImplSW.Restrictions (argumentRestriction, globalRestriction, localRestriction)
+import Language.Lambda.FCU.FCUImplSW.Strip (strip, unstrip)
+import Language.Lambda.FCU.FCUImplSW.Substitutions (devar, mkvars, rename)
+import Language.Lambda.FCU.FCUImplSW.Terms (Id, Term (..), newMetaVarId, permutate, subset)
 
 ----- Unification ----- bvs (th (s,t)) = Q, (theta, S)
 unify :: [(Char, Id)] -> ([(Id, Term)], (Term, Term)) -> [(Id, Term)]

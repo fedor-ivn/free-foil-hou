@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Lambda.FCU.Terms where
+module Language.Lambda.FCU.FCUImplSW.Terms where
 
 import Data.Char (isUpper)
 import Data.List (elemIndex)
@@ -50,7 +50,7 @@ ppTerm (f :@ x) = case f of
 -- >>> "Cons" :: Term
 -- Cons
 -- >>> "x" :.: ("Cons" :@ "x" :@ "y") :: Term
--- λx . ((Cons x) y)
+-- λx . ((Cons x) (y))
 
 isMeta :: Term -> Bool
 isMeta (W _) = True

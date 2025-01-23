@@ -6,7 +6,7 @@ import qualified Language.Lambda.FCU.FCUSyntax.Lex as Raw
 import qualified Language.Lambda.FCU.FCUSyntax.Layout as Raw
 import qualified Language.Lambda.FCU.FCUSyntax.Print as Raw
 import qualified Language.Lambda.FCU.FCUSyntax.ErrM as Raw
-import Language.Lambda.FCU.Terms
+import Language.Lambda.FCU.FCUImplSW.Terms ( Term(..) ) 
 import qualified Control.Applicative as Raw
 
 
@@ -25,5 +25,5 @@ convertTerm term = case term of
     Raw.AppTerm t1 t2 -> convertTerm t1 :@ convertTerm t2
     Raw.AbsTerm (Raw.Id x) t -> x :.: convertTerm t
 
--- >>> parseTerm "xy :@ y"
--- Right xy y
+-- >>> parseTerm "( f :@ a ) :@ ( x :.: y )"
+-- Right (f a) (λx . (y))

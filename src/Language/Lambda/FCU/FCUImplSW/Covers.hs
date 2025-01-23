@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Language.Lambda.FCU.Covers
+module Language.Lambda.FCU.FCUImplSW.Covers
   ( findCover,
     coverExists,
     CoverTest (..),
@@ -10,8 +10,8 @@ module Language.Lambda.FCU.Covers
 where
 
 import Data.Maybe (isJust)
-import Language.Lambda.FCU.RTerms (RTerm (..), toRTerm, toTerm)
-import Language.Lambda.FCU.Terms (Term (..))
+import Language.Lambda.FCU.FCUImplSW.RTerms (RTerm (..), toRTerm, toTerm)
+import Language.Lambda.FCU.FCUImplSW.Terms (Term (..))
 
 findCover :: [RTerm] -> RTerm -> Maybe RTerm
 findCover params r =

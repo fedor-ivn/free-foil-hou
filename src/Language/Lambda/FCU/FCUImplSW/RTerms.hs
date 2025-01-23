@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Lambda.FCU.RTerms (RTerm (..), toRTerm, toTerm, isRTerm) where
+module Language.Lambda.FCU.FCUImplSW.RTerms (RTerm (..), toRTerm, toTerm, isRTerm) where
 
-import Language.Lambda.FCU.Terms (Id, Term (..))
+import Language.Lambda.FCU.FCUImplSW.Terms (Id, Term (..))
 
 data RTerm = RO Id | RConstructor Id | RApp RTerm RTerm
   deriving (Eq, Show)

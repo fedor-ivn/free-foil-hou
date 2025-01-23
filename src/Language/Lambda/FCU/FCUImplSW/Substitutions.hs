@@ -1,7 +1,7 @@
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Lambda.FCU.Substitutions
+module Language.Lambda.FCU.FCUImplSW.Substitutions
   ( Substitutions (..),
     ppSubstitutions,
     devar,
@@ -11,7 +11,7 @@ module Language.Lambda.FCU.Substitutions
   )
 where
 
-import Language.Lambda.FCU.Terms (Id, Term (..))
+import Language.Lambda.FCU.FCUImplSW.Terms (Id, Term (..))
 
 newtype Substitutions
   = Substitutions [(Id, Term)]
