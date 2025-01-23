@@ -1,13 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Language.Lambda.FCU.Prune where
+module Language.Lambda.FCU.FCUImplSW.Prune where
 
 import Data.List (elemIndex)
-import Language.Lambda.FCU.Covers (coverExists)
-import Language.Lambda.FCU.RTerms (RTerm (..), toRTerm)
-import Language.Lambda.FCU.Strip (strip)
-import Language.Lambda.FCU.Substitutions (Substitutions (..), devar, mkvars)
-import Language.Lambda.FCU.Terms (Id, Term (..), newMetaVarId, subset)
+import Language.Lambda.FCU.FCUImplSW.Covers (coverExists)
+import Language.Lambda.FCU.FCUImplSW.RTerms (RTerm (..), toRTerm)
+import Language.Lambda.FCU.FCUImplSW.Strip (strip)
+import Language.Lambda.FCU.FCUImplSW.Substitutions (Substitutions (..), devar, mkvars)
+import Language.Lambda.FCU.FCUImplSW.Terms (Id, Term (..), newMetaVarId, subset)
 
 abst :: ([Id], Term) -> Term
 abst ([], t) = t
