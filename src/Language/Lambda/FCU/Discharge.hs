@@ -2,7 +2,7 @@
 
 module Language.Lambda.FCU.Discharge where
 
-import Language.Lambda.FCU.PPTerm ()
+import Language.Lambda.FCU.Terms
 import qualified Language.Lambda.FCU.FCUSyntax.Abs as Raw
 
 -- | Discharge a term by replacing all terms t in s with variables z.

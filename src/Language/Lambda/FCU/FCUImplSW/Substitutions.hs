@@ -26,10 +26,12 @@ ppSubstitutions (Substitutions subs) =
   "[" ++ unwords ["(" ++ x ++ " |-> " ++ show y ++ ")" | (x, y) <- subs] ++ "]"
 
 -- >>>(Substitutions [("x", "Y")])
--- [(x -> Y)]
+-- [(x |-> Y)]
+
 -- >>> (Substitutions [("x", "Y"), ("z", "Z")])
--- [(x -> Y) (z -> Z)]
--- theta S -> new S
+-- [(x |-> Y) (z |-> Z)]
+
+
 devarOne :: (Id, Term) -> Term -> Term
 devarOne (from, to) term =
   case term of
@@ -115,7 +117,7 @@ rename x x' (y :.: t) = y :.: rename x x' t
 rename _ _ t = t
 
 -- >>> rename "x" "y" ("x" :@ "z")
--- y (z)
+-- y z
 
 -- >>> rename "x" "y" ("x" :.: "z")
 -- λx . (z)
