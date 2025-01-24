@@ -1,0 +1,18 @@
+comment "--" ;
+
+layout toplevel ;
+
+-- Identifiers
+token Id (lower (lower | digit)*) ;     -- Any number of lowercase letters or digits
+token MetavarId (upper (upper | digit)*) ;     -- Any number of uppercase letters or digits
+token ConstructorId (upper lower*) ;         -- Uppercase letter followed by lowercase letters
+
+-- Terms in your Haskell representation
+WTerm.    Term ::= MetavarId ;
+OTerm.    Term ::= Id ;
+CTerm. Term ::= ConstructorId ;
+AppTerm.     Term ::= Term ":@" Term ;
+AbsTerm.    Term ::= Id ":.:" Term ;
+
+-- Parentheses for grouping terms
+_.           Term ::= "(" Term ")" ;
