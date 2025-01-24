@@ -51,7 +51,7 @@ localRestriction tn =
 -- True
 
 -- >>> globalRestriction ["a", "b1", "c"] ["c", "b2", "a"]
--- True
+-- False
 
 globalRestriction :: [Term] -> [Term] -> Bool
 globalRestriction sn tm =

@@ -2,7 +2,7 @@
 
 module Language.Lambda.FCU.Strip where
 
-import Language.Lambda.FCU.PPTerm ()
+import Language.Lambda.FCU.Terms
 import qualified Language.Lambda.FCU.FCUSyntax.Abs as Raw
 
 -- | Strip a term into a head and a list of arguments.
