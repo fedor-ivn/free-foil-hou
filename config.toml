@@ -2,6 +2,10 @@ language = "untyped λ-calculus"
 fragment = "pattern"
 
 [[problems]]
+metavars = [
+    "X: [t1 -> t2, t3] t2",
+    "Y: [t4] t5",
+]
 constraints = [
     "∀ f: magic -> t, x: magic. X[f, x] = f Y[x]",
     "∀ x: magic. Y[x] = x x"
@@ -10,8 +14,8 @@ constraints = [
 [[problems.solutions]]
 name = "most general"
 substitutions = [
-    "Y[a: magic] ↦ a a",
-    "X[b: magic -> t, c: magic] ↦ b (c c)",
+    "Y[a] ↦ a a",
+    "X[b, c] ↦ b (c c)",
 ]
 
 [[problems.solutions]]

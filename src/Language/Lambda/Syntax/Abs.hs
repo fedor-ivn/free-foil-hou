@@ -23,10 +23,9 @@ data Command = CommandCompute Term
 
 data Term
     = Lam Pattern Type ScopedTerm
-    | Let Pattern Term ScopedTerm
     | App Term Term
     | Var VarIdent
-    | MetaVar MetaVarIdent [Term]
+    | Metavar MetavarIdent [Term]
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 
 data ScopedTerm = AScopedTerm Term
@@ -35,14 +34,17 @@ data ScopedTerm = AScopedTerm Term
 data Pattern = APattern VarIdent
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 
-data Binder = ABinder VarIdent Type
+data VarBinder = AVarBinder VarIdent Type
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 
-data MetaSubst = AMetaSubst MetaVarIdent [Binder] ScopedTerm
+data MetavarBinder = AMetavarBinder MetavarIdent [Type] Type
+  deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
+
+data MetaSubst = AMetaSubst MetavarIdent [VarIdent] ScopedTerm
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 
 data UnificationConstraint
-    = AUnificationConstraint [Binder] ScopedTerm ScopedTerm
+    = AUnificationConstraint [VarBinder] ScopedTerm ScopedTerm
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 
 data Type = Fun Type Type | Base VarIdent
@@ -51,6 +53,6 @@ data Type = Fun Type Type | Base VarIdent
 newtype VarIdent = VarIdent String
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic, Data.String.IsString)
 
-newtype MetaVarIdent = MetaVarIdent String
+newtype MetavarIdent = MetavarIdent String
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic, Data.String.IsString)
 

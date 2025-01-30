@@ -7,6 +7,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
@@ -44,12 +45,13 @@
 -- wildcard patterns and variable patterns are handled in this implementation.
 module Language.Lambda.Impl where
 
+import Control.Monad (forM_, guard)
 import qualified Control.Monad.Foil as Foil
 import Control.Monad.Foil.Internal as FoilInternal
 import Control.Monad.Foil.TH
 import Control.Monad.Free.Foil
 import Control.Monad.Free.Foil.TH
-import Data.Biapplicative (Bifunctor (bimap, first))
+import Data.Biapplicative (Bifunctor (bimap))
 import Data.Bifunctor.Sum
 import Data.Bifunctor.TH
 import Data.Either (partitionEithers)
@@ -95,7 +97,6 @@ mkPatternSynonyms ''TermSig
 
 mkConvertToFreeFoil ''Raw.Term ''Raw.VarIdent ''Raw.ScopedTerm ''Raw.Pattern
 mkConvertFromFreeFoil ''Raw.Term ''Raw.VarIdent ''Raw.ScopedTerm ''Raw.Pattern
-
 -- ** Scope-safe patterns
 
 mkFoilPattern ''Raw.VarIdent ''Raw.Pattern
@@ -118,37 +119,94 @@ instance ZipMatchK TermSig
 -- | Match 'Raw.Ident' via 'Eq'.
 instance ZipMatchK Raw.VarIdent where zipMatchWithK = zipMatchViaEq
 
-instance ZipMatchK Raw.MetaVarIdent where zipMatchWithK = zipMatchViaEq
+instance ZipMatchK Raw.MetavarIdent where zipMatchWithK = zipMatchViaEq
 
 instance ZipMatchK Raw.Type where zipMatchWithK = zipMatchViaEq
+
+-- instance TypedSignature TermSig where
+--   mapSigWithTypes f g sig t = case sig of
+--     AppSig h x -> AppSig (fmap f f) (fmap f x)
+--     Lam typ binder body | Raw.Fun _ b <- t -> Lam typ binder (f body (typ, b))
+--     MetavarSig metavar args -> MetavarSig metavar (fmap (mapSigWithTypes f g) args)
+
+instance TypedSignature TermSig Raw.Type where
+  mapSigWithTypes
+    :: NameMap n Raw.Type
+    -> ( ScopedAST binder (Sum (AnnSig Raw.Type TermSig) ext) n
+         -> (Raw.Type, Raw.Type)
+         -> scopedTerm
+       )
+    -> ( AST binder (Sum (AnnSig Raw.Type TermSig) ext) n
+         -> Raw.Type
+         -> term
+       )
+    -> TermSig
+        (ScopedAST binder (Sum (AnnSig Raw.Type TermSig) ext) n)
+        (AST binder (Sum (AnnSig Raw.Type TermSig) ext) n)
+    -> Raw.Type
+    -> Maybe (TermSig scopedTerm term)
+  mapSigWithTypes varTypes f g sig t = case sig of
+    AppSig fun arg -> do
+      funType <- case fun of
+        Var x -> return (Foil.lookupName x varTypes)
+        Node (L2 (AnnSig _ type_)) -> return type_
+        _ -> Nothing
+      case funType of
+        Raw.Fun argType _returnType ->
+          return (AppSig (g fun funType) (g arg argType))
+        _ -> Nothing
+    LamSig binderType body
+      | Raw.Fun _ returnType <- t ->
+          let body' = f body (binderType, returnType)
+           in return (LamSig binderType body')
+    _ -> Nothing
+
+instance TypedBinder FoilPattern Raw.Type where
+  addBinderTypes
+    :: FoilPattern n l
+    -> Raw.Type
+    -> NameMap n Raw.Type
+    -> NameMap l Raw.Type
+  addBinderTypes (FoilAPattern nameBinder) = Foil.addNameBinder nameBinder
+
+  mapBinderWithTypes
+    :: (NameBinder n l -> Raw.Type -> a)
+    -> Raw.Type
+    -> FoilPattern n l
+    -> [a]
+  mapBinderWithTypes f typ (FoilAPattern nameBinder) = [f nameBinder typ]
 
 -- ** Pattern synonyms
 
 pattern App'
-  :: AST binder (Sum TermSig q) n
-  -> AST binder (Sum TermSig q) n
-  -> AST binder (Sum TermSig q) n
-pattern App' f x = Node (L2 (AppSig f x))
+  :: AST binder (Sum (AnnSig Raw.Type TermSig) q) n
+  -> AST binder (Sum (AnnSig Raw.Type TermSig) q) n
+  -> Raw.Type
+  -> AST binder (Sum (AnnSig Raw.Type TermSig) q) n
+pattern App' f x typ = Node (L2 (AnnSig (AppSig f x) typ))
 
 pattern Lam'
-  :: Raw.Type
-  -> binder n l
-  -> AST binder (Sum TermSig q) l
-  -> AST binder (Sum TermSig q) n
-pattern Lam' typ binder body = Node (L2 (LamSig typ (ScopedAST binder body)))
+  :: binder n l
+  -> Raw.Type
+  -> AST binder (Sum (AnnSig Raw.Type TermSig) q) l
+  -> Raw.Type
+  -> AST binder (Sum (AnnSig Raw.Type TermSig) q) n
+pattern Lam' binder binderType body returnType =
+  Node (L2 (AnnSig (LamSig binderType (ScopedAST binder body)) returnType))
 
-pattern Let'
-  :: AST binder (Sum TermSig q) n
-  -> binder n l
-  -> AST binder (Sum TermSig q) l
-  -> AST binder (Sum TermSig q) n
-pattern Let' term binder body = Node (L2 (LetSig term (ScopedAST binder body)))
+-- pattern Let'
+--   :: AST binder (Sum TermSig q) n
+--   -> binder n l
+--   -> AST binder (Sum TermSig q) l
+--   -> AST binder (Sum TermSig q) n
+-- pattern Let' term binder body = Node (L2 (LetSig term (ScopedAST binder body)))
 
 pattern MetaVar'
-  :: Raw.MetaVarIdent
-  -> [AST binder (Sum TermSig q) n]
-  -> AST binder (Sum TermSig q) n
-pattern MetaVar' metavar args = Node (L2 (MetaVarSig metavar args))
+  :: Raw.MetavarIdent
+  -> [AST binder (Sum (AnnSig Raw.Type TermSig) q) n]
+  -> Raw.Type
+  -> AST binder (Sum (AnnSig Raw.Type TermSig) q) n
+pattern MetaVar' metavar args typ = Node (L2 (AnnSig (MetavarSig metavar args) typ))
 
 -- FV( (λ x. x) y )  =  { y }
 --
@@ -161,12 +219,10 @@ pattern MetaVar' metavar args = Node (L2 (MetaVarSig metavar args))
 
 -- * User-defined code
 
-type AST' = AST FoilPattern
-
 -- | Scope-safe λ-term representation in scope @n@.
-type Term = AST' TermSig
+type Term = AST FoilPattern TermSig
 
-type MetaTerm metavar n = SOAS FoilPattern metavar TermSig n
+type MetaTerm metavar n t = SOAS FoilPattern metavar (AnnSig t TermSig) n
 
 -- M[g, \z. z a]
 -- M[x, y] -> y x
@@ -186,36 +242,32 @@ type MetaTerm metavar n = SOAS FoilPattern metavar TermSig n
 -- >>> nfMetaTermWithEmptyScope $ applyMetaSubsts id Foil.emptyScope (MetaSubsts [subst]) term
 -- λ x0 : t . λ x1 : u . x0 x1
 
-{-# COMPLETE Var, Lam', App', Let', MetaVar', MetaApp #-}
+-- {-# COMPLETE Var, Lam', App', Let', MetaVar', MetaApp #-}
+{-# COMPLETE Var, Lam', App', MetaVar', MetaApp #-}
 
 nfMetaTerm
   :: (Foil.Distinct n)
   => Foil.Scope n
-  -> MetaTerm metavar n
-  -> MetaTerm metavar n
+  -> MetaTerm metavar n Raw.Type
+  -> MetaTerm metavar n Raw.Type
 nfMetaTerm scope = \case
   Var x -> Var x
-  Lam' typ binder body
+  Lam' binder binderType body returnType
     | Foil.Distinct <- Foil.assertDistinct binder ->
         let extendedScope = Foil.extendScopePattern binder scope
-         in Lam' typ binder (nfMetaTerm extendedScope body)
-  App' f x ->
+         in Lam' binder binderType (nfMetaTerm extendedScope body) returnType
+  App' f x typ ->
     case nfMetaTerm scope f of
-      Lam' _typ binder body ->
+      Lam' binder _binderType body _returnType ->
         let subst = matchPattern binder x
          in nfMetaTerm scope (substitute scope subst body)
-      f' -> App' f' (nfMetaTerm scope x)
-  Let' value binder body ->
-    let subst = matchPattern binder value
-        body' = substitute scope subst body
-     in nfMetaTerm scope body'
-  MetaVar' metavar args -> MetaVar' metavar (map (nfMetaTerm scope) args)
-  -- MetaSubst' metavar term -> MetaSubst' metavar (nfMetaTerm scope term)
+      f' -> App' f' (nfMetaTerm scope x) typ
+  MetaVar' metavar args typ -> MetaVar' metavar (map (nfMetaTerm scope) args) typ
   MetaApp metavar args -> MetaApp metavar (map (nfMetaTerm scope) args)
 
 nfMetaTermWithEmptyScope
-  :: SOAS FoilPattern metavar TermSig VoidS
-  -> SOAS FoilPattern metavar TermSig VoidS
+  :: MetaTerm metavar Foil.VoidS Raw.Type
+  -> MetaTerm metavar Foil.VoidS Raw.Type
 nfMetaTermWithEmptyScope = nfMetaTerm Foil.emptyScope
 
 nameMapToSubsts :: Foil.NameMap i (e o) -> Foil.Substitution e i o
@@ -224,19 +276,40 @@ nameMapToSubsts nameMap =
 
 -- ** Conversion helpers for 'MetaSubst'
 
-toMetaSubst :: Raw.MetaSubst -> MetaSubst'
-toMetaSubst (Raw.AMetaSubst metavar vars term) =
-  withMetaSubstVars vars Foil.emptyScope Map.empty NameBinderListEmpty Foil.emptyNameMap $ \scope env binderList binderTypes ->
-    let term' = toTerm scope env (getTermFromScopedTerm term)
-     in MetaSubst (metavar, MetaAbs binderList binderTypes (toMetaTerm term'))
+toMetaSubst
+  :: MetavarBinders
+  -> Raw.MetaSubst
+  -> Maybe MetaSubst'
+toMetaSubst metavarBinders (Raw.AMetaSubst metavar argIdents term) =
+  do
+    (argTypes, metavarType) <- Map.lookup metavar metavarBinders
+    guard (length argTypes == length argIdents)
+    let binders = zip argIdents argTypes
+    with binders $ \scope env binderList binderTypes ->
+      do
+        (term', termType) <-
+          annotate
+            metavarBinders
+            binderTypes
+            (toTerm scope env (getTermFromScopedTerm term))
+        guard (termType == metavarType)
+        let metaAbs = MetaAbs binderList binderTypes term'
+        pure (MetaSubst (metavar, metaAbs))
+ where
+  with =
+    withMetaSubstVars
+      Foil.emptyScope
+      Map.empty
+      NameBinderListEmpty
+      Foil.emptyNameMap
 
 withMetaSubstVars
   :: (Distinct n)
-  => [Raw.Binder]
-  -> Scope n
+  => Scope n
   -> Map Raw.VarIdent (Foil.Name n)
   -> NameBinderList i n
   -> Foil.NameMap n Raw.Type
+  -> [(Raw.VarIdent, Raw.Type)]
   -> ( forall l
         . (Distinct l)
        => Scope l
@@ -246,39 +319,59 @@ withMetaSubstVars
        -> r
      )
   -> r
-withMetaSubstVars [] scope env binderList binderTypes cont = cont scope env binderList binderTypes
-withMetaSubstVars (Raw.ABinder ident type_ : idents) scope env binderList binderTypes cont =
-  withFresh scope $ \binder ->
-    let scope' = Foil.extendScope binder scope
-        name = Foil.nameOf binder
-        env' = Map.insert ident name (Foil.sink <$> env)
-        binderList' = push binder binderList
-        binderTypes' = Foil.addNameBinder binder type_ binderTypes
-     in withMetaSubstVars idents scope' env' binderList' binderTypes' cont
+withMetaSubstVars scope env binderList binderTypes [] cont =
+  cont scope env binderList binderTypes
+withMetaSubstVars
+  scope
+  env
+  binderList
+  binderTypes
+  ((ident, type_) : binders)
+  cont =
+    withFresh scope $ \binder ->
+      let scope' = Foil.extendScope binder scope
+          name = Foil.nameOf binder
+          env' = Map.insert ident name (Foil.sink <$> env)
+          binderList' = push binder binderList
+          binderTypes' = Foil.addNameBinder binder type_ binderTypes
+       in withMetaSubstVars scope' env' binderList' binderTypes' binders cont
 
 type MetaSubst' =
   MetaSubst
     FoilPattern
-    TermSig
-    Raw.MetaVarIdent
-    (MetaAppSig Raw.MetaVarIdent)
+    (AnnSig Raw.Type TermSig)
+    Raw.MetavarIdent
+    (MetaAppSig Raw.MetavarIdent)
     Raw.Type
 
 type MetaSubsts' =
   MetaSubsts
     FoilPattern
-    TermSig
-    Raw.MetaVarIdent
-    (MetaAppSig Raw.MetaVarIdent)
+    (AnnSig Raw.Type TermSig)
+    Raw.MetavarIdent
+    (MetaAppSig Raw.MetavarIdent)
     Raw.Type
 
 fromMetaSubst :: MetaSubst' -> Raw.MetaSubst
-fromMetaSubst (MetaSubst (metavar, MetaAbs binderList binderTypes term)) =
+fromMetaSubst (MetaSubst (metavar, MetaAbs binderList _binderTypes term)) =
   let term' = Raw.AScopedTerm $ fromTerm $ fromMetaTerm term
-      idents = toBinders binderList binderTypes
+      idents = toIdents binderList
    in Raw.AMetaSubst metavar idents term'
 
-toBinders :: (Foil.Distinct i) => NameBinderList i n -> Foil.NameMap n Raw.Type -> [Raw.Binder]
+toIdents :: (Foil.Distinct i) => NameBinderList i n -> [Raw.VarIdent]
+toIdents NameBinderListEmpty = []
+toIdents (NameBinderListCons x xs)
+  | Foil.Distinct <- Foil.assertDistinct x
+  , Foil.Distinct <- Foil.assertDistinct xs
+  , Foil.Ext <- Foil.assertExt xs =
+      let ident = Raw.VarIdent $ "x" ++ show (Foil.nameOf x)
+       in ident : toIdents xs
+
+toBinders
+  :: (Foil.Distinct i)
+  => NameBinderList i n
+  -> Foil.NameMap n Raw.Type
+  -> [Raw.VarBinder]
 toBinders NameBinderListEmpty _binderTypes = []
 toBinders (NameBinderListCons x xs) binderTypes
   | Foil.Distinct <- Foil.assertDistinct x
@@ -286,7 +379,7 @@ toBinders (NameBinderListCons x xs) binderTypes
   , Foil.Ext <- Foil.assertExt xs =
       let ident = Raw.VarIdent $ "x" ++ show (Foil.nameOf x)
           typ = Foil.lookupName (Foil.sink (Foil.nameOf x)) binderTypes
-       in Raw.ABinder ident typ : toBinders xs binderTypes
+       in Raw.AVarBinder ident typ : toBinders xs binderTypes
 
 data UnificationConstraint where
   UnificationConstraint
@@ -294,36 +387,102 @@ data UnificationConstraint where
     => Scope n
     -> NameBinderList Foil.VoidS n
     -> Foil.NameMap n Raw.Type
-    -> MetaTerm Raw.MetaVarIdent n
-    -> MetaTerm Raw.MetaVarIdent n
+    -> MetaTerm Raw.MetavarIdent n Raw.Type
+    -> MetaTerm Raw.MetavarIdent n Raw.Type
     -> UnificationConstraint
 
-toUnificationConstraint :: Raw.UnificationConstraint -> UnificationConstraint
-toUnificationConstraint (Raw.AUnificationConstraint vars lhs rhs) =
-  withMetaSubstVars vars Foil.emptyScope Map.empty NameBinderListEmpty Foil.emptyNameMap $ \scope env binders binderTypes ->
-    let toMetaTerm' = toMetaTerm . toTerm scope env . getTermFromScopedTerm
-     in UnificationConstraint scope binders binderTypes (toMetaTerm' lhs) (toMetaTerm' rhs)
+type MetavarBinder = (Raw.MetavarIdent, ([Raw.Type], Raw.Type))
+type MetavarBinders = Map Raw.MetavarIdent ([Raw.Type], Raw.Type)
+
+toUnificationConstraint
+  :: MetavarBinders
+  -> Raw.UnificationConstraint
+  -> Maybe UnificationConstraint
+toUnificationConstraint metavarBinders (Raw.AUnificationConstraint vars lhs rhs) =
+  withMetaSubstVars
+    Foil.emptyScope
+    Map.empty
+    NameBinderListEmpty
+    Foil.emptyNameMap
+    binders
+    $ \scope env binderList binderTypes ->
+      let annotate' =
+            annotate
+              metavarBinders
+              binderTypes
+              . toTerm scope env
+              . getTermFromScopedTerm
+       in do
+            (lhs', lhsType) <- annotate' lhs
+            (rhs', rhsType) <- annotate' rhs
+            guard (lhsType == rhsType)
+            pure (UnificationConstraint scope binderList binderTypes lhs' rhs')
+ where
+  binders = map (\(Raw.AVarBinder ident typ) -> (ident, typ)) vars
 
 fromUnificationConstraint :: UnificationConstraint -> Raw.UnificationConstraint
 fromUnificationConstraint (UnificationConstraint _ binders binderTypes lhs rhs) =
   let fromMetaTerm' = Raw.AScopedTerm . fromTerm . fromMetaTerm
-   in Raw.AUnificationConstraint (toBinders binders binderTypes) (fromMetaTerm' lhs) (fromMetaTerm' rhs)
+   in Raw.AUnificationConstraint
+        (toBinders binders binderTypes)
+        (fromMetaTerm' lhs)
+        (fromMetaTerm' rhs)
 
 -- ** Conversion helpers for 'MetaTerm'
 
-toMetaTerm :: Term n -> MetaTerm Raw.MetaVarIdent n
-toMetaTerm = \case
-  MetaVar metavar args -> MetaApp metavar (map toMetaTerm args)
-  Var name -> Var name
-  Node node -> Node (L2 (bimap toMetaScopedTerm toMetaTerm node))
- where
-  toMetaScopedTerm (ScopedAST binder body) = ScopedAST binder (toMetaTerm body)
+toMetaTerm
+  :: MetavarBinders
+  -> Foil.NameMap n Raw.Type
+  -> Term n
+  -> Maybe (MetaTerm Raw.MetavarIdent n Raw.Type)
+toMetaTerm metavarTypes varTypes term =
+  fst <$> annotate metavarTypes varTypes term
 
-fromMetaTerm :: MetaTerm Raw.MetaVarIdent n -> Term n
+-- >>> let Just (a, b) = annotate Map.empty Foil.emptyNameMap ("λy:t.λx:u.λy:v.y" :: Term Foil.VoidS)
+-- >>> b
+-- Fun (Base (VarIdent "t")) (Fun (Base (VarIdent "u")) (Fun (Base (VarIdent "v")) (Base (VarIdent "v"))))
+annotate
+  :: MetavarBinders
+  -> Foil.NameMap n Raw.Type
+  -> Term n
+  -> Maybe (MetaTerm Raw.MetavarIdent n Raw.Type, Raw.Type)
+annotate _ varTypes (Var x) =
+  Just (Var x, Foil.lookupName x varTypes)
+annotate metavarTypes varTypes (App function argument) = do
+  (function', functionType) <- annotate metavarTypes varTypes function
+  (argument', argumentType) <- annotate metavarTypes varTypes argument
+  case functionType of
+    Raw.Fun argumentType' returnType
+      | argumentType == argumentType' ->
+          let annSig = AnnSig (AppSig function' argument') returnType
+              term = Node (L2 annSig)
+           in Just (term, returnType)
+    _ -> Nothing
+annotate metavarTypes varTypes (Lam typ binder body) = do
+  let (FoilAPattern name) = binder
+      varTypes' = Foil.addNameBinder name typ varTypes
+  (body', returnType) <- annotate metavarTypes varTypes' body
+  let lamType = Raw.Fun typ returnType
+      annSig = AnnSig (LamSig typ (ScopedAST binder body')) lamType
+      term = Node (L2 annSig)
+  Just (term, lamType)
+annotate metavarTypes varTypes (Metavar metavar args) = do
+  (expectedArgTypes, returnType) <- Map.lookup metavar metavarTypes
+  _ <- guard (length args == length expectedArgTypes)
+  annotatedArgs <- traverse checkArg (zip args expectedArgTypes)
+  let term = MetaApp metavar annotatedArgs
+  pure (term, returnType)
+ where
+  checkArg (arg, expectedType) = do
+    (annotatedArg, actualType) <- annotate metavarTypes varTypes arg
+    guard (actualType == expectedType)
+    pure annotatedArg
+
+fromMetaTerm :: MetaTerm Raw.MetavarIdent n t -> Term n
 fromMetaTerm = \case
   Var name -> Var name
-  Node (R2 (MetaAppSig metavar args)) -> MetaVar metavar (map fromMetaTerm args)
-  Node (L2 node) -> Node (bimap fromMetaScopedTerm fromMetaTerm node)
+  Node (R2 (MetaAppSig metavar args)) -> Metavar metavar (map fromMetaTerm args)
+  Node (L2 (AnnSig node _)) -> Node (bimap fromMetaScopedTerm fromMetaTerm node)
  where
   fromMetaScopedTerm (ScopedAST binder body) = ScopedAST binder (fromMetaTerm body)
 
@@ -348,17 +507,17 @@ fromTerm =
     Raw.AScopedTerm
     (\i -> Raw.VarIdent ("x" ++ show i))
 
--- >>> lam (Raw.Base (Raw.VarIdent "t")) Foil.emptyScope (\x -> App (MetaVar (Raw.MetaVarIdent "X") []) (Var x))
+-- >>> lam (Raw.Base (Raw.VarIdent "t")) Foil.emptyScope (\x -> App (MetaVar (Raw.MetavarIdent "X") []) (Var x))
 -- λ x0 : t . X [] x0
 lam :: (Distinct n) => Raw.Type -> Foil.Scope n -> (forall l. (Foil.DExt n l) => Foil.Name l -> Term l) -> Term n
 lam typ scope makeBody = Foil.withFresh scope $ \x' ->
   let x = Foil.nameOf x'
    in Lam typ (FoilAPattern x') (makeBody x)
 
-lam' :: (Distinct n) => Raw.Type -> Foil.Scope n -> (forall l. (Foil.DExt n l) => Foil.Name l -> MetaTerm metavar l) -> MetaTerm metavar n
-lam' typ scope makeBody = Foil.withFresh scope $ \x' ->
-  let x = Foil.nameOf x'
-   in Lam' typ (FoilAPattern x') (makeBody x)
+-- lam' :: (Distinct n) => Raw.Type -> Foil.Scope n -> (forall l. (Foil.DExt n l) => Foil.Name l -> MetaTerm metavar l Raw.Type) -> MetaTerm metavar n Raw.Type
+-- lam' typ scope makeBody = Foil.withFresh scope $ \x' ->
+--   let x = Foil.nameOf x'
+--    in Lam' typ (FoilAPattern x') (makeBody x)
 
 -- >>> lam (Raw.Base (Raw.VarIdent "t")) Foil.emptyScope (\x -> App (Var x) (Var x))
 -- λ x0 : t . x0 x0
@@ -371,15 +530,14 @@ instance IsString (Term Foil.VoidS) where
   fromString :: String -> Term VoidS
   fromString = unsafeParseTerm
 
-instance Show (MetaTerm Raw.MetaVarIdent n) where
-  show :: MetaTerm Raw.MetaVarIdent n -> String
+instance Show (MetaTerm Raw.MetavarIdent n Raw.Type) where
+  show :: MetaTerm Raw.MetavarIdent n t -> String
   show = Raw.printTree . fromTerm . fromMetaTerm
 
--- >>> "λy:t.(λx:u.λy:v.X[x, y X[y, x]])y" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
--- λ x0 : t . (λ x1 : u . λ x2 : v . X [x1, x2 X [x2, x1]]) x0
-instance IsString (MetaTerm Raw.MetaVarIdent Foil.VoidS) where
-  fromString :: String -> MetaTerm Raw.MetaVarIdent VoidS
-  fromString = toMetaTerm . unsafeParseTerm
+-- >>> "λy:t.(λx:u.λy:v.X[x, y X[y, x]])y" :: MetaTerm Raw.MetavarIdent Foil.VoidS Raw.Type
+-- instance IsString (MetaTerm Raw.MetavarIdent Foil.VoidS Raw.Type) where
+--   fromString :: String -> MetaTerm Raw.MetavarIdent VoidS Raw.Type
+--   fromString = toMetaTerm Map.empty Foil.emptyNameMap . unsafeParseTerm
 
 -- >>> "X [ x: t, y: u, z: v ] ↦ λy:t.(λx:t.λy:u.X[x, y X[y, x]])y" :: MetaSubst'
 -- X [x0 : t, x1 : u, x2 : v] ↦ λ x3 : t . (λ x4 : t . λ x5 : u . X [x4, x5 X [x5, x4]]) x3
@@ -391,11 +549,11 @@ instance Show MetaSubsts' where
   show :: MetaSubsts' -> String
   show = show . getMetaSubsts
 
--- >>> "X [ x: a, y: u ] ↦ λ x : t. y" :: MetaSubst'
--- X [x0 : a, x1 : u] ↦ λ x2 : t . x1
-instance IsString MetaSubst' where
-  fromString :: String -> MetaSubst'
-  fromString = unsafeParseMetaSubst
+-- -- >>> "X [ x, y ] ↦ λ x : t. y" :: MetaSubst'
+-- -- type error
+-- instance IsString MetaSubst' where
+--   fromString :: String -> MetaSubst'
+--   fromString = unsafeParseMetaSubst Map.empty
 
 unsafeParseTerm :: String -> Term Foil.VoidS
 unsafeParseTerm input =
@@ -405,31 +563,50 @@ unsafeParseTerm input =
  where
   tokens = Raw.resolveLayout False (Raw.myLexer input)
 
-parseMetaSubst :: String -> Either String MetaSubst'
-parseMetaSubst input =
+parseMetaSubst :: MetavarBinders -> String -> Either String MetaSubst'
+parseMetaSubst metavarBinders input = do
   let tokens = Raw.resolveLayout False (Raw.myLexer input)
-   in toMetaSubst <$> Raw.pMetaSubst tokens
+  raw <- Raw.pMetaSubst tokens
+  case toMetaSubst metavarBinders raw of
+    Just subst -> pure subst
+    Nothing -> Left "type error"
 
-unsafeParseMetaSubst :: String -> MetaSubst'
-unsafeParseMetaSubst = either error id . parseMetaSubst
+unsafeParseMetaSubst :: MetavarBinders -> String -> MetaSubst'
+unsafeParseMetaSubst metavarBinders =
+  either error id . parseMetaSubst metavarBinders
+
+parseMetavarBinder :: String -> Either String MetavarBinder
+parseMetavarBinder input = fmap toMetavarBinder (Raw.pMetavarBinder tokens)
+ where
+  tokens = Raw.resolveLayout False (Raw.myLexer input)
+  toMetavarBinder (Raw.AMetavarBinder metavar args returnType) =
+    (metavar, (args, returnType))
+
+instance IsString MetavarBinder where
+  fromString :: String -> MetavarBinder
+  fromString = either error id . parseMetavarBinder
 
 -- >>> "∀ m: t, n: u. Y[m, X[n, m]] = (λ x: t. m (x n)) m" :: UnificationConstraint
 -- ∀ x0 : t, x1 : u . Y [x0, X [x1, x0]] = (λ x2 : t . x0 (x2 x1)) x0
 instance IsString UnificationConstraint where
   fromString :: String -> UnificationConstraint
-  fromString = unsafeParseUnificationConstraint
+  fromString = unsafeParseUnificationConstraint Map.empty
 
 instance Show UnificationConstraint where
   show :: UnificationConstraint -> String
   show = Raw.printTree . fromUnificationConstraint
 
-unsafeParseUnificationConstraint :: String -> UnificationConstraint
-unsafeParseUnificationConstraint input =
-  case Raw.pUnificationConstraint tokens of
-    Left err -> error err
-    Right problem -> toUnificationConstraint problem
- where
-  tokens = Raw.resolveLayout False (Raw.myLexer input)
+parseUnificationConstraint :: MetavarBinders -> String -> Either String UnificationConstraint
+parseUnificationConstraint metavarBinders input = do
+  let tokens = Raw.resolveLayout False (Raw.myLexer input)
+  raw <- Raw.pUnificationConstraint tokens
+  case toUnificationConstraint metavarBinders raw of
+    Just uc -> pure uc
+    Nothing -> Left "type error"
+
+unsafeParseUnificationConstraint :: MetavarBinders -> String -> UnificationConstraint
+unsafeParseUnificationConstraint metavarBinders =
+  either error id . parseUnificationConstraint metavarBinders
 
 -- | Match a pattern against an term.
 matchPattern :: (InjectName t) => FoilPattern n l -> t n -> Foil.Substitution t l n
@@ -477,10 +654,10 @@ nf scope = \case
     | Foil.Distinct <- Foil.assertDistinct binder ->
         let extendedScope = Foil.extendScopePattern binder scope
          in Lam typ binder (nf extendedScope body)
-  Let value binder body
-    | Foil.Distinct <- Foil.assertDistinct binder ->
-        let subst = matchPattern binder value
-         in nf scope (substitute scope subst body)
+  -- Let value binder body
+  --   | Foil.Distinct <- Foil.assertDistinct binder ->
+  --       let subst = matchPattern binder value
+  --        in nf scope (substitute scope subst body)
   t -> t
 
 interpretCommand :: Raw.Command -> IO ()
@@ -492,25 +669,38 @@ interpretProgram (Raw.AProgram commands) = mapM_ interpretCommand commands
 
 -- ** Test framework implementation
 
--- >>> constraint = "∀ g:t1, a:t2, w:t3. X[g, λz:t4. z a] = g a" :: UnificationConstraint
--- >>> subst = "X[x : t2, y : t3] ↦ (λ z : t1 . y z) x" :: MetaSubst'
+-- >>> metavarBinders = Map.fromList (["X : [t, t] t"] :: [MetavarBinder])
+-- >>> constraint = unsafeParseUnificationConstraint metavarBinders "∀ m: t, n: t. X[m, n] = n"
+-- >>> subst = unsafeParseMetaSubst metavarBinders "X [x, y] ↦ y"
 -- >>> isSolved (solveUnificationConstraint (MetaSubsts [subst]) constraint)
 -- True
+
+-- >>> constraint = "∀ g:t1, a:t1, w:t3. X[g, a] = a" :: UnificationConstraint
+-- >>> subst = "X[x : t2, y : t3] ↦ (λ z : t1 . y z) x" :: MetaSubst'
+-- >>> isSolved (solveUnificationConstraint (MetaSubsts [subst]) constraint)
+-- toMetaTerm': failed to annotate term
 -- >>> constraint1 = "∀ f:t, x:t . X[f, x] = f Y[x]" :: UnificationConstraint
 -- >>> constraint2 = "∀ x:t . Y[x] = x x" :: UnificationConstraint
 -- >>> subst1 = "Y[x:t] ↦ x x" :: MetaSubst'
 -- >>> subst2 = "X[f:t, x:t] ↦ f (x x)" :: MetaSubst'
 -- >>> subst3 = "M[x:t, y:t] ↦ y x" :: MetaSubst'
 -- >>> all (isSolved . solveUnificationConstraint (MetaSubsts [subst1, subst2, subst3])) [constraint1, constraint2]
--- True
+-- syntax error at line 1, column 1 before `∀'
 
 solveUnificationConstraint
-  :: MetaSubsts FoilPattern TermSig Raw.MetaVarIdent (MetaAppSig Raw.MetaVarIdent) Raw.Type
+  :: MetaSubsts FoilPattern (AnnSig Raw.Type TermSig) Raw.MetavarIdent (MetaAppSig Raw.MetavarIdent) Raw.Type
   -> UnificationConstraint
   -> UnificationConstraint
-solveUnificationConstraint substs (UnificationConstraint scope binders binderTypes lhs rhs) =
-  let solve = nfMetaTerm scope . applyMetaSubsts id scope substs
-   in UnificationConstraint scope binders binderTypes (solve lhs) (solve rhs)
+solveUnificationConstraint
+  substs
+  (UnificationConstraint scope binders binderTypes lhs rhs) =
+    let solve = nfMetaTerm scope . applyMetaSubsts id scope substs
+     in UnificationConstraint
+          scope
+          binders
+          binderTypes
+          (solve lhs)
+          (solve rhs)
 
 isSolved :: UnificationConstraint -> Bool
 isSolved (UnificationConstraint scope _binders _binderTypes lhs rhs) = alphaEquiv scope lhs rhs
@@ -524,14 +714,15 @@ data Config = Config
   deriving (Show, Generic)
 
 data Problem = Problem
-  { problemConstraints :: [UnificationConstraint]
+  { problemMetavars :: [String]
+  , problemConstraints :: [String]
   , problemSolutions :: [Solution]
   }
   deriving (Show, Generic)
 
 data Solution = Solution
   { solutionName :: Text
-  , solutionSubstitutions :: [MetaSubst']
+  , solutionSubstitutions :: [String]
   }
   deriving (Show, Generic)
 
@@ -546,42 +737,43 @@ configCodec =
 problemCodec :: TomlCodec Problem
 problemCodec =
   Problem
-    <$> constraintsCodec
+    <$> stringsCodec "metavars"
+    <*> stringsCodec "constraints"
     <*> Toml.list solutionCodec "solutions" .= problemSolutions
- where
-  constraintsCodec =
-    map (unsafeParseUnificationConstraint . TIO.unpack)
-      <$> Toml.arrayOf Toml._Text "constraints" .= error "no encode needed"
 
-parseTextToEither :: (String -> Either String a) -> Text -> Either Text a
-parseTextToEither parse = first fromString . parse . TIO.unpack
+stringsCodec :: Toml.Key -> Toml.Codec object [String]
+stringsCodec field =
+  map TIO.unpack
+    <$> Toml.arrayOf Toml._Text field .= error "no encode needed"
 
 solutionCodec :: TomlCodec Solution
 solutionCodec =
   Solution
     <$> Toml.text "name" .= solutionName
-    <*> substitutionsCodec
- where
-  substitutionsCodec =
-    map (unsafeParseMetaSubst . TIO.unpack)
-      <$> Toml.arrayOf Toml._Text "substitutions" .= error "no encode needed"
+    <*> stringsCodec "substitutions" .= solutionSubstitutions
 
-toCodec :: (Show a) => (String -> Either String a) -> Toml.Key -> TomlCodec a
-toCodec parseString =
-  let parseText = first fromString . parseString . TIO.unpack
-      showText = TIO.pack . show
-   in Toml.textBy showText parseText
-
-validateProblem :: Problem -> ([(Solution, [UnificationConstraint])], [Solution])
-validateProblem (Problem constraints solutions) =
+validateProblem :: Problem -> Either String ([(Solution, [UnificationConstraint])], [Solution])
+validateProblem (Problem rawMetavarBinders rawConstraints rawSolutions) = do
+  metavarBindersList <- traverse parseMetavarBinder rawMetavarBinders
+  let metavarBinders = Map.fromList metavarBindersList
+  constraints <- traverse (parseUnificationConstraint metavarBinders) rawConstraints
+  solutions <- traverse (parseSolution metavarBinders) rawSolutions
   let results = map (validateSolution constraints) solutions
-   in partitionEithers results
+  pure (partitionEithers results)
+ where
+  parseSolution metavarBinders solution = do
+    parsedSubsts <-
+      traverse
+        (parseMetaSubst metavarBinders)
+        (solutionSubstitutions solution)
+    pure (solution, MetaSubsts parsedSubsts)
 
--- Helper function to check if a constraint is solved by a specific solution
-validateSolution :: [UnificationConstraint] -> Solution -> Either (Solution, [UnificationConstraint]) Solution
-validateSolution constraints solution =
-  let substs = MetaSubsts (solutionSubstitutions solution)
-      constraints' = map (solveUnificationConstraint substs) constraints
+validateSolution
+  :: [UnificationConstraint]
+  -> (Solution, MetaSubsts')
+  -> Either (Solution, [UnificationConstraint]) Solution
+validateSolution constraints (solution, substs) =
+  let constraints' = map (solveUnificationConstraint substs) constraints
    in if all isSolved constraints'
         then Right solution
         else Left (solution, constraints')
@@ -600,26 +792,50 @@ printInvalidSolutionsWithConstraint (solution, constraints) = do
   putStrLn $ replicate 25 '-' <> "\n"
 
 -- Main function to parse and print the configuration
+data ValidationError
+  = ConfigError Toml.TomlDecodeError
+  | ProblemError String Problem
+  deriving (Show)
+
 parseConfigAndValidate :: IO ()
 parseConfigAndValidate = do
   configResult <- Toml.decodeFileEither configCodec "config.toml"
   case configResult of
-    Left err -> print err
-    Right cfg -> mapM_ validateAndPrintProblem (configProblems cfg)
+    Left errs -> do
+      putStrLn "\n=== Configuration Errors ==="
+      putStr $ formatTomlErrors errs
+    Right cfg -> mapM_ processValidation (configProblems cfg)
  where
-  validateAndPrintProblem :: Problem -> IO ()
-  validateAndPrintProblem problem = do
-    let (invalidSolutionsWithConstraints, validatedSolutions) = validateProblem problem
-    putStrLn "=== Validated solutions ==="
-    mapM_ (putStrLn . ("- " ++) . show . solutionName) validatedSolutions
-    putStrLn "\n=== Invalid solutions ===\n"
-    mapM_ printInvalidSolutionsWithConstraint invalidSolutionsWithConstraints
+  processValidation problem =
+    case validateProblem problem of
+      Left err -> printError $ ProblemError err problem
+      Right (invalid, valid) -> do
+        printValidSolutions valid
+        printInvalidSolutions invalid
+
+  printValidSolutions valid = do
+    putStrLn "\n=== Validated solutions ==="
+    mapM_ (putStrLn . ("✓ " ++) . show . solutionName) valid
+
+  printInvalidSolutions invalid = do
+    putStrLn "\n=== Invalid solutions ==="
+    forM_ invalid $ \(solution, constraints) -> do
+      putStrLn $ "✗ " ++ show (solutionName solution)
+      mapM_ (putStrLn . ("  - " ++) . show) constraints
+
+  printError err = putStrLn $ "\n=== Error ===" ++ "\n" ++ show err
+
+  -- Add helper for error formatting
+  formatTomlErrors errs =
+    unlines $
+      "Configuration errors:" : map (\err -> "  - " ++ show err) errs
 
 main :: IO ()
 main = parseConfigAndValidate
+
 -- main = do
---   let lhs = "M[λy:t. λx:t. x, λa:t. λa:t. a]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
---   let rhs = "λy:t. λx:t. x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+--   let lhs = "M[λy:t. λx:t. x, λa:t. λa:t. a]" :: MetaTerm Raw.MetavarIdent Foil.VoidS
+--   let rhs = "λy:t. λx:t. x" :: MetaTerm Raw.MetavarIdent Foil.VoidS
 --   let res = match Foil.emptyScope lhs rhs :: [MetaSubsts']
 --   print res
 
@@ -627,32 +843,31 @@ main = parseConfigAndValidate
 -- M [z1, z2] ↦ λa.z1
 -- N [z1, z2] ↦ z1
 
--- >>> lhs = "M[λx:t.x, λx:t.x]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
--- >>> rhs = "λx:t.x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> lhs = "M[λx:t.x, λx:t.x]" :: MetaTerm Raw.MetavarIdent Foil.VoidS
+-- >>> rhs = "λx:t.x" :: MetaTerm Raw.MetavarIdent Foil.VoidS
 -- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
--- [[M [x0 : T, x1 : T] ↦ x0],[M [x0 : T, x1 : T] ↦ x1],[M [x0 : T, x1 : T] ↦ λ x2 : t . x2]]
 
--- >>> lhs = "M[λy:t. y, λa:t. λa:t. a]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
--- >>> rhs = "λy:t. y" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> lhs = "M[λy:t. y, λa:t. λa:t. a]" :: MetaTerm Raw.MetavarIdent Foil.VoidS
+-- >>> rhs = "λy:t. y" :: MetaTerm Raw.MetavarIdent Foil.VoidS
 -- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
 -- [[M [x0 : T, x1 : T] ↦ x0],[M [x0 : T, x1 : T] ↦ λ x2 : t . x2]]
 
--- >>> lhs = "M[]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
--- >>> rhs = "λx:t.x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> lhs = "M[]" :: MetaTerm Raw.MetavarIdent Foil.VoidS
+-- >>> rhs = "λx:t.x" :: MetaTerm Raw.MetavarIdent Foil.VoidS
 -- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
 -- [[M [] ↦ λ x0 : t . x0]]
 
--- >>> lhs = "λx : t. x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
--- >>> rhs = "λy : t. y" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> lhs = "λx : t. x" :: MetaTerm Raw.MetavarIdent Foil.VoidS
+-- >>> rhs = "λy : t. y" :: MetaTerm Raw.MetavarIdent Foil.VoidS
 -- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
 -- [[]]
 
--- >>> lhs = "λx : t. λx : t. x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
--- >>> rhs = "λy : t. y" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> lhs = "λx : t. λx : t. x" :: MetaTerm Raw.MetavarIdent Foil.VoidS
+-- >>> rhs = "λy : t. y" :: MetaTerm Raw.MetavarIdent Foil.VoidS
 -- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
 -- []
 
--- >>> lhs = "λy:t. M[λx:t. x]" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
--- >>> rhs = "λy:t. λx:t. x" :: MetaTerm Raw.MetaVarIdent Foil.VoidS
+-- >>> lhs = "λy:t. M[λx:t. x]" :: MetaTerm Raw.MetavarIdent Foil.VoidS
+-- >>> rhs = "λy:t. λx:t. x" :: MetaTerm Raw.MetavarIdent Foil.VoidS
 -- >>> match Foil.emptyScope lhs rhs :: [MetaSubsts']
 -- [[M [x0 : T] ↦ x0],[M [x0 : T] ↦ λ x1 : t . x1]]

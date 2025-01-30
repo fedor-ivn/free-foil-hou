@@ -19,9 +19,9 @@ transVarIdent :: Language.Lambda.Syntax.Abs.VarIdent -> Result
 transVarIdent x = case x of
   Language.Lambda.Syntax.Abs.VarIdent string -> failure x
 
-transMetaVarIdent :: Language.Lambda.Syntax.Abs.MetaVarIdent -> Result
-transMetaVarIdent x = case x of
-  Language.Lambda.Syntax.Abs.MetaVarIdent string -> failure x
+transMetavarIdent :: Language.Lambda.Syntax.Abs.MetavarIdent -> Result
+transMetavarIdent x = case x of
+  Language.Lambda.Syntax.Abs.MetavarIdent string -> failure x
 
 transProgram :: Language.Lambda.Syntax.Abs.Program -> Result
 transProgram x = case x of
@@ -34,10 +34,9 @@ transCommand x = case x of
 transTerm :: Language.Lambda.Syntax.Abs.Term -> Result
 transTerm x = case x of
   Language.Lambda.Syntax.Abs.Lam pattern_ type_ scopedterm -> failure x
-  Language.Lambda.Syntax.Abs.Let pattern_ term scopedterm -> failure x
   Language.Lambda.Syntax.Abs.App term1 term2 -> failure x
   Language.Lambda.Syntax.Abs.Var varident -> failure x
-  Language.Lambda.Syntax.Abs.MetaVar metavarident terms -> failure x
+  Language.Lambda.Syntax.Abs.Metavar metavarident terms -> failure x
 
 transScopedTerm :: Language.Lambda.Syntax.Abs.ScopedTerm -> Result
 transScopedTerm x = case x of
@@ -47,17 +46,21 @@ transPattern :: Language.Lambda.Syntax.Abs.Pattern -> Result
 transPattern x = case x of
   Language.Lambda.Syntax.Abs.APattern varident -> failure x
 
-transBinder :: Language.Lambda.Syntax.Abs.Binder -> Result
-transBinder x = case x of
-  Language.Lambda.Syntax.Abs.ABinder varident type_ -> failure x
+transVarBinder :: Language.Lambda.Syntax.Abs.VarBinder -> Result
+transVarBinder x = case x of
+  Language.Lambda.Syntax.Abs.AVarBinder varident type_ -> failure x
+
+transMetavarBinder :: Language.Lambda.Syntax.Abs.MetavarBinder -> Result
+transMetavarBinder x = case x of
+  Language.Lambda.Syntax.Abs.AMetavarBinder metavarident types type_ -> failure x
 
 transMetaSubst :: Language.Lambda.Syntax.Abs.MetaSubst -> Result
 transMetaSubst x = case x of
-  Language.Lambda.Syntax.Abs.AMetaSubst metavarident binders scopedterm -> failure x
+  Language.Lambda.Syntax.Abs.AMetaSubst metavarident varidents scopedterm -> failure x
 
 transUnificationConstraint :: Language.Lambda.Syntax.Abs.UnificationConstraint -> Result
 transUnificationConstraint x = case x of
-  Language.Lambda.Syntax.Abs.AUnificationConstraint binders scopedterm1 scopedterm2 -> failure x
+  Language.Lambda.Syntax.Abs.AUnificationConstraint varbinders scopedterm1 scopedterm2 -> failure x
 
 transType :: Language.Lambda.Syntax.Abs.Type -> Result
 transType x = case x of
