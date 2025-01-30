@@ -17,13 +17,15 @@ module Language.Lambda.Syntax.Par
   , pListTerm
   , pScopedTerm
   , pPattern
-  , pBinder
-  , pListBinder
+  , pVarBinder
+  , pListVarBinder
+  , pMetavarBinder
   , pMetaSubst
   , pUnificationConstraint
   , pListVarIdent
   , pType
   , pType1
+  , pListType
   ) where
 
 import Prelude
@@ -42,13 +44,15 @@ import Language.Lambda.Syntax.Lex
 %name pListTerm ListTerm
 %name pScopedTerm ScopedTerm
 %name pPattern Pattern
-%name pBinder Binder
-%name pListBinder ListBinder
+%name pVarBinder VarBinder
+%name pListVarBinder ListVarBinder
+%name pMetavarBinder MetavarBinder
 %name pMetaSubst MetaSubst
 %name pUnificationConstraint UnificationConstraint
 %name pListVarIdent ListVarIdent
 %name pType Type
 %name pType1 Type1
+%name pListType ListType
 -- no lexer declaration
 %monad { Err } { (>>=) } { return }
 %tokentype {Token}
@@ -64,21 +68,19 @@ import Language.Lambda.Syntax.Lex
   '['            { PT _ (TS _ 9)            }
   ']'            { PT _ (TS _ 10)           }
   'compute'      { PT _ (TS _ 11)           }
-  'in'           { PT _ (TS _ 12)           }
-  'let'          { PT _ (TS _ 13)           }
-  'λ'            { PT _ (TS _ 14)           }
-  '↦'            { PT _ (TS _ 15)           }
-  '∀'            { PT _ (TS _ 16)           }
+  'λ'            { PT _ (TS _ 12)           }
+  '↦'            { PT _ (TS _ 13)           }
+  '∀'            { PT _ (TS _ 14)           }
   L_VarIdent     { PT _ (T_VarIdent $$)     }
-  L_MetaVarIdent { PT _ (T_MetaVarIdent $$) }
+  L_MetavarIdent { PT _ (T_MetavarIdent $$) }
 
 %%
 
 VarIdent :: { Language.Lambda.Syntax.Abs.VarIdent }
 VarIdent  : L_VarIdent { Language.Lambda.Syntax.Abs.VarIdent $1 }
 
-MetaVarIdent :: { Language.Lambda.Syntax.Abs.MetaVarIdent }
-MetaVarIdent  : L_MetaVarIdent { Language.Lambda.Syntax.Abs.MetaVarIdent $1 }
+MetavarIdent :: { Language.Lambda.Syntax.Abs.MetavarIdent }
+MetavarIdent  : L_MetavarIdent { Language.Lambda.Syntax.Abs.MetavarIdent $1 }
 
 Program :: { Language.Lambda.Syntax.Abs.Program }
 Program : ListCommand { Language.Lambda.Syntax.Abs.AProgram $1 }
@@ -94,7 +96,6 @@ ListCommand
 Term :: { Language.Lambda.Syntax.Abs.Term }
 Term
   : 'λ' Pattern ':' Type '.' ScopedTerm { Language.Lambda.Syntax.Abs.Lam $2 $4 $6 }
-  | 'let' Pattern '=' Term 'in' ScopedTerm { Language.Lambda.Syntax.Abs.Let $2 $4 $6 }
   | Term1 { $1 }
 
 Term1 :: { Language.Lambda.Syntax.Abs.Term }
@@ -105,7 +106,7 @@ Term1
 Term2 :: { Language.Lambda.Syntax.Abs.Term }
 Term2
   : VarIdent { Language.Lambda.Syntax.Abs.Var $1 }
-  | MetaVarIdent '[' ListTerm ']' { Language.Lambda.Syntax.Abs.MetaVar $1 $3 }
+  | MetavarIdent '[' ListTerm ']' { Language.Lambda.Syntax.Abs.Metavar $1 $3 }
   | '(' Term ')' { $2 }
 
 ListTerm :: { [Language.Lambda.Syntax.Abs.Term] }
@@ -120,23 +121,27 @@ ScopedTerm : Term { Language.Lambda.Syntax.Abs.AScopedTerm $1 }
 Pattern :: { Language.Lambda.Syntax.Abs.Pattern }
 Pattern : VarIdent { Language.Lambda.Syntax.Abs.APattern $1 }
 
-Binder :: { Language.Lambda.Syntax.Abs.Binder }
-Binder
-  : VarIdent ':' Type { Language.Lambda.Syntax.Abs.ABinder $1 $3 }
+VarBinder :: { Language.Lambda.Syntax.Abs.VarBinder }
+VarBinder
+  : VarIdent ':' Type { Language.Lambda.Syntax.Abs.AVarBinder $1 $3 }
 
-ListBinder :: { [Language.Lambda.Syntax.Abs.Binder] }
-ListBinder
+ListVarBinder :: { [Language.Lambda.Syntax.Abs.VarBinder] }
+ListVarBinder
   : {- empty -} { [] }
-  | Binder { (:[]) $1 }
-  | Binder ',' ListBinder { (:) $1 $3 }
+  | VarBinder { (:[]) $1 }
+  | VarBinder ',' ListVarBinder { (:) $1 $3 }
+
+MetavarBinder :: { Language.Lambda.Syntax.Abs.MetavarBinder }
+MetavarBinder
+  : MetavarIdent ':' '[' ListType ']' Type { Language.Lambda.Syntax.Abs.AMetavarBinder $1 $4 $6 }
 
 MetaSubst :: { Language.Lambda.Syntax.Abs.MetaSubst }
 MetaSubst
-  : MetaVarIdent '[' ListBinder ']' '↦' ScopedTerm { Language.Lambda.Syntax.Abs.AMetaSubst $1 $3 $6 }
+  : MetavarIdent '[' ListVarIdent ']' '↦' ScopedTerm { Language.Lambda.Syntax.Abs.AMetaSubst $1 $3 $6 }
 
 UnificationConstraint :: { Language.Lambda.Syntax.Abs.UnificationConstraint }
 UnificationConstraint
-  : '∀' ListBinder '.' ScopedTerm '=' ScopedTerm { Language.Lambda.Syntax.Abs.AUnificationConstraint $2 $4 $6 }
+  : '∀' ListVarBinder '.' ScopedTerm '=' ScopedTerm { Language.Lambda.Syntax.Abs.AUnificationConstraint $2 $4 $6 }
 
 ListVarIdent :: { [Language.Lambda.Syntax.Abs.VarIdent] }
 ListVarIdent
@@ -153,6 +158,12 @@ Type1 :: { Language.Lambda.Syntax.Abs.Type }
 Type1
   : VarIdent { Language.Lambda.Syntax.Abs.Base $1 }
   | '(' Type ')' { $2 }
+
+ListType :: { [Language.Lambda.Syntax.Abs.Type] }
+ListType
+  : {- empty -} { [] }
+  | Type { (:[]) $1 }
+  | Type ',' ListType { (:) $1 $3 }
 
 {
 
