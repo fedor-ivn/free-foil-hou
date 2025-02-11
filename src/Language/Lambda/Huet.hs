@@ -98,3 +98,36 @@ imitate (Stream left (Stream right metas)) parameters (Apply _ _) =
  where
   arguments = Variable <$> parameters
 imitate _ _ (Meta _ _) = error "impossible" -- TODO: remove this possibility
+
+-- >>> x = Var "x"
+-- >>> snd <$> reduce metavariables [x] (Base "A") (Base "A") (Constant "B")
+-- [B]
+-- >>> snd <$> reduce metavariables [x] (Base "A") (Base "B") (Constant "B")
+-- []
+-- >>> snd <$> reduce metavariables [x] (Base "A") (Function (Base "B") (Base "A")) (Constant "B")
+-- [(B) (M0[x])]
+reduce :: Stream Metavar -> [Var] -> Type -> Type -> Ast -> [(Stream Metavar, Ast)]
+reduce metas context expectedType actualType term = reflexive <> function
+ where
+  reflexive
+    | expectedType == actualType = [(metas, term)]
+    | otherwise = []
+  function
+    | Function _argumentType returnType <- actualType =
+        reduce metas' context expectedType returnType term'
+    | otherwise = []
+   where
+    Stream meta metas' = metas
+    term' = Apply term (Meta meta (Variable <$> context))
+
+-- >>> x = (Var "x", Function (Base "A") (Function (Base "A") (Base "A")))
+-- >>> y = (Var "y", (Function (Base "A") (Base "B")))
+-- >>> z = (Var "z", Base "A")
+-- >>> snd <$> project metavariables [x, y, z] (Base "A")
+-- [((x) (M0[x,y,z])) (M1[x,y,z]),z]
+project :: Stream Metavar -> [(Var, Type)] -> Type -> [(Stream Metavar, Ast)]
+project metas context expectedType = do
+  (var, actualType) <- context
+  reduce metas context' expectedType actualType (Variable var)
+ where
+  context' = fst <$> context
