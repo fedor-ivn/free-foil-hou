@@ -49,6 +49,25 @@ rename from to (Lambda binder typ body) = Lambda binder typ body'
 rename from to (Apply left right) = Apply (rename from to left) (rename from to right)
 rename from to (Meta metavariable arguments) = Meta metavariable (rename from to <$> arguments)
 
+-- >>> x = Var "x"
+-- >>> typeOf [(x, Base "X")] [] (Lambda x (Base "Y") (Variable x))
+-- Just (Y) -> Y
+-- >>> typeOf [] [] (Apply (Lambda x (Base "A") (Variable x)) (Constant "A"))
+-- Just A
+typeOf :: [(Var, Type)] -> [(Metavar, ([Type], Type))] -> Ast -> Maybe Type
+typeOf _ _ (Constant x) = Just (Base x) -- whatever
+typeOf variables _ (Variable var) = lookup var variables
+typeOf variables metavariables (Lambda binder binderType body) =
+  Function binderType <$> typeOf ((binder, binderType) : variables) metavariables body
+typeOf variables metavariables (Apply function argument) = do
+  Function argumentType returnType <- typeOf variables metavariables function
+  argumentType' <- typeOf variables metavariables argument
+  if argumentType == argumentType'
+    then Just returnType
+    else Nothing
+typeOf _ metavariables (Meta metavariable _arguments) =
+  snd <$> lookup metavariable metavariables
+
 data Constraint = Constraint [(Var, Type)] Ast Ast deriving (Eq)
 
 instance Show Constraint where
@@ -81,6 +100,14 @@ fresh parameters typ (Metavariables metavariables (Stream metavar freshMetavaria
   parameters' = Variable . fst <$> parameters
   metavarType = (snd <$> parameters, typ)
 
+data FlexRigid = FlexRigid
+  { flexRigidForall :: [(Var, Type)]
+  , flexRigidParameters :: [(Var, Type)]
+  , flexRigidMetavariables :: Metavariables
+  , flexRigidRhs :: Ast
+  }
+  deriving (Show)
+
 -- >>> (x, _X) = (Var "x", Base "X")
 -- >>> (y, _Y) = (Var "y", Base "Y")
 -- >>> decompose (Constraint [(x, _X)] (Variable x) (Variable x))
@@ -103,26 +130,26 @@ decompose (Constraint context (Apply leftF leftA) (Apply rightF rightA)) =
 decompose _ = Nothing
 
 -- >>> (x, y) = (Var "x", Var "y")
--- >>> snd <$> imitate [] someMetas (Base "A") (Constant "B")
+-- >>> snd <$> imitate (FlexRigid [] [] someMetas (Constant "B"))
 -- Just B
--- >>> snd <$> imitate [(x, Base "X")] someMetas (Base "A") (Variable x)
+-- >>> snd <$> imitate (FlexRigid [] [(x, Base "X")] someMetas (Variable x))
 -- Nothing
--- >>> snd <$> imitate [(y, Base "Y")] someMetas (Function (Base "A") (Base "A")) (Lambda x (Base "A") (Variable x))
+-- >>> snd <$> imitate (FlexRigid [] [(y, Base "Y")] someMetas (Lambda x (Base "A") (Variable x)))
 -- Just \x: A. M0[x,y]
-imitate :: [(Var, Type)] -> Metavariables -> Type -> Ast -> Maybe (Metavariables, Ast)
-imitate _ metas _ (Constant constant) = Just (metas, Constant constant)
-imitate _ _ _ (Variable _) = Nothing
-imitate parameters metas (Function _binderType returnType) (Lambda binder binderType _) =
-  Just (metas', Lambda binder binderType body)
- where
-  (body, metas') = fresh ((binder, binderType) : parameters) returnType metas
-imitate _ _ _ Lambda{} = Nothing -- indicate type error somehow? or remove the `Type` parameter and infer the inner type in a different way?
-imitate parameters metaas typ (Apply _ _) =
+imitate :: FlexRigid -> Maybe (Metavariables, Ast)
+imitate (FlexRigid _ _ metas (Constant constant)) = Just (metas, Constant constant)
+imitate (FlexRigid _ _ _ Variable{}) = Nothing
+imitate (FlexRigid context parameters metas (Lambda binder binderType body)) = do
+  returnType <- typeOf ((binder, binderType) : context) (metavariables metas) body
+  let (body', metas') = fresh ((binder, binderType) : parameters) returnType metas
+  Just (metas', Lambda binder binderType body')
+imitate (FlexRigid context parameters metas (Apply function argument)) = do
+  functionType <- typeOf context (metavariables metas) function
+  argumentType <- typeOf context (metavariables metas) argument
+  let (left, metas') = fresh parameters functionType metas
+  let (right, metas'') = fresh parameters argumentType metas'
   Just (metas'', Apply left right)
- where
-  (left, metas') = fresh parameters (Function (Base "?") typ) metaas
-  (right, metas'') = fresh parameters (Base "?") metas'
-imitate _ _ _ (Meta _ _) = error "impossible" -- TODO: remove this possibility
+imitate (FlexRigid _ _ _ Meta{}) = error "impossible" -- TODO: remove this possibility
 
 -- >>> parameters = [(Var "x", Base "X")]
 -- >>> snd <$> reduce parameters someMetas (Base "A") (Base "A") (Constant "B")
@@ -146,17 +173,16 @@ reduce parameters metas expectedType actualType term = reflexive <> function
 -- >>> x = (Var "x", Function (Base "A") (Function (Base "A") (Base "A")))
 -- >>> y = (Var "y", (Function (Base "A") (Base "B")))
 -- >>> z = (Var "z", Base "A")
--- >>> snd <$> project [x, y, z] someMetas (Base "A")
+-- >>> snd <$> project (FlexRigid [] [x, y, z] someMetas (Constant "A"))
 -- [((x) (M0[x,y,z])) (M1[x,y,z]),z]
-project :: [(Var, Type)] -> Metavariables -> Type -> [(Metavariables, Ast)]
-project parameters metas expectedType = do
+project :: FlexRigid -> [(Metavariables, Ast)]
+project (FlexRigid context parameters metas node) = do
+  expectedType <- maybeToList (typeOf context (metavariables metas) node)
   (var, actualType) <- parameters
   reduce parameters metas expectedType actualType (Variable var)
 
 -- >>> x = (Var "x", Function (Base "A") (Base "A"))
--- >>> snd <$> match [x] someMetas (Base "A") (Constant "A")
+-- >>> snd <$> match (FlexRigid [] [x] someMetas (Constant "A"))
 -- [A,(x) (M0[x])]
-match :: [(Var, Type)] -> Metavariables -> Type -> Ast -> [(Metavariables, Ast)]
-match parameters metas typ term =
-  maybeToList (imitate parameters metas typ term)
-    <> project parameters metas typ
+match :: FlexRigid -> [(Metavariables, Ast)]
+match constraint = maybeToList (imitate constraint) <> project constraint
