@@ -574,6 +574,7 @@ whnf scope = \case
       f' -> App f' x
   t -> t
 
+-- | Normalize a term to weak head normal form (WHNF).
 -- >>> nf Foil.emptyScope "λy:t.λz:f. (λx:t.λy:f.y) y z"
 -- λ x0 : t . λ x1 : f . x1
 -- >>> nf Foil.emptyScope "λz:t.λw:u.(λx:t.λy:u->u.y) z (λz:u.z) w"
@@ -829,6 +830,11 @@ main = parseConfigAndValidate
 --   print $ matchUnificationConstraint [rawMetavarBinder] rawConstraint
 --   print $ isSolvedUnificationConstraint [rawMetavarBinder] rawConstraint [rawSubst]
 
+{- $setup
+>>> import Language.Lambda.Impl
+-}
+
+-- | Test cases
 -- >>> metavarBinders = ["X : [t, t] t"]
 -- >>> constraint     = "∀ m: t, n: t. X[m, n] = n"
 -- >>> substs         = ["X [x, y] ↦ y"]
@@ -836,7 +842,6 @@ main = parseConfigAndValidate
 -- >>> isSolvedUnificationConstraint metavarBinders constraint substs
 -- Right [[X [x0, x1] ↦ x1]]
 -- Right True
-
 -- >>> metavarBinders = ["M : [t -> t, t] t"]
 -- >>> constraint     = "∀ f: t -> t, g: t. M[f, g] = f g"
 -- >>> subst          = ["M [x, y] ↦ x y"]
@@ -844,7 +849,6 @@ main = parseConfigAndValidate
 -- >>> isSolvedUnificationConstraint metavarBinders constraint subst
 -- Right [[M [x0, x1] ↦ x0 x1]]
 -- Right True
-
 -- >>> metavarBinders = ["M : [t -> t, t] t"]
 -- >>> constraint     = "∀ f : t -> t, g : t. M[f, g] = g"
 -- >>> subst          = ["M [x, y] ↦ y"]
@@ -852,7 +856,6 @@ main = parseConfigAndValidate
 -- >>> isSolvedUnificationConstraint metavarBinders constraint subst
 -- Right [[M [x0, x1] ↦ x1]]
 -- Right True
-
 -- >>> metavarBinders = ["M : [t -> t, t -> t] t -> t"]
 -- >>> constraint     = "∀ . M[λf:t. f, λg:t. g] = λy:t. y"
 -- >>> subst          = ["M [x, y] ↦ x"]
@@ -860,7 +863,6 @@ main = parseConfigAndValidate
 -- >>> isSolvedUnificationConstraint metavarBinders constraint subst
 -- Right [[M [x0, x1] ↦ x0],[M [x0, x1] ↦ x1],[M [x0, x1] ↦ λ x2 : t . x2]]
 -- Right True
-
 -- >>> metavarBinders = ["M : [t -> t, t -> t -> t] t -> t"]
 -- >>> constraint     = "∀ . M[λx:t. x, λy:t. λy:t. y] = λa:t. a"
 -- >>> subst          = ["M [x, y] ↦ x"]
@@ -868,7 +870,6 @@ main = parseConfigAndValidate
 -- >>> isSolvedUnificationConstraint metavarBinders constraint subst
 -- Right [[M [x0, x1] ↦ x0],[M [x0, x1] ↦ λ x2 : t . x2]]
 -- Right True
-
 -- >>> metavarBinders = ["M : [] t -> t"]
 -- >>> constraint     = "∀ . M[] = λx:t.x"
 -- >>> subst          = ["M [] ↦ λ x:t.x"]
@@ -876,7 +877,6 @@ main = parseConfigAndValidate
 -- >>> isSolvedUnificationConstraint metavarBinders constraint subst
 -- Right [[M [] ↦ λ x0 : t . x0]]
 -- Right True
-
 -- >>> metavarBinders = []
 -- >>> constraint     = "∀ . λx:t.x = λy:t.y"
 -- >>> subst          = []
@@ -884,7 +884,6 @@ main = parseConfigAndValidate
 -- >>> isSolvedUnificationConstraint metavarBinders constraint subst
 -- Right [[]]
 -- Right True
-
 -- >>> metavarBinders = []
 -- >>> constraint     = "∀ . λx:t.λx:t.x = λy:t.y"
 -- >>> subst          = []  -- no substitution can solve this constraint
@@ -892,7 +891,6 @@ main = parseConfigAndValidate
 -- >>> isSolvedUnificationConstraint metavarBinders constraint subst
 -- Right []
 -- Right False
-
 -- >>> metavarBinders = ["M : [t -> t] t -> t"]
 -- >>> constraint     = "∀ . λy:t.M[λx:t.x] = λy:t.λx:t.x"
 -- >>> subst          = ["M [x] ↦ x"]
