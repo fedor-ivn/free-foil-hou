@@ -17,6 +17,7 @@
 
 module Data.SOAS where
 
+import Control.Monad (guard)
 import qualified Control.Monad.Foil as Foil
 import qualified Control.Monad.Foil.Internal as Foil
 import qualified Control.Monad.Foil.Relative as Foil
@@ -33,9 +34,6 @@ import Data.ZipMatchK
 import Debug.Trace (trace)
 import qualified GHC.Generics as GHC
 import Generics.Kind.TH (deriveGenericK)
-
--- import qualified Language.Lambda.Syntax.Abs as Raw
--- import Unsafe.Coerce (unsafeCoerce)
 
 -- | Second-order signature for metavariable applications.
 -- This way, metavariables can be added to any other signature using 'Sum'.
@@ -88,6 +86,10 @@ class TypedSignature sig t where
     -- ^ (ожидаемый) тип узла
     -> Maybe (sig scopedTerm term)
     -- ^ результат
+
+  debugSig
+    :: AST binder (Sum (AnnSig t sig) ext) n
+    -> String
 
 class TypedBinder binder t where
   addBinderTypes
@@ -224,30 +226,26 @@ combineMetaSubsts
      )
   => [MetaSubsts binder sig metavar ext t]
   -> [MetaSubsts binder sig metavar ext t]
-combineMetaSubsts = foldr go []
+combineMetaSubsts [] = []
+combineMetaSubsts (subst : substs) = foldr (mapMaybe . combine) [subst] substs
  where
-  go x [] = [x]
-  go x xs = mapMaybe (inner x) xs
-
-  inner (MetaSubsts xs) (MetaSubsts ys)
+  combine (MetaSubsts xs) (MetaSubsts ys)
     | conflicts = trace "there are conflicts" Nothing
     | otherwise = trace "no conflicts" return (MetaSubsts (xs ++ ys))
    where
-    conflicts =
-      and
-        [ case Foil.unifyPatterns binders binders' of
+    conflicts = or $ do
+      MetaSubst (m, MetaAbs binders _types body) <- xs
+      MetaSubst (m', MetaAbs binders' _types' body') <- ys
+      guard (m == m')
+      pure $
+        case Foil.unifyPatterns binders binders' of
           Foil.SameNameBinders _ ->
             case Foil.assertDistinct binders of
               Foil.Distinct ->
-                let scope' = Foil.extendScopePattern binders Foil.emptyScope
-                 in alphaEquiv scope' body body'
-          Foil.NotUnifiable -> False
-          -- FIXME: RenameLeftNameBinder _ _ ->
+                let scope = Foil.extendScopePattern binders Foil.emptyScope
+                 in not (alphaEquiv scope body body')
+          Foil.NotUnifiable -> True
           _ -> error "unexpected renaming"
-        | MetaSubst (m, MetaAbs binders _types body) <- xs
-        , MetaSubst (m', MetaAbs binders' _types' body') <- ys
-        , m == m'
-        ]
 
 -- | Match left-hand side (with metavariables) against the rigid right-hand side.
 --
@@ -290,11 +288,11 @@ match
   -- ^ The right hand side (rigid). todo: should we annotate ext as well?
   -> [MetaSubsts binder (AnnSig t sig) metavar ext t]
 match scope metavarTypes varTypes (lhs, lhsReturnType) (rhs, rhsReturnType) =
-  case (lhs, rhs) of
+  trace "matching non-scoped lhs and rhs" $ case (lhs, rhs) of
     (Var x, Var y) | x == y -> trace "matched same vars" return (MetaSubsts [])
-    (MetaApp metavar args, Node (L2 (AnnSig _ rightType))) ->
-      case Map.lookup metavar metavarTypes of
-        Just (argTypes, leftType) | leftType == rightType ->
+    (MetaApp metavar args, _) ->
+      case trace "looking up metavar" Map.lookup metavar metavarTypes of
+        Just (argTypes, leftType) | leftType == rhsReturnType ->
           withFreshNameBinderList
             argTypes
             Foil.emptyScope
@@ -310,7 +308,15 @@ match scope metavarTypes varTypes (lhs, lhsReturnType) (rhs, rhsReturnType) =
                             subst = MetaSubst (metavar, metaAbs)
                          in MetaSubsts (subst : substs)
                     )
-                    (matchMetavar scope' metavarTypes binderList scope varTypes argsWithTypes (rhs, leftType))
+                    ( matchMetavar
+                        scope'
+                        metavarTypes
+                        binderList
+                        scope
+                        varTypes
+                        argsWithTypes
+                        (rhs, leftType)
+                    )
         _ -> []
     -- AppSig t1 t2 -- left term
     -- AppSig a1 a2 -- right term
@@ -339,8 +345,8 @@ match scope metavarTypes varTypes (lhs, lhsReturnType) (rhs, rhsReturnType) =
                       concatMap (combineMetaSubsts . biList) traversed
             _ -> trace "term structs doesn't match" []
     (Node (L2 _term), Node (R2 _ext)) -> []
-    (_, Var _) -> []
-    (Var _, _) -> []
+    (_, Var _) -> trace "vars didn't match: (_, Var _)" []
+    (Var _, _) -> trace "vars didn't match: (Var _, _)" []
     _ -> []
 
 -- | Same as 'match' but for scoped terms.
@@ -456,7 +462,7 @@ matchMetavar
      ]
 matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWithTypes (rhs, expectedType) =
   let projections = project metavarNameBinders argsWithTypes
-      imitations = case rhs of
+      imitations = trace ("imitate on: " <> debugSig rhs) $ case rhs of
         Node (L2 (AnnSig sig type')) -> do
           sigWithTypes <- maybeToList (mapSigWithTypes varTypes (,) (,) sig expectedType)
           traversedSig <-
@@ -464,12 +470,12 @@ matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWit
               (matchMetavarScoped metavarScope metavarTypes metavarNameBinders scope varTypes argsWithTypes)
               (matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWithTypes)
               sigWithTypes
-          let foo = L2 (AnnSig traversedSig type')
-              term = Node (bimap fst fst foo)
-          substs <- combineMetaSubsts (biList (bimap snd snd foo))
+          let term = Node (L2 (AnnSig (bimap fst fst traversedSig) type'))
+          substs <- combineMetaSubsts (biList (bimap snd snd (trace ("end imitate on: " <> debugSig rhs) traversedSig)))
           return (term, substs)
-        _ -> []
-   in projections ++ imitations
+        _ -> trace "rhs is not an annsig???" []
+   in trace (show $ map length [projections, imitations]) $
+        projections ++ imitations
  where
   project
     :: (Foil.Distinct i)
@@ -526,7 +532,7 @@ matchMetavarScoped
   varTypes
   argsWithTypes
   (ScopedAST binder rhs, (binderType, bodyType)) =
-    case (Foil.assertExt binder, Foil.assertDistinct binder) of
+    trace "matching metavar scoped" $ case (Foil.assertExt binder, Foil.assertDistinct binder) of
       (Foil.Ext, Foil.Distinct) ->
         Foil.withRefreshedPattern @_ @_ @(AST binder sig)
           metavarScope
