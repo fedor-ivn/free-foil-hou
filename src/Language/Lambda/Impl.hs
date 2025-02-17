@@ -11,6 +11,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -629,7 +630,7 @@ matchUnificationConstraint
     pure substs
 
 solveUnificationConstraint
-  :: MetaSubsts FoilPattern (AnnSig Raw.Type TermSig) Raw.MetavarIdent (MetaAppSig Raw.MetavarIdent) Raw.Type
+  :: MetaSubsts'
   -> UnificationConstraint
   -> UnificationConstraint
 solveUnificationConstraint
@@ -661,6 +662,13 @@ isSolved :: UnificationConstraint -> Bool
 isSolved (UnificationConstraint scope _binders _binderTypes (lhs, _) (rhs, _)) = alphaEquiv scope lhs rhs
 
 -- Data types
+data RawConfig = RawConfig
+  { rawConfigLanguage :: Text
+  , rawConfigFragment :: Text
+  , rawConfigProblems :: [RawProblem]
+  }
+  deriving (Show, Generic)
+
 data Config = Config
   { configLanguage :: Text
   , configFragment :: Text
@@ -668,70 +676,93 @@ data Config = Config
   }
   deriving (Show, Generic)
 
+data RawProblem = RawProblem
+  { rawProblemMetavars :: [String]
+  , rawProblemConstraints :: [String]
+  , rawProblemSolutions :: [RawSolution]
+  }
+  deriving (Show, Generic)
+
 data Problem = Problem
-  { problemMetavars :: [String]
-  , problemConstraints :: [String]
+  { problemMetavars :: MetavarBinders
+  , problemConstraints :: [UnificationConstraint]
   , problemSolutions :: [Solution]
+  }
+  deriving (Show, Generic)
+
+data RawSolution = RawSolution
+  { rawSolutionName :: Text
+  , rawSolutionSubstitutions :: [String]
   }
   deriving (Show, Generic)
 
 data Solution = Solution
   { solutionName :: Text
-  , solutionSubstitutions :: [String]
+  , solutionSubstitutions :: MetaSubsts'
   }
   deriving (Show, Generic)
 
 -- TomlCodecs
-configCodec :: TomlCodec Config
+configCodec :: TomlCodec RawConfig
 configCodec =
-  Config
-    <$> Toml.text "language" .= configLanguage
-    <*> Toml.text "fragment" .= configFragment
-    <*> Toml.list problemCodec "problems" .= configProblems
+  RawConfig
+    <$> Toml.text "language" .= rawConfigLanguage
+    <*> Toml.text "fragment" .= rawConfigFragment
+    <*> Toml.list problemCodec "problems" .= rawConfigProblems
 
-problemCodec :: TomlCodec Problem
+problemCodec :: TomlCodec RawProblem
 problemCodec =
-  Problem
+  RawProblem
     <$> stringsCodec "metavars"
     <*> stringsCodec "constraints"
-    <*> Toml.list solutionCodec "solutions" .= problemSolutions
+    <*> Toml.list solutionCodec "solutions" .= rawProblemSolutions
 
 stringsCodec :: Toml.Key -> Toml.Codec object [String]
 stringsCodec field =
   map TIO.unpack
     <$> Toml.arrayOf Toml._Text field .= error "no encode needed"
 
-solutionCodec :: TomlCodec Solution
+solutionCodec :: TomlCodec RawSolution
 solutionCodec =
-  Solution
-    <$> Toml.text "name" .= solutionName
-    <*> stringsCodec "substitutions" .= solutionSubstitutions
+  RawSolution
+    <$> Toml.text "name" .= rawSolutionName
+    <*> stringsCodec "substitutions" .= rawSolutionSubstitutions
 
 validateProblem :: Problem -> Either String ([(Solution, [UnificationConstraint])], [Solution])
-validateProblem (Problem rawMetavarBinders rawConstraints rawSolutions) = do
-  metavarBindersList <- traverse parseMetavarBinder rawMetavarBinders
-  let metavarBinders = Map.fromList metavarBindersList
-  constraints <- traverse (parseUnificationConstraint metavarBinders) rawConstraints
-  solutions <- traverse (parseSolution metavarBinders) rawSolutions
-  let results = map (validateSolution constraints) solutions
+validateProblem (Problem{..}) = do
+  let results = map (validateSolution problemConstraints) problemSolutions
   pure (partitionEithers results)
+
+parseRawProblem :: RawProblem -> Either String Problem
+parseRawProblem RawProblem{..} = do
+  metavarBindersList <- traverse parseMetavarBinder rawProblemMetavars
+  let metavarBinders = Map.fromList metavarBindersList
+  constraints <- traverse (parseUnificationConstraint metavarBinders) rawProblemConstraints
+  solutions <- traverse (parseSolution metavarBinders) rawProblemSolutions
+  pure (Problem metavarBinders constraints solutions)
  where
-  parseSolution metavarBinders solution = do
+  parseSolution metavarBinders (RawSolution{..}) = do
     parsedSubsts <-
       traverse
         (parseMetaSubst metavarBinders)
-        (solutionSubstitutions solution)
-    pure (solution, MetaSubsts parsedSubsts)
+        rawSolutionSubstitutions
+    pure (Solution rawSolutionName (MetaSubsts parsedSubsts))
+
+parseRawConfig :: RawConfig -> Either String Config
+parseRawConfig RawConfig{..} = do
+  problems <- traverse parseRawProblem rawConfigProblems
+  pure (Config rawConfigLanguage rawConfigFragment problems)
 
 validateSolution
   :: [UnificationConstraint]
-  -> (Solution, MetaSubsts')
+  -> Solution
   -> Either (Solution, [UnificationConstraint]) Solution
-validateSolution constraints (solution, substs) =
-  let constraints' = map (solveUnificationConstraint substs) constraints
-   in if all isSolved constraints'
+validateSolution constraints solution@Solution{..} =
+  let solvedConstraints =
+        map (solveUnificationConstraint solutionSubstitutions) constraints
+   in if all isSolved solvedConstraints
         then Right solution
-        else Left (solution, constraints')
+        else Left (solution, solvedConstraints)
 
 printInvalidSolutionsWithConstraint :: (Foldable t, Show a) => (Solution, t a) -> IO ()
 printInvalidSolutionsWithConstraint (solution, constraints) = do
@@ -739,7 +770,7 @@ printInvalidSolutionsWithConstraint (solution, constraints) = do
   putStrLn $ "Solution: " <> TIO.unpack (solutionName solution)
   putStrLn ""
   putStrLn "Substitutions:"
-  mapM_ (putStrLn . ("- " ++) . show) (solutionSubstitutions solution)
+  mapM_ (putStrLn . ("- " ++) . show) (getMetaSubsts (solutionSubstitutions solution))
   putStrLn ""
   putStrLn "Constraints with applied substitutions:"
   mapM_ (putStrLn . ("- " ++) . show) constraints
@@ -749,7 +780,7 @@ printInvalidSolutionsWithConstraint (solution, constraints) = do
 -- Main function to parse and print the configuration
 data ValidationError
   = ConfigError Toml.TomlDecodeError
-  | ProblemError String Problem
+  | ProblemError String RawProblem
   deriving (Show)
 
 parseConfigAndValidate :: IO ()
@@ -759,11 +790,14 @@ parseConfigAndValidate = do
     Left errs -> do
       putStrLn "\n=== Configuration Errors ==="
       putStr $ formatTomlErrors errs
-    Right cfg -> mapM_ processValidation (configProblems cfg)
+    Right cfg -> case parseRawConfig cfg of
+      Left err -> putStrLn err
+      Right Config{..} ->
+        mapM_ processValidation configProblems
  where
   processValidation problem =
     case validateProblem problem of
-      Left err -> printError $ ProblemError err problem
+      Left err -> printError err
       Right (invalid, valid) -> do
         printValidSolutions valid
         printInvalidSolutions invalid
@@ -866,4 +900,3 @@ main = parseConfigAndValidate
 -- >>> isSolvedUnificationConstraint metavarBinders constraint subst
 -- Right [[M [x0] ↦ x0],[M [x0] ↦ λ x1 : t . x1]]
 -- Right True
-
