@@ -1,68 +1,28 @@
-language = "untyped λ-calculus"
+language = "typed λ-calculus"
 fragment = "pattern"
 
 [[problems]]
 metavars = [
-    "X: [t1 -> t2, t3] t2",
-    "Y: [t4] t5",
+    "X: [t -> t, t] t",
+    "Y: [t] t",
+    "M: [t, t -> t] t"
 ]
 constraints = [
-    "∀ f: magic -> t, x: magic. X[f, x] = f Y[x]",
-    "∀ x: magic. Y[x] = x x"
+    "∀ f: t -> t, x: t. X[f, x] = f Y[x]",
+    "∀ x: t. Y[x] = x"
 ]
 
 [[problems.solutions]]
 name = "most general"
 substitutions = [
-    "Y[a] ↦ a a",
-    "X[b, c] ↦ b (c c)",
+    "Y[a] ↦ a",
+    "X[b, c] ↦ b c",
 ]
 
 [[problems.solutions]]
 name = "with redundant substitution"
 substitutions = [
-    "Y[x: magic] ↦ x x",
-    "X[f: magic -> t, x: magic] ↦ f (x x)",
-    "M[x: t, y: t -> u] ↦ y x"
-]
-
-[[problems]]
-constraints = [
-    "∀ x:t. M[λy:t. x, λa:t. λa:t. a] = λy:t. x"
-]
-
-[[problems.solutions]]
-name = "most general"
-substitutions = [
-    "M[a: t, b: t -> t] ↦ a",
-]
-
-[[problems]]
-constraints = [
-    "∀ x:t, y:t. M[λz:t.N[x, y], x y] = λa:t.λb:t.x"
-]
-
-[[problems.solutions]]
-name = "some other solution"
-substitutions = [
-    "M[z1:t, z2:t] ↦ λa:t.z1",
-    "N[z1:t, z2:t] ↦ z1"
-]
-
-[[problems]]
-constraints = [
-    "∀ x:t, y:t. M[λz:t.N[x, y], x] = λa:t.λb:t.x"
-]
-
-[[problems.solutions]]
-name = "solution 1"
-substitutions = [
-    "M[z1:t, z2:t] ↦ λa:t.z1",
-    "N[z1:t, z2:t] ↦ z1"
-]
-
-[[problems.solutions]]
-name = "solution 2"
-substitutions = [
-    "M[z1:t, z2:t] ↦ λa:t.λb:t.z2",
+    "Y[x] ↦ x",
+    "X[f, x] ↦ f x",
+    "M[x, y] ↦ y x"
 ]
