@@ -58,6 +58,9 @@ library:
         - Language.Lambda.Syntax.Test
         - Language.Lambda.Syntax.ErrM
         - Language.Lambda.Syntax.Skel
+        - Language.Lambda.FCU.FCUSyntax.Test
+        - Language.Lambda.FCU.FCUSyntax.ErrM
+        - Language.Lambda.FCU.FCUSyntax.Skel
 
 executables:
   free-foil-hou-exe:
