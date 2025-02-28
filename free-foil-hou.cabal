@@ -35,9 +35,24 @@ library
       Language.Lambda.Framework
       Language.Lambda.FCU.Covers
       Language.Lambda.FCU.Discharge
+      Language.Lambda.FCU.FCUImplSW.Covers
+      Language.Lambda.FCU.FCUImplSW.Discharge
+      Language.Lambda.FCU.FCUImplSW.Prune
+      Language.Lambda.FCU.FCUImplSW.Restrictions
+      Language.Lambda.FCU.FCUImplSW.RTerms
+      Language.Lambda.FCU.FCUImplSW.Strip
+      Language.Lambda.FCU.FCUImplSW.Substitutions
+      Language.Lambda.FCU.FCUImplSW.Terms
+      Language.Lambda.FCU.FCUImplSW.Unification
+      Language.Lambda.FCU.FCUSyntax.Abs
+      Language.Lambda.FCU.FCUSyntax.Layout
+      Language.Lambda.FCU.FCUSyntax.Lex
+      Language.Lambda.FCU.FCUSyntax.Par
+      Language.Lambda.FCU.FCUSyntax.Print
+      Language.Lambda.FCU.FreeFoil.Syntax
+      Language.Lambda.FCU.Parse
       Language.Lambda.FCU.Prune
       Language.Lambda.FCU.Restrictions
-      Language.Lambda.FCU.RTerms
       Language.Lambda.FCU.Strip
       Language.Lambda.FCU.Substitutions
       Language.Lambda.FCU.Terms
