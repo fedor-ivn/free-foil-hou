@@ -49,12 +49,14 @@ module Language.Lambda.Impl where
 import Control.Monad (forM_, guard)
 import qualified Control.Monad.Foil as Foil
 import Control.Monad.Foil.Internal as FoilInternal
+import qualified Control.Monad.Foil.Relative as Foil
 import Control.Monad.Foil.TH
 import Control.Monad.Free.Foil
 import Control.Monad.Free.Foil.TH
 import Data.Biapplicative (Bifunctor (bimap))
 import Data.Bifunctor.Sum
 import Data.Bifunctor.TH
+import Data.Bitraversable (Bitraversable)
 import Data.Either (partitionEithers)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -614,6 +616,11 @@ interpretProgram (Raw.AProgram commands) = mapM_ interpretCommand commands
 
 -- ** Test framework implementation
 
+parseMetavarBinders :: [String] -> Either String MetavarBinders
+parseMetavarBinders rawMetavarBinders = do
+  metavarBinders <- traverse parseMetavarBinder rawMetavarBinders
+  pure $ Map.fromList metavarBinders
+
 matchUnificationConstraint
   :: [String]
   -> String
@@ -621,8 +628,7 @@ matchUnificationConstraint
 matchUnificationConstraint
   rawMetavarBinders
   rawUnificationConstraint = do
-    metavarBinders <- traverse parseMetavarBinder rawMetavarBinders
-    let metavarBindersMap = Map.fromList metavarBinders
+    metavarBindersMap <- parseMetavarBinders rawMetavarBinders
     (UnificationConstraint scope _ binderTypes lhs rhs) <-
       parseUnificationConstraint
         metavarBindersMap
@@ -820,6 +826,58 @@ parseConfigAndValidate = do
     unlines $
       "Configuration errors:" : map (\err -> "  - " ++ show err) errs
 
+-- >>> rawMetavarBinders = ["M : [t] t -> t -> t", "N : [t] t -> t"]
+-- >>> Right metavarBinders = parseMetavarBinders rawMetavarBinders
+-- >>> Right lhs = parseMetaSubst metavarBinders "M[x] ↦ λy:t.N[x]"
+-- >>> Right rhs = parseMetaSubst metavarBinders "M[x] ↦ λy:t.λz:t.x"
+-- >>> (_, lhsAbs) = getMetaSubst lhs
+-- >>> (_, rhsAbs) = getMetaSubst rhs
+-- >>> Just (_, type_) = Map.lookup "M" metavarBinders
+-- >>> matchMetaAbs metavarBinders type_ lhsAbs rhsAbs
+-- [[N [x0] ↦ λ x2 : t . x0]]
+matchMetaAbs
+  :: ( UnifiablePattern binder
+     , SinkableK binder
+     , Bitraversable sig
+     , Bitraversable ext
+     , ZipMatchK sig
+     , ZipMatchK ext
+     , TypedBinder binder Raw.Type
+     , TypedSignature sig Raw.Type
+     )
+  => MetavarBinders
+  -> Raw.Type
+  -> MetaAbs binder (Sum (AnnSig Raw.Type sig) (MetaAppSig Raw.MetavarIdent)) Raw.Type
+  -> MetaAbs binder (Sum (AnnSig Raw.Type sig) ext) Raw.Type
+  -> [MetaSubsts binder (AnnSig Raw.Type sig) Raw.MetavarIdent ext Raw.Type]
+matchMetaAbs
+  metavarBinders
+  type_
+  (MetaAbs lhsBinderList lhsBinderTypes lhsTerm)
+  (MetaAbs rhsBinderList rhsBinderTypes rhsTerm) =
+    case Foil.unifyPatterns lhsBinderList rhsBinderList of
+      Foil.SameNameBinders _ ->
+        case Foil.assertDistinct lhsBinderList of
+          Foil.Distinct ->
+            let commonScope = Foil.extendScopePattern lhsBinderList Foil.emptyScope
+             in match commonScope metavarBinders lhsBinderTypes (lhsTerm, type_) (rhsTerm, type_)
+      Foil.RenameLeftNameBinder _ rename ->
+        case Foil.assertDistinct rhsBinderList of
+          Foil.Distinct ->
+            let commonScope = Foil.extendScopePattern rhsBinderList Foil.emptyScope
+                lhsTerm' = Foil.liftRM commonScope (Foil.fromNameBinderRenaming rename) lhsTerm
+             in match commonScope metavarBinders rhsBinderTypes (lhsTerm', type_) (rhsTerm, type_)
+      Foil.RenameRightNameBinder _ rename ->
+        case Foil.assertDistinct lhsBinderList of
+          Foil.Distinct ->
+            let commonScope = Foil.extendScopePattern lhsBinderList Foil.emptyScope
+                rhsTerm' = Foil.liftRM commonScope (Foil.fromNameBinderRenaming rename) rhsTerm
+             in match commonScope metavarBinders lhsBinderTypes (lhsTerm, type_) (rhsTerm', type_)
+      Foil.RenameBothBinders commonBinders rename1 rename2 -> undefined
+      Foil.NotUnifiable ->
+        -- Binders cannot be unified
+        trace "here" []
+
 main :: IO ()
 main = parseConfigAndValidate
 
@@ -830,9 +888,8 @@ main = parseConfigAndValidate
 --   print $ matchUnificationConstraint [rawMetavarBinder] rawConstraint
 --   print $ isSolvedUnificationConstraint [rawMetavarBinder] rawConstraint [rawSubst]
 
-{- $setup
->>> import Language.Lambda.Impl
--}
+-- $setup
+-- >>> import Language.Lambda.Impl
 
 -- | Test cases
 -- >>> metavarBinders = ["X : [t, t] t"]
@@ -897,4 +954,13 @@ main = parseConfigAndValidate
 -- >>> matchUnificationConstraint metavarBinders constraint
 -- >>> isSolvedUnificationConstraint metavarBinders constraint subst
 -- Right [[M [x0] ↦ x0],[M [x0] ↦ λ x1 : t . x1]]
+-- Right True
+
+-- | Constraint couldn't be solved by matching
+-- >>> metavarBinders = ["N : [t] t -> t"]
+-- >>> constraint     = "∀ x : t, y : t. N[x] y = x"
+-- >>> subst          = ["N [x] ↦ λz:t.x"]
+-- >>> matchUnificationConstraint metavarBinders constraint
+-- >>> isSolvedUnificationConstraint metavarBinders constraint subst
+-- Right []
 -- Right True
