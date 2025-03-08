@@ -17,7 +17,7 @@ newtype Var = Var String deriving (Eq, Show)
 newtype Metavar = Metavar String deriving (Eq, Show)
 
 data Ast
-  = Constant String
+  = Constant String Type
   | Variable Var
   | Lambda Var Type Ast
   | Apply Ast Ast
@@ -63,7 +63,7 @@ instance Show Type where
   show (Function from to) = "(" <> show from <> ") -> " <> show to
 
 instance Show Ast where
-  show (Constant constant) = constant
+  show (Constant constant typ) = constant <> ": " <> show typ
   show (Variable (Var variable)) = variable
   show (Lambda (Var binder) typ body) = "\\" <> binder <> ": " <> show typ <> ". " <> show body
   show (Apply left right) = "(" <> show left <> ") (" <> show right <> ")"
@@ -83,13 +83,13 @@ instance Show Constraint where
 -- >>> (x, y, z) = (Var "x", Var "y", Var "z")
 -- >>> rename x y (Apply (Variable x) (Variable z))
 -- (y) (z)
--- >>> rename x y (Lambda x (Variable x))
--- \x. x
+-- >>> rename x y (Lambda x (Base "A") (Variable x))
+-- \x: A. x
 rename :: Var -> Var -> Ast -> Ast
 rename from to (Variable variable)
   | variable == from = Variable to
   | otherwise = Variable variable
-rename _ _ (Constant constant) = Constant constant
+rename _ _ (Constant constant typ) = Constant constant typ
 rename from to (Lambda binder typ body) = Lambda binder typ body'
  where
   body'
@@ -133,10 +133,10 @@ substituteConstraint meta parameters substitution (Constraint forall_ left right
 -- >>> x = Var "x"
 -- >>> typeOf [(x, Base "X")] [] (Lambda x (Base "Y") (Variable x))
 -- Just (Y) -> Y
--- >>> typeOf [] [] (Apply (Lambda x (Base "A") (Variable x)) (Constant "A"))
+-- >>> typeOf [] [] (Apply (Lambda x (Base "A") (Variable x)) (Constant "A" (Base "A")))
 -- Just A
 typeOf :: [(Var, Type)] -> [(Metavar, ([Type], Type))] -> Ast -> Maybe Type
-typeOf _ _ (Constant x) = Just (Base x) -- whatever
+typeOf _ _ (Constant _ typ) = Just typ
 typeOf variables _ (Variable var) = lookup var variables
 typeOf variables metavariables (Lambda binder binderType body) =
   Function binderType <$> typeOf ((binder, binderType) : variables) metavariables body
@@ -162,7 +162,7 @@ toFlexRigid (Constraint forall_ rhs (Meta meta arguments)) = Just (FlexRigid for
 toFlexRigid _ = Nothing
 
 someParameters :: [Var]
-someParameters = fmap (\n -> Var ("x" <> show n)) [0 ..]
+someParameters = fmap (\n -> Var ("x" <> show n)) [0 :: Integer ..]
 
 makeParameters :: FlexRigid -> [Var]
 makeParameters FlexRigid{flexRigidArguments} = take (length flexRigidArguments) someParameters
@@ -174,9 +174,9 @@ pickFlexRigid :: Solution -> Maybe FlexRigid
 pickFlexRigid (Solution _ constraints _) = go constraints
  where
   go [] = Nothing
-  go (constraint : constraints) = case toFlexRigid constraint of
+  go (constraint : rest) = case toFlexRigid constraint of
     Just flexRigid -> Just flexRigid
-    Nothing -> go constraints
+    Nothing -> go rest
 
 splitProblems :: [Solution] -> ([Solution] -> [Solution], [(FlexRigid, Solution)])
 splitProblems = go id id
@@ -205,8 +205,8 @@ data Decomposition
 -- Decomposed []
 -- >>> decompose (Constraint [(x, _X), (y, _Y)] (Variable x) (Variable y))
 -- Failed
--- >>> decompose (Constraint [(x, _X), (y, _Y)] (Apply (Variable x) (Variable y)) (Apply (Constant "A") (Constant "B")))
--- Decomposed [forall x: X, y: Y. x = A,forall x: X, y: Y. y = B]
+-- >>> decompose (Constraint [(x, _X), (y, _Y)] (Apply (Variable x) (Variable y)) (Apply (Constant "A" (Function (Base "B") (Base "B"))) (Constant "B" (Base "B"))))
+-- Decomposed [forall x: X, y: Y. x = A: (B) -> B,forall x: X, y: Y. y = B: B]
 -- >>> decompose (Constraint [] (Lambda x _X (Variable x)) (Lambda y _X (Variable y)))
 -- Decomposed [forall x: X. x = x]
 -- >>> decompose (Constraint [(x, _X), (y, _Y)] (Apply (Variable x) (Variable y)) (Variable x))
@@ -214,7 +214,7 @@ data Decomposition
 decompose :: Constraint -> Decomposition
 decompose constraint@(Constraint _ Meta{} _) = Nondecomposable constraint
 decompose constraint@(Constraint _ _ Meta{}) = Nondecomposable constraint
-decompose (Constraint _ (Constant left) (Constant right)) | left == right = Decomposed []
+decompose (Constraint _ left@Constant{} right@Constant{}) | left == right = Decomposed []
 decompose (Constraint _ (Variable left) (Variable right)) | left == right = Decomposed []
 decompose (Constraint context (Lambda leftBinder typ left) (Lambda rightBinder _ right)) =
   Decomposed [Constraint ((leftBinder, typ) : context) left (rename rightBinder leftBinder right)]
@@ -237,8 +237,8 @@ decomposeProblems problems = do
 
 -- >>> (x, y) = (Var "x", Var "y")
 -- >>> metas = Metavariables [(Metavar "M", ([Base "Y"], Base "B"))] (freshMetavariables someMetas)
--- >>> snd <$> imitate metas (FlexRigid [] (Metavar "M") (error "params") (Constant "B")) [y]
--- Just B
+-- >>> snd <$> imitate metas (FlexRigid [] (Metavar "M") (error "params") (Constant "B" (Base "B"))) [y]
+-- Just B: B
 -- >>> metas = Metavariables [(Metavar "M", ([Base "Y"], Base "X"))] (freshMetavariables someMetas)
 -- >>> snd <$> imitate metas (FlexRigid [(x, Base "X")] (Metavar "M") (error "params") (Variable x)) [y]
 -- Nothing
@@ -246,7 +246,7 @@ decomposeProblems problems = do
 -- >>> snd <$> imitate metas (FlexRigid [(x, Base "A")] (Metavar "M") (error "params") (Lambda x (Base "A") (Variable x))) [y]
 -- Just \x: A. M0[x,y]
 imitate :: Metavariables -> FlexRigid -> [Var] -> Maybe (Metavariables, Ast)
-imitate metas (FlexRigid _ _ _ (Constant constant)) _ = Just (metas, Constant constant)
+imitate metas (FlexRigid _ _ _ (Constant constant typ)) _ = Just (metas, Constant constant typ)
 imitate _ (FlexRigid _ _ _ Variable{}) _ = Nothing
 imitate metas (FlexRigid _ meta _ (Lambda binder binderType _)) parameters = do
   (parameterTypes, Function _ returnType) <- lookup meta (metavariables metas)
@@ -264,12 +264,12 @@ imitate metas (FlexRigid context meta _ (Apply function argument)) parameters = 
 imitate _ (FlexRigid _ _ _ Meta{}) _ = error "impossible" -- TODO: remove this possibility
 
 -- >>> parameters = [(Var "x", Base "X")]
--- >>> snd <$> reduce parameters someMetas (Base "A") (Base "A") (Constant "B")
--- [B]
--- >>> snd <$> reduce parameters someMetas (Base "A") (Base "B") (Constant "B")
+-- >>> snd <$> reduce parameters someMetas (Base "A") (Base "A") (Constant "B" (Base "B"))
+-- [B: B]
+-- >>> snd <$> reduce parameters someMetas (Base "A") (Base "B") (Constant "B" (Base "B"))
 -- []
--- >>> snd <$> reduce parameters someMetas (Base "A") (Function (Base "B") (Base "A")) (Constant "B")
--- [(B) (M0[x])]
+-- >>> snd <$> reduce parameters someMetas (Base "A") (Function (Base "B") (Base "A")) (Constant "B" (Base "B"))
+-- [(B: B) (M0[x])]
 reduce :: [(Var, Type)] -> Metavariables -> Type -> Type -> Ast -> [(Metavariables, Ast)]
 reduce parameters metas expectedType actualType term = reflexive <> function
  where
@@ -286,7 +286,7 @@ reduce parameters metas expectedType actualType term = reflexive <> function
 -- >>> (y, yType) = (Var "y", (Function (Base "A") (Base "B")))
 -- >>> (z, zType) = (Var "z", Base "A")
 -- >>> metas = Metavariables [(Metavar "M", ([xType, yType, zType], Base "A"))] (freshMetavariables someMetas)
--- >>> snd <$> project metas (FlexRigid [] (Metavar "M") (error "args") (Constant "A")) [x, y, z]
+-- >>> snd <$> project metas (FlexRigid [] (Metavar "M") (error "args") (Constant "A" (Base "A"))) [x, y, z]
 -- [((x) (M0[x,y,z])) (M1[x,y,z]),z]
 project :: Metavariables -> FlexRigid -> [Var] -> [(Metavariables, Ast)]
 project metas (FlexRigid _ meta _ _) parameters = do
@@ -295,9 +295,10 @@ project metas (FlexRigid _ meta _ _) parameters = do
   (var, actualType) <- typedParameters
   reduce typedParameters metas expectedType actualType (Variable var)
 
--- >>> x = (Var "x", Function (Base "A") (Base "A"))
--- >>> snd <$> match (FlexRigid [] [x] someMetas (Constant "A"))
--- [A,(x) (M0[x])]
+-- >>> (x, xType) = (Var "x", Function (Base "A") (Base "A"))
+-- >>> metas = Metavariables [(Metavar "M", ([xType], Base "A"))] (freshMetavariables someMetas)
+-- >>> snd <$> match metas (FlexRigid [] (Metavar "M") (error "args") (Constant "A" (Base "A"))) [x]
+-- [A: A,(x) (M0[x])]
 match :: Metavariables -> FlexRigid -> [Var] -> [(Metavariables, Ast)]
 match metas constraint parameters = maybeToList (imitate metas constraint parameters) <> project metas constraint parameters
 
@@ -309,14 +310,13 @@ step flexRigid (Solution metas constraints substitutions) = do
   let constraints' = substituteConstraint meta parameters substitution <$> constraints
   return (Solution metas' constraints' ((meta, (parameters, substitution)) : substitutions))
 
--- >>> (f, x) = (Var "f", Var "x")
 -- >>> t = Base "t"
--- >>> left = Apply (Variable f) (Variable x)
--- >>> right = Meta (Metavar "F") [Meta (Metavar "X") [], Variable f, Variable x]
--- >>> metas = Metavariables [(Metavar "F", ([t, Function t t, t], t)), (Metavar "X", ([], t))] (freshMetavariables someMetas)
--- >>> constraint = Constraint [(f, (Function t t)), (x, t)] left right
--- >>> solve [Problem metas [constraint]]
--- [Solution {solutionMetavariables = Metavariables {metavariables = [(Metavar "M0",([t,(t) -> t,t],t)),(Metavar "F",([t,(t) -> t,t],t)),(Metavar "X",([],t))], freshMetavariables = Stream}, solutionConstraints = [], solutionSubstitutions = [(Metavar "M0",([Var "x0",Var "x1",Var "x2"],x2)),(Metavar "F",([Var "x0",Var "x1",Var "x2"],(x1) (M0[x0,x1,x2])))]},Solution {solutionMetavariables = Metavariables {metavariables = [(Metavar "M1",([t,(t) -> t,t],t)),(Metavar "M0",([t,(t) -> t,t],(t) -> t)),(Metavar "F",([t,(t) -> t,t],t)),(Metavar "X",([],t))], freshMetavariables = Stream}, solutionConstraints = [], solutionSubstitutions = [(Metavar "M1",([Var "x0",Var "x1",Var "x2"],x2)),(Metavar "M0",([Var "x0",Var "x1",Var "x2"],x1)),(Metavar "F",([Var "x0",Var "x1",Var "x2"],(M0[x0,x1,x2]) (M1[x0,x1,x2])))]}]
+-- >>> left = Apply (Constant "a" (Function t t)) (Constant "b" t)
+-- >>> right = Meta (Metavar "F") [Meta (Metavar "X") []]
+-- >>> metas = Metavariables [(Metavar "F", ([t], t)), (Metavar "X", ([], t))] (freshMetavariables someMetas)
+-- >>> constraint = Constraint [] left right
+-- >>> solutionSubstitutions <$> solve [Problem metas [constraint]]
+-- [[(Metavar "M1",([Var "x0"],b: t)),(Metavar "M0",([Var "x0"],a: (t) -> t)),(Metavar "F",([Var "x0"],(M0[x0]) (M1[x0])))],[(Metavar "X",([],b: t)),(Metavar "M1",([Var "x0"],x0)),(Metavar "M0",([Var "x0"],a: (t) -> t)),(Metavar "F",([Var "x0"],(M0[x0]) (M1[x0])))],[(Metavar "M1",([],b: t)),(Metavar "M0",([],a: (t) -> t)),(Metavar "X",([],(M0[]) (M1[]))),(Metavar "F",([Var "x0"],x0))]]
 solve :: [Problem] -> [Solution]
 solve = go . fmap withoutSubstitutions
  where
