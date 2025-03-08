@@ -51,10 +51,14 @@ data Problem = Problem
   }
   deriving (Show)
 
+data Substitution = Substitution Metavar [Var] Ast
+
+newtype Substitutions = Substitutions [Substitution]
+
 data Solution = Solution
   { solutionMetavariables :: Metavariables
   , solutionConstraints :: [Constraint]
-  , solutionSubstitutions :: [(Metavar, ([Var], Ast))]
+  , solutionSubstitutions :: Substitutions
   }
   deriving (Show)
 
@@ -77,6 +81,14 @@ instance Show Constraint where
       <> show left
       <> " = "
       <> show right
+
+instance Show Substitution where
+  show (Substitution (Metavar meta) parameters body) =
+    meta <> "[" <> intercalate "," (fmap (\(Var var) -> var) parameters) <> "] ↦ " <> show body
+
+instance Show Substitutions where
+  show (Substitutions []) = "{ }"
+  show (Substitutions substitutions) = "{ " <> intercalate ", " (show <$> substitutions) <> " }"
 
 -- Naive rename
 --
@@ -111,24 +123,22 @@ substituteVar expected substitution (Apply function argument) =
 substituteVar expected substitution (Meta meta arguments) =
   Meta meta (substituteVar expected substitution <$> arguments)
 
-substituteMetavar :: Metavar -> [Var] -> Ast -> Ast -> Ast
-substituteMetavar _ _ _ node@Constant{} = node
-substituteMetavar _ _ _ node@Variable{} = node
-substituteMetavar expected parameters substitution (Lambda binder typ body) =
-  Lambda binder typ (substituteMetavar expected parameters substitution body)
-substituteMetavar expected parameters substitution (Apply function argument) =
+substituteMetavar :: Substitution -> Ast -> Ast
+substituteMetavar _ node@Constant{} = node
+substituteMetavar _ node@Variable{} = node
+substituteMetavar substitution (Lambda binder typ body) =
+  Lambda binder typ (substituteMetavar substitution body)
+substituteMetavar substitution (Apply function argument) =
   Apply
-    (substituteMetavar expected parameters substitution function)
-    (substituteMetavar expected parameters substitution argument)
-substituteMetavar expected parameters substitution (Meta meta arguments)
-  | meta == expected = foldr (uncurry substituteVar) substitution (zip parameters arguments)
-  | otherwise = Meta meta (substituteMetavar expected parameters substitution <$> arguments)
+    (substituteMetavar substitution function)
+    (substituteMetavar substitution argument)
+substituteMetavar substitution@(Substitution expected parameters body) (Meta meta arguments)
+  | meta == expected = foldr (uncurry substituteVar) body (zip parameters arguments)
+  | otherwise = Meta meta (substituteMetavar substitution <$> arguments)
 
-substituteConstraint :: Metavar -> [Var] -> Ast -> Constraint -> Constraint
-substituteConstraint meta parameters substitution (Constraint forall_ left right) =
-  Constraint forall_ (f left) (f right)
- where
-  f = substituteMetavar meta parameters substitution
+substituteConstraint :: Substitution -> Constraint -> Constraint
+substituteConstraint substitution (Constraint forall_ left right) =
+  Constraint forall_ (substituteMetavar substitution left) (substituteMetavar substitution right)
 
 -- >>> x = Var "x"
 -- >>> typeOf [(x, Base "X")] [] (Lambda x (Base "Y") (Variable x))
@@ -168,7 +178,7 @@ makeParameters :: FlexRigid -> [Var]
 makeParameters FlexRigid{flexRigidArguments} = take (length flexRigidArguments) someParameters
 
 withoutSubstitutions :: Problem -> Solution
-withoutSubstitutions (Problem metas constraints) = Solution metas constraints []
+withoutSubstitutions (Problem metas constraints) = Solution metas constraints emptySubstitutions
 
 pickFlexRigid :: Solution -> Maybe FlexRigid
 pickFlexRigid (Solution _ constraints _) = go constraints
@@ -192,6 +202,13 @@ fresh parameters typ (Metavariables metavariables (Stream metavar freshMetavaria
  where
   parameters' = Variable . fst <$> parameters
   metavarType = (snd <$> parameters, typ)
+
+emptySubstitutions :: Substitutions
+emptySubstitutions = Substitutions []
+
+addSubstitution :: Substitution -> Substitutions -> Substitutions
+addSubstitution substitution (Substitutions substitutions) =
+  Substitutions (substitution : substitutions)
 
 data Decomposition
   = Failed
@@ -300,15 +317,18 @@ project metas (FlexRigid _ meta _ _) parameters = do
 -- >>> snd <$> match metas (FlexRigid [] (Metavar "M") (error "args") (Constant "A" (Base "A"))) [x]
 -- [A: A,(x) (M0[x])]
 match :: Metavariables -> FlexRigid -> [Var] -> [(Metavariables, Ast)]
-match metas constraint parameters = maybeToList (imitate metas constraint parameters) <> project metas constraint parameters
+match metas constraint parameters =
+  maybeToList (imitate metas constraint parameters)
+    <> project metas constraint parameters
 
 step :: FlexRigid -> Solution -> [Solution]
 step flexRigid (Solution metas constraints substitutions) = do
   let meta = flexRigidMetavariable flexRigid
   let parameters = makeParameters flexRigid
-  (metas', substitution) <- match metas flexRigid parameters
-  let constraints' = substituteConstraint meta parameters substitution <$> constraints
-  return (Solution metas' constraints' ((meta, (parameters, substitution)) : substitutions))
+  (metas', body) <- match metas flexRigid parameters
+  let substitution = Substitution meta parameters body
+  let constraints' = substituteConstraint substitution <$> constraints
+  return (Solution metas' constraints' (addSubstitution substitution substitutions))
 
 -- >>> t = Base "t"
 -- >>> left = Apply (Constant "a" (Function t t)) (Constant "b" t)
@@ -316,7 +336,7 @@ step flexRigid (Solution metas constraints substitutions) = do
 -- >>> metas = Metavariables [(Metavar "F", ([t], t)), (Metavar "X", ([], t))] (freshMetavariables someMetas)
 -- >>> constraint = Constraint [] left right
 -- >>> solutionSubstitutions <$> solve [Problem metas [constraint]]
--- [[(Metavar "M1",([Var "x0"],b: t)),(Metavar "M0",([Var "x0"],a: (t) -> t)),(Metavar "F",([Var "x0"],(M0[x0]) (M1[x0])))],[(Metavar "X",([],b: t)),(Metavar "M1",([Var "x0"],x0)),(Metavar "M0",([Var "x0"],a: (t) -> t)),(Metavar "F",([Var "x0"],(M0[x0]) (M1[x0])))],[(Metavar "M1",([],b: t)),(Metavar "M0",([],a: (t) -> t)),(Metavar "X",([],(M0[]) (M1[]))),(Metavar "F",([Var "x0"],x0))]]
+-- [{ M1[x0] ↦ b: t, M0[x0] ↦ a: (t) -> t, F[x0] ↦ (M0[x0]) (M1[x0]) },{ X[] ↦ b: t, M1[x0] ↦ x0, M0[x0] ↦ a: (t) -> t, F[x0] ↦ (M0[x0]) (M1[x0]) },{ M1[] ↦ b: t, M0[] ↦ a: (t) -> t, X[] ↦ (M0[]) (M1[]), F[x0] ↦ x0 }]
 solve :: [Problem] -> [Solution]
 solve = go . fmap withoutSubstitutions
  where
