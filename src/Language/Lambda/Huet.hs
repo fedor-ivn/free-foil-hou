@@ -13,8 +13,15 @@ instance Show (Stream a) where
 
 data Type = Base String | Function Type Type deriving (Eq)
 
+instance Show Type where
+  show (Base typ) = typ
+  show (Function from to) = "(" <> show from <> ") -> " <> show to
+
 newtype Var = Var String deriving (Eq, Show)
 newtype Metavar = Metavar String deriving (Eq, Show)
+
+someParameters :: [Var]
+someParameters = fmap (\n -> Var ("x" <> show n)) [0 :: Integer ..]
 
 data Ast
   = Constant String Type
@@ -23,72 +30,6 @@ data Ast
   | Apply Ast Ast
   | Meta Metavar [Ast]
   deriving (Eq)
-
-data Constraint = Constraint
-  { constraintForall :: [(Var, Type)]
-  , constraintLhs :: Ast
-  , constraintRhs :: Ast
-  }
-  deriving (Eq)
-
-data FlexRigid = FlexRigid
-  { flexRigidForall :: [(Var, Type)]
-  , flexRigidMetavariable :: Metavar
-  , flexRigidArguments :: [Ast]
-  , flexRigidRhs :: Ast
-  }
-  deriving (Show)
-
-data Metavariables = Metavariables
-  { metavariables :: [(Metavar, ([Type], Type))]
-  , freshMetavariables :: Stream Metavar
-  }
-  deriving (Show, Eq)
-
-data Problem = Problem
-  { problemMetavariables :: Metavariables
-  , problemConstraints :: [Constraint]
-  }
-  deriving (Show)
-
-data Substitution = Substitution Metavar [Var] Ast
-
-newtype Substitutions = Substitutions [Substitution]
-
-data Solution = Solution
-  { solutionMetavariables :: Metavariables
-  , solutionConstraints :: [Constraint]
-  , solutionSubstitutions :: Substitutions
-  }
-  deriving (Show)
-
-instance Show Type where
-  show (Base typ) = typ
-  show (Function from to) = "(" <> show from <> ") -> " <> show to
-
-instance Show Ast where
-  show (Constant constant typ) = constant <> ": " <> show typ
-  show (Variable (Var variable)) = variable
-  show (Lambda (Var binder) typ body) = "\\" <> binder <> ": " <> show typ <> ". " <> show body
-  show (Apply left right) = "(" <> show left <> ") (" <> show right <> ")"
-  show (Meta (Metavar metavariable) arguments) = metavariable <> show arguments
-
-instance Show Constraint where
-  show (Constraint vars left right) =
-    "forall "
-      <> intercalate ", " (fmap (\(Var x, typ) -> x <> ": " <> show typ) vars)
-      <> ". "
-      <> show left
-      <> " = "
-      <> show right
-
-instance Show Substitution where
-  show (Substitution (Metavar meta) parameters body) =
-    meta <> "[" <> intercalate "," (fmap (\(Var var) -> var) parameters) <> "] ↦ " <> show body
-
-instance Show Substitutions where
-  show (Substitutions []) = "{ }"
-  show (Substitutions substitutions) = "{ " <> intercalate ", " (show <$> substitutions) <> " }"
 
 -- Naive rename
 --
@@ -109,6 +50,25 @@ rename from to (Lambda binder typ body) = Lambda binder typ body'
     | otherwise = rename from to body
 rename from to (Apply left right) = Apply (rename from to left) (rename from to right)
 rename from to (Meta metavariable arguments) = Meta metavariable (rename from to <$> arguments)
+
+-- >>> x = Var "x"
+-- >>> typeOf [(x, Base "X")] [] (Lambda x (Base "Y") (Variable x))
+-- Just (Y) -> Y
+-- >>> typeOf [] [] (Apply (Lambda x (Base "A") (Variable x)) (Constant "A" (Base "A")))
+-- Just A
+typeOf :: [(Var, Type)] -> [(Metavar, ([Type], Type))] -> Ast -> Maybe Type
+typeOf _ _ (Constant _ typ) = Just typ
+typeOf variables _ (Variable var) = lookup var variables
+typeOf variables metavariables (Lambda binder binderType body) =
+  Function binderType <$> typeOf ((binder, binderType) : variables) metavariables body
+typeOf variables metavariables (Apply function argument) = do
+  Function argumentType returnType <- typeOf variables metavariables function
+  argumentType' <- typeOf variables metavariables argument
+  if argumentType == argumentType'
+    then Just returnType
+    else Nothing
+typeOf _ metavariables (Meta metavariable _arguments) =
+  snd <$> lookup metavariable metavariables
 
 substituteVar :: Var -> Ast -> Ast -> Ast
 substituteVar _ _ node@Constant{} = node
@@ -136,34 +96,40 @@ substituteMetavar substitution@(Substitution expected parameters body) (Meta met
   | meta == expected = foldr (uncurry substituteVar) body (zip parameters arguments)
   | otherwise = Meta meta (substituteMetavar substitution <$> arguments)
 
+instance Show Ast where
+  show (Constant constant typ) = constant <> ": " <> show typ
+  show (Variable (Var variable)) = variable
+  show (Lambda (Var binder) typ body) = "\\" <> binder <> ": " <> show typ <> ". " <> show body
+  show (Apply left right) = "(" <> show left <> ") (" <> show right <> ")"
+  show (Meta (Metavar metavariable) arguments) = metavariable <> show arguments
+
+data Constraint = Constraint
+  { constraintForall :: [(Var, Type)]
+  , constraintLhs :: Ast
+  , constraintRhs :: Ast
+  }
+  deriving (Eq)
+
 substituteConstraint :: Substitution -> Constraint -> Constraint
 substituteConstraint substitution (Constraint forall_ left right) =
   Constraint forall_ (substituteMetavar substitution left) (substituteMetavar substitution right)
 
--- >>> x = Var "x"
--- >>> typeOf [(x, Base "X")] [] (Lambda x (Base "Y") (Variable x))
--- Just (Y) -> Y
--- >>> typeOf [] [] (Apply (Lambda x (Base "A") (Variable x)) (Constant "A" (Base "A")))
--- Just A
-typeOf :: [(Var, Type)] -> [(Metavar, ([Type], Type))] -> Ast -> Maybe Type
-typeOf _ _ (Constant _ typ) = Just typ
-typeOf variables _ (Variable var) = lookup var variables
-typeOf variables metavariables (Lambda binder binderType body) =
-  Function binderType <$> typeOf ((binder, binderType) : variables) metavariables body
-typeOf variables metavariables (Apply function argument) = do
-  Function argumentType returnType <- typeOf variables metavariables function
-  argumentType' <- typeOf variables metavariables argument
-  if argumentType == argumentType'
-    then Just returnType
-    else Nothing
-typeOf _ metavariables (Meta metavariable _arguments) =
-  snd <$> lookup metavariable metavariables
+instance Show Constraint where
+  show (Constraint vars left right) =
+    "forall "
+      <> intercalate ", " (fmap (\(Var x, typ) -> x <> ": " <> show typ) vars)
+      <> ". "
+      <> show left
+      <> " = "
+      <> show right
 
-someMetas :: Metavariables
-someMetas = Metavariables [] freshMetavariables
- where
-  freshMetavariables = fmap (\i -> Metavar ("M" <> show i)) (nats (0 :: Integer))
-  nats i = Stream i (nats (i + 1))
+data FlexRigid = FlexRigid
+  { flexRigidForall :: [(Var, Type)]
+  , flexRigidMetavariable :: Metavar
+  , flexRigidArguments :: [Ast]
+  , flexRigidRhs :: Ast
+  }
+  deriving (Show)
 
 toFlexRigid :: Constraint -> Maybe FlexRigid
 toFlexRigid (Constraint _ Meta{} Meta{}) = Nothing
@@ -171,11 +137,56 @@ toFlexRigid (Constraint forall_ (Meta meta arguments) rhs) = Just (FlexRigid for
 toFlexRigid (Constraint forall_ rhs (Meta meta arguments)) = Just (FlexRigid forall_ meta arguments rhs)
 toFlexRigid _ = Nothing
 
-someParameters :: [Var]
-someParameters = fmap (\n -> Var ("x" <> show n)) [0 :: Integer ..]
+data Metavariables = Metavariables
+  { metavariables :: [(Metavar, ([Type], Type))]
+  , freshMetavariables :: Stream Metavar
+  }
+  deriving (Show, Eq)
 
-makeParameters :: FlexRigid -> [Var]
-makeParameters FlexRigid{flexRigidArguments} = take (length flexRigidArguments) someParameters
+someMetas :: Metavariables
+someMetas = Metavariables [] freshMetavariables
+ where
+  freshMetavariables = fmap (\i -> Metavar ("M" <> show i)) (nats (0 :: Integer))
+  nats i = Stream i (nats (i + 1))
+
+fresh :: [(Var, Type)] -> Type -> Metavariables -> (Ast, Metavariables)
+fresh parameters typ (Metavariables metavariables (Stream metavar freshMetavariables)) =
+  (Meta metavar parameters', Metavariables ((metavar, metavarType) : metavariables) freshMetavariables)
+ where
+  parameters' = Variable . fst <$> parameters
+  metavarType = (snd <$> parameters, typ)
+
+data Substitution = Substitution Metavar [Var] Ast
+
+instance Show Substitution where
+  show (Substitution (Metavar meta) parameters body) =
+    meta <> "[" <> intercalate "," (fmap (\(Var var) -> var) parameters) <> "] ↦ " <> show body
+
+newtype Substitutions = Substitutions [Substitution]
+
+emptySubstitutions :: Substitutions
+emptySubstitutions = Substitutions []
+
+addSubstitution :: Substitution -> Substitutions -> Substitutions
+addSubstitution substitution (Substitutions substitutions) =
+  Substitutions (substitution : substitutions)
+
+instance Show Substitutions where
+  show (Substitutions []) = "{ }"
+  show (Substitutions substitutions) = "{ " <> intercalate ", " (show <$> substitutions) <> " }"
+
+data Problem = Problem
+  { problemMetavariables :: Metavariables
+  , problemConstraints :: [Constraint]
+  }
+  deriving (Show)
+
+data Solution = Solution
+  { solutionMetavariables :: Metavariables
+  , solutionConstraints :: [Constraint]
+  , solutionSubstitutions :: Substitutions
+  }
+  deriving (Show)
 
 withoutSubstitutions :: Problem -> Solution
 withoutSubstitutions (Problem metas constraints) = Solution metas constraints emptySubstitutions
@@ -196,48 +207,42 @@ splitProblems = go id id
     Just flexRigid -> go solved (((flexRigid, problem) :) . unsolved) problems
     Nothing -> go ((problem :) . solved) unsolved problems
 
-fresh :: [(Var, Type)] -> Type -> Metavariables -> (Ast, Metavariables)
-fresh parameters typ (Metavariables metavariables (Stream metavar freshMetavariables)) =
-  (Meta metavar parameters', Metavariables ((metavar, metavarType) : metavariables) freshMetavariables)
- where
-  parameters' = Variable . fst <$> parameters
-  metavarType = (snd <$> parameters, typ)
-
-emptySubstitutions :: Substitutions
-emptySubstitutions = Substitutions []
-
-addSubstitution :: Substitution -> Substitutions -> Substitutions
-addSubstitution substitution (Substitutions substitutions) =
-  Substitutions (substitution : substitutions)
-
 data Decomposition
   = Failed
   | Nondecomposable Constraint
   | Decomposed [Constraint]
   deriving (Show)
 
--- >>> (x, _X) = (Var "x", Base "X")
--- >>> (y, _Y) = (Var "y", Base "Y")
--- >>> decompose (Constraint [(x, _X)] (Variable x) (Variable x))
+-- >>> (t, u) = (Base "t", Base "u")
+-- >>> (x, y) = (Var "x", Var "y")
+-- >>> decompose (Constraint [(x, t)] (Variable x) (Variable x))
 -- Decomposed []
--- >>> decompose (Constraint [(x, _X), (y, _Y)] (Variable x) (Variable y))
+-- >>> decompose (Constraint [(x, t), (y, u)] (Variable x) (Variable y))
 -- Failed
--- >>> decompose (Constraint [(x, _X), (y, _Y)] (Apply (Variable x) (Variable y)) (Apply (Constant "A" (Function (Base "B") (Base "B"))) (Constant "B" (Base "B"))))
--- Decomposed [forall x: X, y: Y. x = A: (B) -> B,forall x: X, y: Y. y = B: B]
--- >>> decompose (Constraint [] (Lambda x _X (Variable x)) (Lambda y _X (Variable y)))
--- Decomposed [forall x: X. x = x]
--- >>> decompose (Constraint [(x, _X), (y, _Y)] (Apply (Variable x) (Variable y)) (Variable x))
+-- >>> decompose (Constraint [(x, t), (y, u)] (Apply (Variable x) (Variable y)) (Apply (Constant "A" t) (Constant "B" u)))
+-- Decomposed [forall x: t, y: u. x = A: t,forall x: t, y: u. y = B: u]
+-- >>> decompose (Constraint [] (Lambda x t (Variable x)) (Lambda y t (Variable y)))
+-- Decomposed [forall x: t. x = x]
+-- >>> decompose (Constraint [(x, t), (y, u)] (Apply (Variable x) (Variable y)) (Variable x))
 -- Failed
 decompose :: Constraint -> Decomposition
-decompose constraint@(Constraint _ Meta{} _) = Nondecomposable constraint
-decompose constraint@(Constraint _ _ Meta{}) = Nondecomposable constraint
-decompose (Constraint _ left@Constant{} right@Constant{}) | left == right = Decomposed []
-decompose (Constraint _ (Variable left) (Variable right)) | left == right = Decomposed []
-decompose (Constraint context (Lambda leftBinder typ left) (Lambda rightBinder _ right)) =
-  Decomposed [Constraint ((leftBinder, typ) : context) left (rename rightBinder leftBinder right)]
-decompose (Constraint context (Apply leftF leftA) (Apply rightF rightA)) =
-  Decomposed [Constraint context leftF rightF, Constraint context leftA rightA]
-decompose _ = Failed
+decompose constraint@(Constraint forall_ left right) = case (left, right) of
+  (Meta{}, _) -> Nondecomposable constraint
+  (_, Meta{}) -> Nondecomposable constraint
+  (Constant{}, Constant{}) | left == right -> Decomposed []
+  (Variable{}, Variable{}) | left == right -> Decomposed []
+  (Lambda leftBinder leftBinderType leftBody, Lambda rightBinder rightBinderType rightBody)
+    | leftBinderType == rightBinderType ->
+        Decomposed [Constraint forall' leftBody rightBody']
+   where
+    forall' = (leftBinder, leftBinderType) : forall_
+    rightBody' = rename rightBinder leftBinder rightBody
+  (Apply leftFunction leftArgument, Apply rightFunction rightArgument) ->
+    Decomposed
+      [ Constraint forall_ leftFunction rightFunction
+      , Constraint forall_ leftArgument rightArgument
+      ]
+  _ -> Failed
 
 decomposeConstraints :: [Constraint] -> Maybe [Constraint]
 decomposeConstraints [] = Just []
@@ -252,43 +257,52 @@ decomposeProblems problems = do
   constraints' <- maybeToList (decomposeConstraints constraints)
   return (Solution metas constraints' substitutions)
 
--- >>> (x, y) = (Var "x", Var "y")
--- >>> metas = Metavariables [(Metavar "M", ([Base "Y"], Base "B"))] (freshMetavariables someMetas)
--- >>> snd <$> imitate metas (FlexRigid [] (Metavar "M") (error "params") (Constant "B" (Base "B"))) [y]
--- Just B: B
--- >>> metas = Metavariables [(Metavar "M", ([Base "Y"], Base "X"))] (freshMetavariables someMetas)
--- >>> snd <$> imitate metas (FlexRigid [(x, Base "X")] (Metavar "M") (error "params") (Variable x)) [y]
--- Nothing
--- >>> metas = Metavariables [(Metavar "M", ([Base "Y"], Function (Base "A") (Base "A")))] (freshMetavariables someMetas)
--- >>> snd <$> imitate metas (FlexRigid [(x, Base "A")] (Metavar "M") (error "params") (Lambda x (Base "A") (Variable x))) [y]
--- Just \x: A. M0[x,y]
-imitate :: Metavariables -> FlexRigid -> [Var] -> Maybe (Metavariables, Ast)
-imitate metas (FlexRigid _ _ _ (Constant constant typ)) _ = Just (metas, Constant constant typ)
-imitate _ (FlexRigid _ _ _ Variable{}) _ = Nothing
-imitate metas (FlexRigid _ meta _ (Lambda binder binderType _)) parameters = do
-  (parameterTypes, Function _ returnType) <- lookup meta (metavariables metas)
-  let typedParameters = zip parameters parameterTypes
-  let (body', metas') = fresh ((binder, binderType) : typedParameters) returnType metas
-  Just (metas', Lambda binder binderType body')
-imitate metas (FlexRigid context meta _ (Apply function argument)) parameters = do
-  (parameterTypes, _) <- lookup meta (metavariables metas)
-  let typedParameters = zip parameters parameterTypes
-  functionType <- typeOf context (metavariables metas) function
-  argumentType <- typeOf context (metavariables metas) argument
-  let (left, metas') = fresh typedParameters functionType metas
-  let (right, metas'') = fresh typedParameters argumentType metas'
-  Just (metas'', Apply left right)
-imitate _ (FlexRigid _ _ _ Meta{}) _ = error "impossible" -- TODO: remove this possibility
+data MatchContext = MatchContext
+  { matchMetavariables :: Metavariables
+  , matchParameters :: [(Var, Type)]
+  , matchForall :: [(Var, Type)]
+  , matchRhs :: Ast
+  , matchRhsType :: Type
+  }
+  deriving (Show)
 
--- >>> parameters = [(Var "x", Base "X")]
--- >>> snd <$> reduce parameters someMetas (Base "A") (Base "A") (Constant "B" (Base "B"))
--- [B: B]
--- >>> snd <$> reduce parameters someMetas (Base "A") (Base "B") (Constant "B" (Base "B"))
+-- >>> (x, y) = (Var "x", Var "y")
+-- >>> (t, u, v) = (Base "t", Base "u", Base "v")
+-- >>> metas = Metavariables [(Metavar "M", ([u], t))] (freshMetavariables someMetas)
+-- >>> context = MatchContext someMetas [(y, v)]
+-- >>> snd <$> imitate (context [] (Constant "B" t) t)
+-- Just B: t
+-- >>> snd <$> imitate (context [(x, t)] (Variable x) t)
+-- Nothing
+-- >>> snd <$> imitate (context [(x, u)] (Lambda x t (Variable x)) (Function t t))
+-- Just \x: t. M0[x,y]
+imitate :: MatchContext -> Maybe (Metavariables, Ast)
+imitate (MatchContext metas parameters forall_ rhs rhsType) = case rhs of
+  Constant constant typ -> Just (metas, Constant constant typ)
+  Variable _ -> Nothing
+  Lambda binder binderType _ -> do
+    Function _ returnType <- Just rhsType
+    let (body, metas') = fresh ((binder, binderType) : parameters) returnType metas
+    Just (metas', Lambda binder binderType body)
+  Apply function argument -> do
+    functionType <- typeOf forall_ (metavariables metas) function
+    argumentType <- typeOf forall_ (metavariables metas) argument
+    let (function', metas') = fresh parameters functionType metas
+    let (argument', metas'') = fresh parameters argumentType metas'
+    Just (metas'', Apply function' argument')
+  Meta{} -> error "impossible" -- TODO: remove this possibility
+
+-- >>> (t, u, v) = (Base "t", Base "u", Base "v")
+-- >>> parameters = [(Var "x", v)]
+-- >>> y = Variable (Var "y")
+-- >>> snd <$> reduce someMetas parameters t t y
+-- [y]
+-- >>> snd <$> reduce someMetas parameters t u y
 -- []
--- >>> snd <$> reduce parameters someMetas (Base "A") (Function (Base "B") (Base "A")) (Constant "B" (Base "B"))
--- [(B: B) (M0[x])]
-reduce :: [(Var, Type)] -> Metavariables -> Type -> Type -> Ast -> [(Metavariables, Ast)]
-reduce parameters metas expectedType actualType term = reflexive <> function
+-- >>> snd <$> reduce someMetas parameters t (Function u t) y
+-- [(y) (M0[x])]
+reduce :: Metavariables -> [(Var, Type)] -> Type -> Type -> Ast -> [(Metavariables, Ast)]
+reduce metas parameters expectedType actualType term = reflexive <> function
  where
   reflexive
     | expectedType == actualType = [(metas, term)]
@@ -296,37 +310,35 @@ reduce parameters metas expectedType actualType term = reflexive <> function
   function
     | Function argumentType returnType <- actualType = do
         let (argument, metas') = fresh parameters argumentType metas
-        reduce parameters metas' expectedType returnType (Apply term argument)
+        reduce metas' parameters expectedType returnType (Apply term argument)
     | otherwise = []
 
--- >>> (x, xType) = (Var "x", Function (Base "A") (Function (Base "A") (Base "A")))
--- >>> (y, yType) = (Var "y", (Function (Base "A") (Base "B")))
--- >>> (z, zType) = (Var "z", Base "A")
--- >>> metas = Metavariables [(Metavar "M", ([xType, yType, zType], Base "A"))] (freshMetavariables someMetas)
--- >>> snd <$> project metas (FlexRigid [] (Metavar "M") (error "args") (Constant "A" (Base "A"))) [x, y, z]
+-- >>> (t, u) = (Base "t", Base "u")
+-- >>> x = (Var "x", Function t (Function u t))
+-- >>> y = (Var "y", Function t u)
+-- >>> z = (Var "z", t)
+-- >>> snd <$> project (MatchContext someMetas [x, y, z] [] (Constant "A" t) t)
 -- [((x) (M0[x,y,z])) (M1[x,y,z]),z]
-project :: Metavariables -> FlexRigid -> [Var] -> [(Metavariables, Ast)]
-project metas (FlexRigid _ meta _ _) parameters = do
-  (parameterTypes, expectedType) <- maybeToList (lookup meta (metavariables metas))
-  let typedParameters = zip parameters parameterTypes
-  (var, actualType) <- typedParameters
-  reduce typedParameters metas expectedType actualType (Variable var)
+project :: MatchContext -> [(Metavariables, Ast)]
+project (MatchContext metas parameters _ _ rhsType) = do
+  (parameter, parameterType) <- parameters
+  reduce metas parameters rhsType parameterType (Variable parameter)
 
+-- >>> t = Base "t"
+-- >>> x = Var "x"
 -- >>> (x, xType) = (Var "x", Function (Base "A") (Base "A"))
--- >>> metas = Metavariables [(Metavar "M", ([xType], Base "A"))] (freshMetavariables someMetas)
--- >>> snd <$> match metas (FlexRigid [] (Metavar "M") (error "args") (Constant "A" (Base "A"))) [x]
--- [A: A,(x) (M0[x])]
-match :: Metavariables -> FlexRigid -> [Var] -> [(Metavariables, Ast)]
-match metas constraint parameters =
-  maybeToList (imitate metas constraint parameters)
-    <> project metas constraint parameters
+-- >>> snd <$> match (MatchContext someMetas [(x, Function t t)] [] (Constant "A" t) t)
+-- [A: t,(x) (M0[x])]
+match :: MatchContext -> [(Metavariables, Ast)]
+match context = maybeToList (imitate context) <> project context
 
 step :: FlexRigid -> Solution -> [Solution]
-step flexRigid (Solution metas constraints substitutions) = do
-  let meta = flexRigidMetavariable flexRigid
-  let parameters = makeParameters flexRigid
-  (metas', body) <- match metas flexRigid parameters
-  let substitution = Substitution meta parameters body
+step (FlexRigid forall_ meta _ rhs) (Solution metas constraints substitutions) = do
+  (parameterTypes, rhsType) <- maybeToList (lookup meta (metavariables metas))
+  let parameters = zip someParameters parameterTypes
+
+  (metas', body) <- match (MatchContext metas parameters forall_ rhs rhsType)
+  let substitution = Substitution meta (fst <$> parameters) body
   let constraints' = substituteConstraint substitution <$> constraints
   return (Solution metas' constraints' (addSubstitution substitution substitutions))
 
