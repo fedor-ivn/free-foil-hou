@@ -349,6 +349,15 @@ step (FlexRigid forall_ meta _ rhs) (Solution metas constraints substitutions) =
 -- >>> constraint = Constraint [] left right
 -- >>> solutionSubstitutions <$> solve [Problem metas [constraint]]
 -- [{ M1[x0] ↦ b: t, M0[x0] ↦ a: (t) -> t, F[x0] ↦ (M0[x0]) (M1[x0]) },{ X[] ↦ b: t, M1[x0] ↦ x0, M0[x0] ↦ a: (t) -> t, F[x0] ↦ (M0[x0]) (M1[x0]) },{ M1[] ↦ b: t, M0[] ↦ a: (t) -> t, X[] ↦ (M0[]) (M1[]), F[x0] ↦ x0 }]
+--
+-- >>> (_F, _X) = (Metavar "F", Metavar "X)
+-- >>> a = Constant "a" (Function t t)
+-- >>> b = Constant "b" t
+-- >>> left = Meta _F [Meta _X [], b]
+-- >>> right = Apply a b
+-- >>> metas = Metavariables [(_F, ([Function t (Function t t), t], t)), (_X, ([], Function t (Function t t)))] (freshMetavariables someMetas)
+-- >>> solutionSubstitutions <$> solve [Problem metas [Constraint [] left right]]
+-- [{ M1[x0,x1] ↦ x1, M0[x0,x1] ↦ a: (t) -> t, F[x0,x1] ↦ (M0[x0,x1]) (M1[x0,x1]) },{ M1[x0,x1] ↦ b: t, M0[x0,x1] ↦ a: (t) -> t, F[x0,x1] ↦ (M0[x0,x1]) (M1[x0,x1]) }]
 solve :: [Problem] -> [Solution]
 solve = go . fmap withoutSubstitutions
  where
