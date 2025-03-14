@@ -14,6 +14,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Data.SOAS where
 
@@ -88,6 +89,11 @@ class TypedBinder binder t where
     -> t
     -> binder n l
     -> [a]
+
+instance TypedSignature (MetaAppSig metavar) typ where
+  -- mapSigWithTypes varTypes metaVarTypes f g (MetaAppSig m args) _expectedType =
+    -- _
+
 
 type TypedSOAS binder metavar sig n t =
   AST binder (AnnSig t (Sum sig (MetaAppSig metavar))) n
@@ -269,6 +275,7 @@ match
      , Ord metavar
      , TypedBinder binder t
      , TypedSignature sig t
+     , TypedSignature ext t
      , ZipMatchK (Sum sig (MetaAppSig metavar))
      , ZipMatchK t
      )
@@ -347,6 +354,20 @@ match scope metavarTypes varTypes (lhs, lhsReturnType) (rhs, rhsReturnType) =
               _ -> trace "term structs doesn't match" []
       (Node (AnnSig (L2 _) _), Node (AnnSig (R2 _) _)) -> []
 
+swapSum :: Sum sig1 sig2 scope term -> Sum sig2 sig1 scope term
+swapSum (L2 x) = R2 x
+swapSum (R2 y) = L2 y
+
+swapAnnSum :: AnnSig t (Sum sig1 sig2) scope term -> AnnSig t (Sum sig2 sig1) scope term
+swapAnnSum (AnnSig sig t) = AnnSig (swapSum sig) t
+
+transAST :: Bifunctor sig => (forall a b. sig a b -> sig' a b) -> AST binder sig n -> AST binder sig' n
+transAST _phi (Var x) = Var x
+transAST phi (Node node) = Node (phi (bimap (transScopedAST phi) (transAST phi) node))
+
+transScopedAST :: Bifunctor sig => (forall a b. sig a b -> sig' a b) -> ScopedAST binder sig n -> ScopedAST binder sig' n
+transScopedAST phi (ScopedAST binder body) = ScopedAST binder (transAST phi body)
+
 -- | Same as 'match' but for scoped terms.
 matchScoped
   :: ( Bitraversable sig
@@ -363,6 +384,7 @@ matchScoped
      , Ord metavar
      , TypedBinder binder t
      , TypedSignature sig t
+     , TypedSignature ext t
      , ZipMatchK (Sum sig (MetaAppSig metavar))
      , ZipMatchK t
      )
@@ -440,6 +462,7 @@ matchMetavar
      , Eq t
      , Ord metavar
      , TypedSignature sig t
+     , TypedSignature ext t
      , TypedBinder binder t
      , ZipMatchK t
      , ZipMatchK (Sum sig (MetaAppSig metavar))
@@ -466,7 +489,7 @@ matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWit
   let projections = project metavarNameBinders argsWithTypes
       imitations = trace ("imitate on: " <> debugSig rhs) $ case rhs of
         Var x -> undefined
-        Node sig -> do
+        Node (AnnSig (L2 sig) t) -> do
           let maybeSig = mapSigWithTypes varTypes (,) (,) sig expectedType
           sigWithTypes <- maybeToList maybeSig
           traversedSig <-
@@ -474,10 +497,20 @@ matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWit
               (matchMetavarScoped metavarScope metavarTypes metavarNameBinders scope varTypes argsWithTypes)
               (matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWithTypes)
               sigWithTypes
-          let term = Node (bimap fst fst traversedSig)
+          let term = Node (AnnSig (L2 (bimap fst fst traversedSig)) t)
           substs <- combineMetaSubsts (biList (bimap snd snd (trace ("end imitate on: " <> debugSig rhs) traversedSig)))
           return (term, substs)
-        Node (AnnSig (R2 _) _) -> []
+        Node (AnnSig (R2 sig) t) -> do
+          let maybeSig = mapSigWithTypes varTypes (,) (,) (bimap (transScopedAST swapAnnSum) (transAST swapAnnSum) sig) expectedType
+          sigWithTypes <- maybeToList maybeSig
+          traversedSig <-
+            bitraverse
+              (matchMetavarScoped metavarScope metavarTypes metavarNameBinders scope varTypes argsWithTypes)
+              (matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWithTypes)
+              (bimap (first (transScopedAST swapAnnSum)) (first (transAST swapAnnSum)) sigWithTypes)
+          let term = Node (AnnSig (R2 (bimap fst fst traversedSig)) t)
+          substs <- combineMetaSubsts (biList (bimap snd snd (trace ("end imitate on: " <> debugSig rhs) traversedSig)))
+          return (term, substs)
    in trace (show $ map length [projections, imitations]) $
         projections ++ imitations
  where
@@ -517,6 +550,7 @@ matchMetavarScoped
      , Eq t
      , Ord metavar
      , TypedSignature sig t
+     , TypedSignature ext t
      , TypedBinder binder t
      , ZipMatchK t
      , ZipMatchK (Sum sig (MetaAppSig metavar))

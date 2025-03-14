@@ -140,8 +140,7 @@ instance TypedSignature TermSig Raw.Type where
     AppSig fun arg -> do
       funType <- case fun of
         Var x -> return (Foil.lookupName x varTypes)
-        Node (L2 (AnnSig _ type_)) -> return type_
-        _ -> Nothing
+        Node (AnnSig _ type_) -> return type_
       case funType of
         Raw.Fun argType _returnType ->
           return (AppSig (g fun funType) (g arg argType))
@@ -152,7 +151,7 @@ instance TypedSignature TermSig Raw.Type where
            in return (LamSig binderType body')
     _ -> Nothing
 
-  debugSig :: forall binder ext n. AST binder (Sum (AnnSig Raw.Type TermSig) ext) n -> String
+  debugSig :: forall binder ext n. AST binder (AnnSig Raw.Type (Sum TermSig ext)) n -> String
   debugSig term = let term' = unsafeCoerce term :: MetaTerm Raw.MetavarIdent n Raw.Type in show term'
 
 instance TypedBinder FoilPattern Raw.Type where
@@ -162,20 +161,20 @@ instance TypedBinder FoilPattern Raw.Type where
 -- ** Pattern synonyms
 
 pattern App'
-  :: AST binder (Sum (AnnSig Raw.Type TermSig) q) n
-  -> AST binder (Sum (AnnSig Raw.Type TermSig) q) n
+  :: AST binder (AnnSig Raw.Type (Sum TermSig q)) n
+  -> AST binder (AnnSig Raw.Type (Sum TermSig q)) n
   -> Raw.Type
-  -> AST binder (Sum (AnnSig Raw.Type TermSig) q) n
-pattern App' f x typ = Node (L2 (AnnSig (AppSig f x) typ))
+  -> AST binder (AnnSig Raw.Type (Sum TermSig q)) n
+pattern App' f x typ = Node (AnnSig (L2 (AppSig f x)) typ)
 
 pattern Lam'
   :: binder n l
   -> Raw.Type
-  -> AST binder (Sum (AnnSig Raw.Type TermSig) q) l
+  -> AST binder (AnnSig Raw.Type (Sum TermSig q)) l
   -> Raw.Type
-  -> AST binder (Sum (AnnSig Raw.Type TermSig) q) n
+  -> AST binder (AnnSig Raw.Type (Sum TermSig q)) n
 pattern Lam' binder binderType body returnType =
-  Node (L2 (AnnSig (LamSig binderType (ScopedAST binder body)) returnType))
+  Node (AnnSig (L2 (LamSig binderType (ScopedAST binder body))) returnType)
 
 -- pattern Let'
 --   :: AST binder (Sum TermSig q) n
@@ -186,10 +185,10 @@ pattern Lam' binder binderType body returnType =
 
 pattern MetaVar'
   :: Raw.MetavarIdent
-  -> [AST binder (Sum (AnnSig Raw.Type TermSig) q) n]
+  -> [AST binder (AnnSig Raw.Type (Sum TermSig q)) n]
   -> Raw.Type
-  -> AST binder (Sum (AnnSig Raw.Type TermSig) q) n
-pattern MetaVar' metavar args typ = Node (L2 (AnnSig (MetavarSig metavar args) typ))
+  -> AST binder (AnnSig Raw.Type (Sum TermSig q)) n
+pattern MetaVar' metavar args typ = Node (AnnSig (L2 (MetavarSig metavar args)) typ)
 
 -- FV( (λ x. x) y )  =  { y }
 --
@@ -246,7 +245,7 @@ nfMetaTerm scope = \case
          in nfMetaTerm scope (substitute scope subst body)
       f' -> App' f' (nfMetaTerm scope x) typ
   MetaVar' metavar args typ -> MetaVar' metavar (map (nfMetaTerm scope) args) typ
-  MetaApp metavar args -> MetaApp metavar (map (nfMetaTerm scope) args)
+  MetaApp metavar args typ -> MetaApp metavar (map (nfMetaTerm scope) args) typ
 
 nfMetaTermWithEmptyScope
   :: MetaTerm metavar Foil.VoidS Raw.Type
@@ -322,17 +321,15 @@ withMetaSubstVars
 type MetaSubst' =
   MetaSubst
     FoilPattern
-    (AnnSig Raw.Type TermSig)
+    (AnnSig Raw.Type (Sum TermSig (MetaAppSig Raw.MetavarIdent)))
     Raw.MetavarIdent
-    (MetaAppSig Raw.MetavarIdent)
     Raw.Type
 
 type MetaSubsts' =
   MetaSubsts
     FoilPattern
-    (AnnSig Raw.Type TermSig)
+    (AnnSig Raw.Type (Sum TermSig (MetaAppSig Raw.MetavarIdent)))
     Raw.MetavarIdent
-    (MetaAppSig Raw.MetavarIdent)
     Raw.Type
 
 fromMetaSubst :: MetaSubst' -> Raw.MetaSubst
@@ -436,8 +433,8 @@ annotate metavarTypes varTypes (App function argument) = do
   case functionType of
     Raw.Fun argumentType' returnType
       | argumentType == argumentType' ->
-          let annSig = AnnSig (AppSig function' argument') returnType
-              term = Node (L2 annSig)
+          let annSig = AnnSig (L2 (AppSig function' argument')) returnType
+              term = Node annSig
            in Just (term, returnType)
     _ -> Nothing
 annotate metavarTypes varTypes (Lam typ binder body) = do
@@ -445,14 +442,14 @@ annotate metavarTypes varTypes (Lam typ binder body) = do
       varTypes' = Foil.addNameBinder name typ varTypes
   (body', returnType) <- annotate metavarTypes varTypes' body
   let lamType = Raw.Fun typ returnType
-      annSig = AnnSig (LamSig typ (ScopedAST binder body')) lamType
-      term = Node (L2 annSig)
+      annSig = AnnSig (L2 (LamSig typ (ScopedAST binder body'))) lamType
+      term = Node annSig
   Just (term, lamType)
 annotate metavarTypes varTypes (Metavar metavar args) = do
   (expectedArgTypes, returnType) <- Map.lookup metavar metavarTypes
   _ <- guard (length args == length expectedArgTypes)
   annotatedArgs <- traverse checkArg (zip args expectedArgTypes)
-  let term = MetaApp metavar annotatedArgs
+  let term = MetaApp metavar annotatedArgs returnType
   pure (term, returnType)
  where
   checkArg (arg, expectedType) = do
@@ -463,8 +460,8 @@ annotate metavarTypes varTypes (Metavar metavar args) = do
 fromMetaTerm :: MetaTerm Raw.MetavarIdent n t -> Term n
 fromMetaTerm = \case
   Var name -> Var name
-  Node (R2 (MetaAppSig metavar args)) -> Metavar metavar (map fromMetaTerm args)
-  Node (L2 (AnnSig node _)) -> Node (bimap fromMetaScopedTerm fromMetaTerm node)
+  Node (AnnSig (R2 (MetaAppSig metavar args)) _typ) -> Metavar metavar (map fromMetaTerm args)
+  Node (AnnSig (L2 node) _) -> Node (bimap fromMetaScopedTerm fromMetaTerm node)
  where
   fromMetaScopedTerm (ScopedAST binder body) = ScopedAST binder (fromMetaTerm body)
 
@@ -645,7 +642,7 @@ solveUnificationConstraint
 solveUnificationConstraint
   substs
   (UnificationConstraint scope binders binderTypes (lhs, lhsType) (rhs, rhsType)) =
-    let solve = nfMetaTerm scope . applyMetaSubsts id scope substs
+    let solve = nfMetaTerm scope . applyMetaSubsts scope substs
      in UnificationConstraint
           scope
           binders
@@ -665,7 +662,7 @@ isSolvedUnificationConstraint rawMetavarBinders rawUnificationConstraint rawMeta
     trace "parsed unification constraint" $
       parseUnificationConstraint metavarBindersMap rawUnificationConstraint
   metaSubsts <- traverse (parseMetaSubst metavarBindersMap) rawMetaSubsts
-  let solve = nfMetaTerm scope . applyMetaSubsts id scope (MetaSubsts metaSubsts)
+  let solve = nfMetaTerm scope . applyMetaSubsts scope (MetaSubsts metaSubsts)
   pure $
     alphaEquiv
       scope
@@ -887,12 +884,13 @@ matchMetaAbs
      , ZipMatchK ext
      , TypedBinder binder Raw.Type
      , TypedSignature sig Raw.Type
+     , TypedSignature ext Raw.Type
      )
   => MetavarBinders
   -> Raw.Type
-  -> MetaAbs binder (Sum (AnnSig Raw.Type sig) (MetaAppSig Raw.MetavarIdent)) Raw.Type
-  -> MetaAbs binder (Sum (AnnSig Raw.Type sig) ext) Raw.Type
-  -> [MetaSubsts binder (AnnSig Raw.Type sig) Raw.MetavarIdent ext Raw.Type]
+  -> MetaAbs binder (AnnSig Raw.Type (Sum sig (MetaAppSig Raw.MetavarIdent))) Raw.Type
+  -> MetaAbs binder (AnnSig Raw.Type (Sum sig ext)) Raw.Type
+  -> [MetaSubsts binder (AnnSig Raw.Type (Sum sig ext)) Raw.MetavarIdent Raw.Type]
 matchMetaAbs
   metavarBinders
   type_
