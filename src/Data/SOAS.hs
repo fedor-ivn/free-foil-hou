@@ -60,13 +60,13 @@ deriveGenericK ''AnnSig
 class TypedSignature sig t where
   mapSigWithTypes
     :: Foil.NameMap n t
-    -> (ScopedAST binder (AnnSig t (Sum sig ext)) n -> (t, t) -> scopedTerm)
+    -> (ScopedAST binder (AnnSig t sig') n -> (t, t) -> scopedTerm)
     -- ^ что делать с информацией о типах в подвыражениях со связанными переменными
-    -> (AST binder (AnnSig t (Sum sig ext)) n -> t -> term)
+    -> (AST binder (AnnSig t sig') n -> t -> term)
     -- ^ что делать с информацией о типах в простых подвыражениях
     -> sig
-        (ScopedAST binder (AnnSig t (Sum sig ext)) n)
-        (AST binder (AnnSig t (Sum sig ext)) n)
+        (ScopedAST binder (AnnSig t sig') n)
+        (AST binder (AnnSig t sig') n)
     -- ^ исходный узел (синтаксическая конструкция)
     -> t
     -- ^ (ожидаемый) тип узла
@@ -94,6 +94,16 @@ instance TypedSignature (MetaAppSig metavar) typ where
   -- mapSigWithTypes varTypes metaVarTypes f g (MetaAppSig m args) _expectedType =
     -- _
 
+instance TypedSignature sig typ => TypedSignature (AnnSig t sig) typ where
+  mapSigWithTypes varTypes f g (AnnSig sig t) expectedType = do
+    sig' <- mapSigWithTypes varTypes f g sig expectedType
+    return (AnnSig sig' t)
+
+instance (TypedSignature sig1 typ, TypedSignature sig2 typ) => TypedSignature (Sum sig1 sig2) typ where
+  mapSigWithTypes varTypes f g (L2 sig) expectedType =
+    L2 <$> mapSigWithTypes varTypes f g sig expectedType
+  mapSigWithTypes varTypes f g (R2 sig) expectedType =
+    R2 <$> mapSigWithTypes varTypes f g sig expectedType
 
 type TypedSOAS binder metavar sig n t =
   AST binder (AnnSig t (Sum sig (MetaAppSig metavar))) n
@@ -489,7 +499,7 @@ matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWit
   let projections = project metavarNameBinders argsWithTypes
       imitations = trace ("imitate on: " <> debugSig rhs) $ case rhs of
         Var x -> undefined
-        Node (AnnSig (L2 sig) t) -> do
+        Node sig -> do
           let maybeSig = mapSigWithTypes varTypes (,) (,) sig expectedType
           sigWithTypes <- maybeToList maybeSig
           traversedSig <-
@@ -497,18 +507,7 @@ matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWit
               (matchMetavarScoped metavarScope metavarTypes metavarNameBinders scope varTypes argsWithTypes)
               (matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWithTypes)
               sigWithTypes
-          let term = Node (AnnSig (L2 (bimap fst fst traversedSig)) t)
-          substs <- combineMetaSubsts (biList (bimap snd snd (trace ("end imitate on: " <> debugSig rhs) traversedSig)))
-          return (term, substs)
-        Node (AnnSig (R2 sig) t) -> do
-          let maybeSig = mapSigWithTypes varTypes (,) (,) (bimap (transScopedAST swapAnnSum) (transAST swapAnnSum) sig) expectedType
-          sigWithTypes <- maybeToList maybeSig
-          traversedSig <-
-            bitraverse
-              (matchMetavarScoped metavarScope metavarTypes metavarNameBinders scope varTypes argsWithTypes)
-              (matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWithTypes)
-              (bimap (first (transScopedAST swapAnnSum)) (first (transAST swapAnnSum)) sigWithTypes)
-          let term = Node (AnnSig (R2 (bimap fst fst traversedSig)) t)
+          let term = Node (bimap fst fst traversedSig)
           substs <- combineMetaSubsts (biList (bimap snd snd (trace ("end imitate on: " <> debugSig rhs) traversedSig)))
           return (term, substs)
    in trace (show $ map length [projections, imitations]) $
