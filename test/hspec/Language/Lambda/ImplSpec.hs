@@ -29,3 +29,5 @@ spec = do
         forM_ problemSolutions $ \solution@Impl.Solution{..} -> do
           it (Text.unpack solutionName) $ do
             Impl.validateSolution problemConstraints solution `shouldSatisfy` isRight
+
+

@@ -60,12 +60,14 @@ import Data.Bitraversable (Bitraversable)
 import Data.Either (partitionEithers)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe (isJust, listToMaybe)
 import Data.SOAS
 import Data.String (IsString (..))
 import Data.Text (Text)
 import qualified Data.Text as TIO
 import Data.ZipMatchK
 import Data.ZipMatchK.Bifunctor ()
+import Debug.Trace (trace)
 import GHC.Generics (Generic)
 import qualified GHC.Generics as GHC
 import Generics.Kind.TH (deriveGenericK)
@@ -531,7 +533,7 @@ parseMetaSubst metavarBinders input = do
   raw <- Raw.pMetaSubst tokens
   case toMetaSubst metavarBinders raw of
     Just subst -> pure subst
-    Nothing -> Left "type error"
+    Nothing -> trace "here" $ Left "type error"
 
 parseMetavarBinder :: String -> Either String MetavarBinder
 parseMetavarBinder input = fmap toMetavarBinder (Raw.pMetavarBinder tokens)
@@ -553,7 +555,7 @@ parseUnificationConstraint metavarBinders input = do
   let tokens = Raw.resolveLayout False (Raw.myLexer input)
   raw <- Raw.pUnificationConstraint tokens
   case toUnificationConstraint metavarBinders raw of
-    Just uc -> pure uc
+    Just uc -> trace (show uc) $ pure uc
     Nothing -> Left "type error"
 
 -- | Match a pattern against an term.
@@ -660,10 +662,15 @@ isSolvedUnificationConstraint rawMetavarBinders rawUnificationConstraint rawMeta
   metavarBinders <- traverse parseMetavarBinder rawMetavarBinders
   let metavarBindersMap = Map.fromList metavarBinders
   (UnificationConstraint scope _ _ (lhs, _) (rhs, _)) <-
-    parseUnificationConstraint metavarBindersMap rawUnificationConstraint
+    trace "parsed unification constraint" $
+      parseUnificationConstraint metavarBindersMap rawUnificationConstraint
   metaSubsts <- traverse (parseMetaSubst metavarBindersMap) rawMetaSubsts
   let solve = nfMetaTerm scope . applyMetaSubsts id scope (MetaSubsts metaSubsts)
-  pure $ alphaEquiv scope (solve lhs) (solve rhs)
+  pure $
+    alphaEquiv
+      scope
+      (trace (show (solve lhs)) (solve lhs))
+      (trace (show (solve rhs)) (solve rhs))
 
 isSolved :: UnificationConstraint -> Bool
 isSolved (UnificationConstraint scope _binders _binderTypes (lhs, _) (rhs, _)) = alphaEquiv scope lhs rhs
@@ -826,15 +833,51 @@ parseConfigAndValidate = do
     unlines $
       "Configuration errors:" : map (\err -> "  - " ++ show err) errs
 
+-- | Check if the left substitution is more general than the right substitution.
+-- Returns a list of booleans, one per metavariable in LHS substitution. A
+-- substitution σ1 is more general than σ2 if there exists a substitution τ such
+-- that σ2 = τ ∘ σ1
 -- >>> rawMetavarBinders = ["M : [t] t -> t -> t", "N : [t] t -> t"]
 -- >>> Right metavarBinders = parseMetavarBinders rawMetavarBinders
--- >>> Right lhs = parseMetaSubst metavarBinders "M[x] ↦ λy:t.N[x]"
--- >>> Right rhs = parseMetaSubst metavarBinders "M[x] ↦ λy:t.λz:t.x"
+-- >>> Right lhsSubst = parseMetaSubst metavarBinders "M[x] ↦ λy:t.N[x]"
+-- >>> Right rhsSubst = parseMetaSubst metavarBinders "M[x] ↦ λy:t.λz:t.x"
+-- >>> lhsSubsts = MetaSubsts [lhsSubst]
+-- >>> rhsSubsts = MetaSubsts [rhsSubst]
+-- >>> moreGeneralThan metavarBinders lhsSubsts rhsSubsts
+-- True
+-- >>> rawMetavarBinders = ["M : [t] t -> t -> t", "N : [t] t -> t"]
+-- >>> Right metavarBinders = parseMetavarBinders rawMetavarBinders
+-- >>> Right lhsSubst = parseMetaSubst metavarBinders "M[x] ↦ λy:t.λz:t.x"
+-- >>> lhsSubsts = MetaSubsts [lhsSubst]
+-- >>> rhsSubsts = MetaSubsts []
+-- >>> moreGeneralThan metavarBinders lhsSubsts rhsSubsts
+-- True
+moreGeneralThan :: MetavarBinders -> MetaSubsts' -> MetaSubsts' -> Bool
+moreGeneralThan metavarBinders lhs rhs =
+  -- LHS is more general if all metavariables passed the check
+  flip
+    all
+    lhsSubsts
+    $ \(metavar, lhsAbs) ->
+      let maybeSubsts = do
+            rhsAbs <- lookup metavar rhsSubsts
+            (_, type_) <- Map.lookup metavar metavarBinders
+            let substs = matchMetaAbs metavarBinders type_ lhsAbs rhsAbs
+            listToMaybe substs
+       in isJust maybeSubsts
+ where
+  lhsSubsts = map getMetaSubst $ getMetaSubsts lhs
+  rhsSubsts = map getMetaSubst $ getMetaSubsts rhs
+
+-- >>> rawMetavarBinders = ["M : [t] t -> t", "H1 : [t] t -> t", "H2 : [t] t -> t"]
+-- >>> Right metavarBinders = parseMetavarBinders rawMetavarBinders
+-- >>> Right lhs = parseMetaSubst metavarBinders "M[x] ↦ H1[x]"
+-- >>> Right rhs = parseMetaSubst metavarBinders "M[x] ↦ H2[x]"
 -- >>> (_, lhsAbs) = getMetaSubst lhs
 -- >>> (_, rhsAbs) = getMetaSubst rhs
 -- >>> Just (_, type_) = Map.lookup "M" metavarBinders
 -- >>> matchMetaAbs metavarBinders type_ lhsAbs rhsAbs
--- [[N [x0] ↦ λ x2 : t . x0]]
+-- []
 matchMetaAbs
   :: ( UnifiablePattern binder
      , SinkableK binder
@@ -859,34 +902,45 @@ matchMetaAbs
       Foil.SameNameBinders _ ->
         case Foil.assertDistinct lhsBinderList of
           Foil.Distinct ->
-            let commonScope = Foil.extendScopePattern lhsBinderList Foil.emptyScope
-             in match commonScope metavarBinders lhsBinderTypes (lhsTerm, type_) (rhsTerm, type_)
+            let scope = Foil.extendScopePattern lhsBinderList Foil.emptyScope
+             in trace "dbg" $ match scope metavarBinders lhsBinderTypes (lhsTerm, type_) (rhsTerm, type_)
       Foil.RenameLeftNameBinder _ rename ->
         case Foil.assertDistinct rhsBinderList of
           Foil.Distinct ->
-            let commonScope = Foil.extendScopePattern rhsBinderList Foil.emptyScope
-                lhsTerm' = Foil.liftRM commonScope (Foil.fromNameBinderRenaming rename) lhsTerm
-             in match commonScope metavarBinders rhsBinderTypes (lhsTerm', type_) (rhsTerm, type_)
+            let scope = Foil.extendScopePattern rhsBinderList Foil.emptyScope
+                lhsTerm' = Foil.liftRM scope (Foil.fromNameBinderRenaming rename) lhsTerm
+             in match scope metavarBinders rhsBinderTypes (lhsTerm', type_) (rhsTerm, type_)
       Foil.RenameRightNameBinder _ rename ->
         case Foil.assertDistinct lhsBinderList of
           Foil.Distinct ->
-            let commonScope = Foil.extendScopePattern lhsBinderList Foil.emptyScope
-                rhsTerm' = Foil.liftRM commonScope (Foil.fromNameBinderRenaming rename) rhsTerm
-             in match commonScope metavarBinders lhsBinderTypes (lhsTerm, type_) (rhsTerm', type_)
+            let scope = Foil.extendScopePattern lhsBinderList Foil.emptyScope
+                rhsTerm' = Foil.liftRM scope (Foil.fromNameBinderRenaming rename) rhsTerm
+             in match scope metavarBinders lhsBinderTypes (lhsTerm, type_) (rhsTerm', type_)
       Foil.RenameBothBinders commonBinders rename1 rename2 -> undefined
       Foil.NotUnifiable ->
         -- Binders cannot be unified
         trace "here" []
 
 main :: IO ()
-main = parseConfigAndValidate
+-- main = parseConfigAndValidate
+
+main = do
+  let rawMetavarBinders = ["M : [t] t -> t", "H1 : [t] t -> t", "H2 : [t] t -> t"]
+  let subst = ["F[a, x] ↦ a H[a, x]"]
+      Right metavarBinders = parseMetavarBinders rawMetavarBinders
+      Right lhs = parseMetaSubst metavarBinders "M[x] ↦ H1[x]"
+      Right rhs = parseMetaSubst metavarBinders "M[x] ↦ H2[x]"
+      (_, lhsAbs) = getMetaSubst lhs
+      (_, rhsAbs) = getMetaSubst rhs
+      Just (_, type_) = Map.lookup "M" metavarBinders
+  print $ matchMetaAbs metavarBinders type_ lhsAbs rhsAbs
 
 -- main = do
---   let rawMetavarBinder = "M : [t -> t, t] t"
---   let rawConstraint = "∀ f: t -> t, g: t. M[f, g] = f g"
---   let rawSubst = "M [x, y] ↦ x y"
+--   let rawMetavarBinder = "N : [t -> t] t -> t"
+--   let rawConstraint = "∀ x : t. λy:t.N[x] = λy:t.λz:t.x"
 --   print $ matchUnificationConstraint [rawMetavarBinder] rawConstraint
---   print $ isSolvedUnificationConstraint [rawMetavarBinder] rawConstraint [rawSubst]
+
+-- print $ isSolvedUnificationConstraint [rawMetavarBinder] rawConstraint [rawSubst]
 
 -- $setup
 -- >>> import Language.Lambda.Impl
@@ -964,3 +1018,10 @@ main = parseConfigAndValidate
 -- >>> isSolvedUnificationConstraint metavarBinders constraint subst
 -- Right []
 -- Right True
+
+-- >>> metavarBinders = ["F: [t -> t, t] t", "X: [t -> t] t", "Y: [] t"]
+-- >>> constraint     = "∀ a: t -> t. F[a, X[a]] = a Y[]"
+-- >>> subst          = ["F[a, x] ↦ a H[a, x]"]
+-- >>> isSolvedUnificationConstraint metavarBinders constraint subst
+-- Right []
+-- Left "type error"

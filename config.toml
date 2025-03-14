@@ -26,3 +26,22 @@ substitutions = [
     "X[f, x] ↦ f x",
     "M[x, y] ↦ y x"
 ]
+
+[[problems]]
+metavars = [
+    "F: [t -> t, t] t",
+    "X: [t -> t] t",
+    "Y: [] t",
+]
+constraints = [
+    "∀ a: t -> t. F[a, X[a]] = a Y[]",
+]
+
+[[problems.solutions]]
+metavars = [
+    "H: [t -> t, t] t",
+]
+name = "most general solution with new metavariable"
+substitutions = [
+    "F[a, x] ↦ a H[a, x]"
+]
