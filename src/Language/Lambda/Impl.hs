@@ -135,8 +135,8 @@ instance ZipMatchK Raw.Type where zipMatchWithK = zipMatchViaEq
 --     Lam typ binder body | Raw.Fun _ b <- t -> Lam typ binder (f body (typ, b))
 --     MetavarSig metavar args -> MetavarSig metavar (fmap (mapSigWithTypes f g) args)
 
-instance TypedSignature TermSig Raw.Type where
-  mapSigWithTypes varTypes f g sig t = case sig of
+instance TypedSignature TermSig Raw.MetavarIdent Raw.Type where
+  mapSigWithTypes varTypes _ f g sig t = case sig of
     AppSig fun arg -> do
       funType <- case fun of
         Var x -> return (Foil.lookupName x varTypes)
@@ -151,8 +151,8 @@ instance TypedSignature TermSig Raw.Type where
            in return (LamSig binderType body')
     _ -> Nothing
 
-  debugSig :: forall binder ext n. AST binder (AnnSig Raw.Type (Sum TermSig ext)) n -> String
-  debugSig term = let term' = unsafeCoerce term :: MetaTerm Raw.MetavarIdent n Raw.Type in show term'
+-- debugSig :: forall binder ext n. AST binder (AnnSig Raw.Type (Sum TermSig ext)) n -> String
+-- debugSig term = let term' = unsafeCoerce term :: MetaTerm Raw.MetavarIdent n Raw.Type in show term'
 
 instance TypedBinder FoilPattern Raw.Type where
   addBinderTypes (FoilAPattern nameBinder) = Foil.addNameBinder nameBinder
@@ -874,7 +874,7 @@ moreGeneralThan metavarBinders lhs rhs =
 -- >>> (_, rhsAbs) = getMetaSubst rhs
 -- >>> Just (_, type_) = Map.lookup "M" metavarBinders
 -- >>> matchMetaAbs metavarBinders type_ lhsAbs rhsAbs
--- []
+-- [[H1 [x0] ↦ H2 [x0]]]
 matchMetaAbs
   :: ( UnifiablePattern binder
      , SinkableK binder
@@ -883,8 +883,8 @@ matchMetaAbs
      , ZipMatchK sig
      , ZipMatchK ext
      , TypedBinder binder Raw.Type
-     , TypedSignature sig Raw.Type
-     , TypedSignature ext Raw.Type
+     , TypedSignature sig Raw.MetavarIdent Raw.Type
+     , TypedSignature ext Raw.MetavarIdent Raw.Type
      )
   => MetavarBinders
   -> Raw.Type
