@@ -60,7 +60,7 @@ import Data.Bitraversable (Bitraversable)
 import Data.Either (partitionEithers)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (isJust, listToMaybe)
+import Data.Maybe (fromMaybe, isJust, listToMaybe)
 import Data.SOAS
 import Data.String (IsString (..))
 import Data.Text (Text)
@@ -77,7 +77,6 @@ import qualified Language.Lambda.Syntax.Par as Raw
 import qualified Language.Lambda.Syntax.Print as Raw
 import Toml (TomlCodec, (.=))
 import qualified Toml
-import Unsafe.Coerce (unsafeCoerce)
 
 -- $setup
 -- >>> :set -XOverloadedStrings
@@ -703,12 +702,14 @@ data Problem = Problem
 
 data RawSolution = RawSolution
   { rawSolutionName :: Text
+  , rawSolutionMetavars :: Maybe [String] -- New field for solution-specific metavars
   , rawSolutionSubstitutions :: [String]
   }
   deriving (Show, Generic)
 
 data Solution = Solution
   { solutionName :: Text
+  , solutionMetavars :: MetavarBinders -- Store the parsed metavars
   , solutionSubstitutions :: MetaSubsts'
   }
   deriving (Show, Generic)
@@ -737,6 +738,7 @@ solutionCodec :: TomlCodec RawSolution
 solutionCodec =
   RawSolution
     <$> Toml.text "name" .= rawSolutionName
+    <*> Toml.dioptional (stringsCodec "metavars") .= rawSolutionMetavars -- Make it optional
     <*> stringsCodec "substitutions" .= rawSolutionSubstitutions
 
 validateProblem :: Problem -> Either String ([(Solution, [UnificationConstraint])], [Solution])
@@ -752,12 +754,23 @@ parseRawProblem RawProblem{..} = do
   solutions <- traverse (parseSolution metavarBinders) rawProblemSolutions
   pure (Problem metavarBinders constraints solutions)
  where
-  parseSolution metavarBinders (RawSolution{..}) = do
+  parseSolution problemMetavarBinders (RawSolution{..}) = do
+    -- Parse any solution-specific metavariables
+    let metavars = fromMaybe [] rawSolutionMetavars
+    solutionMetavarBindersList <- traverse parseMetavarBinder metavars
+    let solutionMetavarBinders = Map.fromList solutionMetavarBindersList
+
+    -- Merge problem metavariables with solution metavariables
+    -- Constraint metavars take precedence if there are duplicates
+    let mergedMetavarBinders = Map.union problemMetavarBinders solutionMetavarBinders
+
+    -- Parse substitutions using the merged metavariable context
     parsedSubsts <-
       traverse
-        (parseMetaSubst metavarBinders)
+        (parseMetaSubst mergedMetavarBinders)
         rawSolutionSubstitutions
-    pure (Solution rawSolutionName (MetaSubsts parsedSubsts))
+
+    pure (Solution rawSolutionName solutionMetavarBinders (MetaSubsts parsedSubsts))
 
 parseRawConfig :: RawConfig -> Either String Config
 parseRawConfig RawConfig{..} = do
@@ -769,6 +782,7 @@ validateSolution
   -> Solution
   -> Either (Solution, [UnificationConstraint]) Solution
 validateSolution constraints solution@Solution{..} =
+  -- Merge problem metavars with solution-specific metavars
   let solvedConstraints =
         map (solveUnificationConstraint solutionSubstitutions) constraints
    in if all isSolved solvedConstraints
@@ -921,8 +935,11 @@ matchMetaAbs
 
 main :: IO ()
 -- main = parseConfigAndValidate
+-- main = mainDebug
+main = mainMatchDebug
 
-main = do
+mainMatchDebug :: IO ()
+mainMatchDebug = do
   let rawMetavarBinders = ["M : [t] t -> t", "H1 : [t] t -> t", "H2 : [t] t -> t"]
   let subst = ["F[a, x] ↦ a H[a, x]"]
       Right metavarBinders = parseMetavarBinders rawMetavarBinders
@@ -933,10 +950,13 @@ main = do
       Just (_, type_) = Map.lookup "M" metavarBinders
   print $ matchMetaAbs metavarBinders type_ lhsAbs rhsAbs
 
--- main = do
---   let rawMetavarBinder = "N : [t -> t] t -> t"
---   let rawConstraint = "∀ x : t. λy:t.N[x] = λy:t.λz:t.x"
---   print $ matchUnificationConstraint [rawMetavarBinder] rawConstraint
+mainDebug :: IO ()
+mainDebug = do
+  let rawMetavarBinder = "N : [t -> t] t -> t"
+  let metavarBinders = ["X : [t, t] t"]
+      constraint = "∀ m: t, n: t. X[m, n] = n"
+      substs = ["X [x, y] ↦ y"]
+  print $ matchUnificationConstraint metavarBinders constraint
 
 -- print $ isSolvedUnificationConstraint [rawMetavarBinder] rawConstraint [rawSubst]
 

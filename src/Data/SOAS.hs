@@ -188,7 +188,7 @@ applyMetaSubsts
      , Foil.CoSinkable binder
      , Foil.SinkableK binder
      )
-  => -- \^ Renaming of metavariables (normally, 'id' or some kind of injection).
+  =>
   Foil.Scope n
   -- ^ Scope of terms.
   -> MetaSubsts binder (AnnSig t (Sum sig (MetaAppSig metavar))) metavar t
@@ -521,7 +521,7 @@ matchMetavar
 matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWithTypes (rhs, expectedType) =
   let projections = project metavarNameBinders argsWithTypes
       imitations = trace ("imitate on: ") $ case rhs of
-        Var x -> []
+        Var _ -> []
         Node sig -> do
           let maybeSig = mapSigWithTypes varTypes metavarTypes (,) (,) sig expectedType
           sigWithTypes <- maybeToList maybeSig

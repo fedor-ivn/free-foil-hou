@@ -43,5 +43,6 @@ metavars = [
 ]
 name = "most general solution with new metavariable"
 substitutions = [
+    "H[a, x] ↦ Y[]",
     "F[a, x] ↦ a H[a, x]"
 ]
