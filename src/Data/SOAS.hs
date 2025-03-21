@@ -203,7 +203,8 @@ applyMetaSubsts scope substs = \case
       Just (MetaAbs names _types body) ->
         let nameMap = toNameMap Foil.emptyNameMap names args'
             substs' = Foil.nameMapToSubstitution nameMap
-         in substitute scope substs' body
+            body' = substitute scope substs' body
+         in applyMetaSubsts scope substs body'
       Nothing -> MetaApp metavar args' ann
    where
     args' = map go args
