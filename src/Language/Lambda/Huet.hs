@@ -11,11 +11,16 @@ data Stream a = Stream a (Stream a) deriving (Eq, Functor)
 instance Show (Stream a) where
   show _ = "Stream"
 
-data Type = Base String | Function Type Type deriving (Eq)
+data Type
+  = Base String
+  | Function Type Type
+  | TPair Type Type
+  deriving (Eq)
 
 instance Show Type where
   show (Base typ) = typ
   show (Function from to) = "(" <> show from <> ") -> " <> show to
+  show (TPair first second) = "(" <> show first <> ", " <> show second <> ")"
 
 newtype Var = Var String deriving (Eq, Show)
 newtype Metavar = Metavar String deriving (Eq, Show)
@@ -28,6 +33,9 @@ data Ast
   | Variable Var
   | Lambda Var Type Ast
   | Apply Ast Ast
+  | Pair Ast Ast
+  | First Ast
+  | Second Ast
   | Meta Metavar [Ast]
   deriving (Eq)
 
@@ -36,6 +44,9 @@ isFlexible Constant{} = False
 isFlexible Variable{} = False
 isFlexible Lambda{} = False
 isFlexible (Apply function _) = isFlexible function
+isFlexible Pair{} = False
+isFlexible (First pair) = isFlexible pair
+isFlexible (Second pair) = isFlexible pair
 isFlexible Meta{} = True
 
 -- >>> (x, f, t) = (Var "x", Var "f", Base "t")
@@ -45,6 +56,8 @@ isFlexible Meta{} = True
 -- \f: (t) -> t. (f) (A: t)
 -- >>> eval (Apply (Apply (Lambda x t (Lambda f (Function t t) (Apply (Variable f) (Variable x)))) (Constant "A" t)) (Lambda x t (Constant "B" t)))
 -- B: t
+-- >>> eval (First (Pair (Constant "A" t) (Constant "B" t)))
+-- A: t
 eval :: Ast -> Ast
 eval node = case node of
   Constant _ _ -> node
@@ -54,6 +67,13 @@ eval node = case node of
     case eval function of
       Lambda binder _typ body -> eval (substituteVar binder argument body)
       function' -> Apply function' argument
+  Pair first second -> Pair (eval first) (eval second)
+  First pair -> case eval pair of
+    Pair first _ -> eval first
+    pair' -> First pair'
+  Second pair -> case eval pair of
+    Pair _ second -> eval second
+    pair' -> Second pair'
   Meta _ _ -> node
 
 -- Naive rename
@@ -64,17 +84,21 @@ eval node = case node of
 -- >>> rename x y (Lambda x (Base "A") (Variable x))
 -- \x: A. x
 rename :: Var -> Var -> Ast -> Ast
-rename from to (Variable variable)
-  | variable == from = Variable to
-  | otherwise = Variable variable
-rename _ _ (Constant constant typ) = Constant constant typ
-rename from to (Lambda binder typ body) = Lambda binder typ body'
- where
-  body'
-    | binder == from = body
-    | otherwise = rename from to body
-rename from to (Apply left right) = Apply (rename from to left) (rename from to right)
-rename from to (Meta metavariable arguments) = Meta metavariable (rename from to <$> arguments)
+rename from to node = case node of
+  Variable variable
+    | variable == from -> Variable to
+    | otherwise -> Variable variable
+  Constant constant typ -> Constant constant typ
+  Lambda binder typ body -> Lambda binder typ body'
+   where
+    body'
+      | binder == from = body
+      | otherwise = rename from to body
+  Apply left right -> Apply (rename from to left) (rename from to right)
+  Pair first second -> Pair (rename from to first) (rename from to second)
+  First pair -> First (rename from to pair)
+  Second pair -> Second (rename from to pair)
+  Meta metavariable arguments -> Meta metavariable (rename from to <$> arguments)
 
 -- >>> x = Var "x"
 -- >>> typeOf [(x, Base "X")] [] (Lambda x (Base "Y") (Variable x))
@@ -82,50 +106,75 @@ rename from to (Meta metavariable arguments) = Meta metavariable (rename from to
 -- >>> typeOf [] [] (Apply (Lambda x (Base "A") (Variable x)) (Constant "A" (Base "A")))
 -- Just A
 typeOf :: [(Var, Type)] -> [(Metavar, ([Type], Type))] -> Ast -> Maybe Type
-typeOf _ _ (Constant _ typ) = Just typ
-typeOf variables _ (Variable var) = lookup var variables
-typeOf variables metavariables (Lambda binder binderType body) =
-  Function binderType <$> typeOf ((binder, binderType) : variables) metavariables body
-typeOf variables metavariables (Apply function argument) = do
-  Function argumentType returnType <- typeOf variables metavariables function
-  argumentType' <- typeOf variables metavariables argument
-  if argumentType == argumentType'
-    then Just returnType
-    else Nothing
-typeOf _ metavariables (Meta metavariable _arguments) =
-  snd <$> lookup metavariable metavariables
+typeOf variables metavariables node = case node of
+  Constant _ typ -> Just typ
+  Variable var -> lookup var variables
+  Lambda binder binderType body ->
+    Function binderType <$> typeOf ((binder, binderType) : variables) metavariables body
+  Apply function argument -> do
+    Function argumentType returnType <- typeOf variables metavariables function
+    argumentType' <- typeOf variables metavariables argument
+    if argumentType == argumentType'
+      then Just returnType
+      else Nothing
+  Pair first second ->
+    TPair <$> typeOf variables metavariables first <*> typeOf variables metavariables second
+  First pair -> do
+    TPair first _ <- typeOf variables metavariables pair
+    Just first
+  Second pair -> do
+    TPair _ second <- typeOf variables metavariables pair
+    Just second
+  Meta metavariable _arguments -> snd <$> lookup metavariable metavariables
 
 substituteVar :: Var -> Ast -> Ast -> Ast
-substituteVar _ _ node@Constant{} = node
-substituteVar expected substitution (Variable variable)
-  | variable == expected = substitution
-  | otherwise = Variable variable
-substituteVar expected substitution node@(Lambda binder typ body)
-  | binder == expected = node
-  | otherwise = Lambda binder typ (substituteVar expected substitution body)
-substituteVar expected substitution (Apply function argument) =
-  Apply (substituteVar expected substitution function) (substituteVar expected substitution argument)
-substituteVar expected substitution (Meta meta arguments) =
-  Meta meta (substituteVar expected substitution <$> arguments)
+substituteVar expected substitution node = case node of
+  Constant{} -> node
+  Variable variable
+    | variable == expected -> substitution
+    | otherwise -> Variable variable
+  Lambda binder typ body
+    | binder == expected -> node
+    | otherwise -> Lambda binder typ (substituteVar expected substitution body)
+  Apply function argument ->
+    Apply (substituteVar expected substitution function) (substituteVar expected substitution argument)
+  Pair first second ->
+    Pair (substituteVar expected substitution first) (substituteVar expected substitution second)
+  First pair -> First (substituteVar expected substitution pair)
+  Second pair -> Second (substituteVar expected substitution pair)
+  Meta meta arguments ->
+    Meta meta (substituteVar expected substitution <$> arguments)
 
 substituteMetavar :: Substitution -> Ast -> Ast
-substituteMetavar _ node@Constant{} = node
-substituteMetavar _ node@Variable{} = node
-substituteMetavar substitution (Lambda binder typ body) =
-  Lambda binder typ (substituteMetavar substitution body)
-substituteMetavar substitution (Apply function argument) =
-  Apply
-    (substituteMetavar substitution function)
-    (substituteMetavar substitution argument)
-substituteMetavar substitution@(Substitution expected parameters body) (Meta meta arguments)
-  | meta == expected = foldr (uncurry substituteVar) body (zip parameters arguments)
-  | otherwise = Meta meta (substituteMetavar substitution <$> arguments)
+substituteMetavar substitution node = case node of
+  Constant{} -> node
+  Variable{} -> node
+  Lambda binder typ body ->
+    Lambda binder typ (substituteMetavar substitution body)
+  Apply function argument ->
+    Apply
+      (substituteMetavar substitution function)
+      (substituteMetavar substitution argument)
+  Pair first second ->
+    Pair
+      (substituteMetavar substitution first)
+      (substituteMetavar substitution second)
+  First pair -> First (substituteMetavar substitution pair)
+  Second pair -> Second (substituteMetavar substitution pair)
+  Meta meta arguments
+    | Substitution expected parameters body <- substitution
+    , meta == expected ->
+        foldr (uncurry substituteVar) body (zip parameters arguments)
+    | otherwise -> Meta meta (substituteMetavar substitution <$> arguments)
 
 instance Show Ast where
   show (Constant constant typ) = constant <> ": " <> show typ
   show (Variable (Var variable)) = variable
   show (Lambda (Var binder) typ body) = "\\" <> binder <> ": " <> show typ <> ". " <> show body
   show (Apply left right) = "(" <> show left <> ") (" <> show right <> ")"
+  show (Pair first second) = "(" <> show first <> ", " <> show second <> ")"
+  show (First pair) = "(" <> show pair <> ").0"
+  show (Second pair) = "(" <> show pair <> ").1"
   show (Meta (Metavar metavariable) arguments) = metavariable <> show arguments
 
 data Constraint = Constraint
@@ -269,8 +318,18 @@ decompose (Constraint forall_ left right) = case (left, right) of
    where
     forall' = (leftBinder, leftBinderType) : forall_
     rightBody' = rename rightBinder leftBinder rightBody
+  (Pair leftFirst leftSecond, Pair rightFirst rightSecond) ->
+    Decomposed
+      [ Constraint forall_ leftFirst rightFirst
+      , Constraint forall_ leftSecond rightSecond
+      ]
+  (First left, First right) -> Decomposed [Constraint forall_ left right]
+  (Second left, Second right) -> Decomposed [Constraint forall_ left right]
   (Apply leftFunction leftArgument, Apply rightFunction rightArgument) ->
-    Decomposed [Constraint forall_ leftArgument rightArgument, Constraint forall_ leftFunction rightFunction]
+    Decomposed
+      [ Constraint forall_ leftArgument rightArgument
+      , Constraint forall_ leftFunction rightFunction
+      ]
   _ -> Failed
 
 -- >>> (t, u) = (Base "t", Base "u")
@@ -353,6 +412,14 @@ imitate metas (Constraint forall_ left right) = case (left, right) of
       argumentType <- typeOf forall_ (metavariables metas) argument
       let (metas'', argument') = fresh parameters argumentType metas'
       return (metas'', Apply function' argument')
+    Pair first second -> do
+      firstType <- typeOf forall_ (metavariables metas) first
+      secondType <- typeOf forall_ (metavariables metas) second
+      let (metas', first') = fresh parameters firstType metas
+      let (metas'', second') = fresh parameters secondType metas'
+      return (metas'', Pair first' second')
+    First pair -> fmap First <$> go' metas parameters pair
+    Second pair -> fmap Second <$> go' metas parameters pair
     Meta{} -> Nothing
 
 -- >>> (t, u, v) = (Base "t", Base "u", Base "v")
@@ -365,16 +432,19 @@ imitate metas (Constraint forall_ left right) = case (left, right) of
 -- >>> snd <$> reduce someMetas parameters t (Function u t) y
 -- [(y) (M0[x])]
 reduce :: Metavariables -> [(Var, Type)] -> Type -> Type -> Ast -> [(Metavariables, Ast)]
-reduce metas parameters expectedType actualType term = reflexive <> function
+reduce metas parameters expectedType actualType term = reflexive <> typed
  where
   reflexive
     | expectedType == actualType = [(metas, term)]
     | otherwise = []
-  function
-    | Function argumentType returnType <- actualType = do
-        let (metas', argument) = fresh parameters argumentType metas
-        reduce metas' parameters expectedType returnType (Apply term argument)
-    | otherwise = []
+  typed = case actualType of
+    Base{} -> []
+    Function argumentType returnType -> do
+      let (metas', argument) = fresh parameters argumentType metas
+      reduce metas' parameters expectedType returnType (Apply term argument)
+    TPair first second -> do
+      reduce metas parameters expectedType first (First term)
+        <> reduce metas parameters expectedType second (Second term)
 
 -- >>> (t, u) = (Base "t", Base "u")
 -- >>> _M = Metavar "M"
@@ -413,7 +483,19 @@ introduce metas (Constraint _ left right) = go left <|> go right
     let (metas', substitution) = fresh ((binder, binderType) : parameters) bodyType metas
     return (metas', Substitution meta (fst <$> parameters) (Lambda binder binderType substitution))
   go (Apply function _) = go function
+  go Pair{} = Nothing
+  go (First (Meta meta _)) = goPair meta
+  go (First pair) = go pair
+  go (Second (Meta meta _)) = goPair meta
+  go (Second pair) = go pair
   go Meta{} = Nothing
+
+  goPair meta = do
+    (parameterTypes, TPair firstType secondType) <- lookup meta (metavariables metas)
+    let parameters = zip someParameters parameterTypes
+    let (metas', first) = fresh parameters firstType metas
+    let (metas'', second) = fresh parameters secondType metas'
+    return (metas'', Substitution meta (fst <$> parameters) (Pair first second))
 
 -- >>> t = Base "t"
 -- >>> left = Apply (Constant "a" (Function t t)) (Constant "b" t)
@@ -466,6 +548,40 @@ step constraint (Solution metas constraints substitutions) =
 -- >>> metas = Metavariables [(_F, ([Function t (Function t t), t], t)), (_X, ([], Function t (Function t t)))] (freshMetavariables someMetas)
 -- >>> take 5 $ solutionSubstitutions <$> solve [Problem metas [Constraint [] left right]]
 -- [{ M0[x0,x1] ↦ x1, F[x0,x1] ↦ (a: (t) -> t) (M0[x0,x1]) },{ M0[x0,x1] ↦ b: t, F[x0,x1] ↦ (a: (t) -> t) (M0[x0,x1]) },{ M4[x0,x1] ↦ b: t, M3[x0,x1] ↦ (a: (t) -> t) (M4[x0,x1]), M2[x1] ↦ \x0: t. M3[x0,x1], X[] ↦ \x0: t. M2[x0], F[x0,x1] ↦ ((x0) (M0[x0,x1])) (M1[x0,x1]) },{ M2[x0] ↦ a: (t) -> t, M1[x0,x1] ↦ b: t, X[] ↦ \x0: t. M2[x0], F[x0,x1] ↦ ((x0) (M0[x0,x1])) (M1[x0,x1]) },{ M2[x0] ↦ a: (t) -> t, M1[x0,x1] ↦ x1, X[] ↦ \x0: t. M2[x0], F[x0,x1] ↦ ((x0) (M0[x0,x1])) (M1[x0,x1]) }]
+--
+-- >>> first = Constraint [] (First (Meta _X [])) (Constant "A" t)
+-- >>> second = Constraint [] (Second (Meta _X [])) (Constant "B" t)
+-- >>> metas = Metavariables [(_X, ([], TPair t t))] (freshMetavariables someMetas)
+-- >>> solutionSubstitutions <$> solve [Problem metas [first, second]]
+-- [{ M1[] ↦ B: t, M0[] ↦ A: t, X[] ↦ (M0[], M1[]) }]
+--
+-- >>> first = Constraint [] (First (Meta _X [])) (Second (Meta _X []))
+-- >>> second = Constraint [] (First (Meta _X [])) (Constant "A" t)
+-- >>> solutionSubstitutions <$> solve [Problem metas [first, second]]
+-- [{ M1[] ↦ A: t, M0[] ↦ A: t, X[] ↦ (M0[], M1[]) }]
+--
+-- >>> x = Var "x"
+-- >>> first = Constraint [] (First (Apply (Meta _F []) (Constant "A" t))) (Second (Apply (Meta _F []) (Constant "B" t)))
+-- >>> second = Constraint [(x, t)] (First (Apply (Meta _F []) (Variable x))) (Variable x)
+-- >>> metas = Metavariables [(_F, ([], Function t (TPair t t)))] (freshMetavariables someMetas)
+-- >>> solutionSubstitutions <$> solve [Problem metas [first, second]]
+-- [{ M2[x0] ↦ A: t, M1[x0] ↦ x0, M0[x0] ↦ (M1[x0], M2[x0]), F[] ↦ \x0: t. M0[x0] }]
+--
+-- >>> constraint = Constraint [] (Apply (Meta _F []) (Pair (Constant "A" t) (Constant "A" t))) (Constant "A" t)
+-- >>> metas = Metavariables [(_F, ([], Function (TPair t t) t))] (freshMetavariables someMetas)
+-- >>> solutionSubstitutions <$> solve [Problem metas [constraint]]
+-- [{ M0[x0] ↦ (x0).1, F[] ↦ \x0: (t, t). M0[x0] },{ M0[x0] ↦ (x0).0, F[] ↦ \x0: (t, t). M0[x0] },{ M0[x0] ↦ A: t, F[] ↦ \x0: (t, t). M0[x0] }]
+--
+-- >>> u = Base "u"
+-- >>> constraint = Constraint [(x, t)] (Meta _F [Meta _X [Variable x]]) (Variable x)
+-- >>> metas = Metavariables [(_F, ([Function u (TPair (Function u (TPair t t)) t)], t)), (_X, ([t], Function u (TPair (Function u (TPair t t)) t)))] (freshMetavariables someMetas)
+-- >>> solutionSubstitutions <$> solve [Problem metas [constraint]]
+-- [{ M3[x0,x1] ↦ x1, M1[x0,x1] ↦ (M2[x0,x1], M3[x0,x1]), X[x1] ↦ \x0: u. M1[x0,x1], F[x0] ↦ ((x0) (M0[x0])).1 },{ M6[x0,x1,x2] ↦ x2, M5[x0,x1,x2] ↦ (M6[x0,x1,x2], M7[x0,x1,x2]), M3[x1,x2] ↦ \x0: u. M5[x0,x1,x2], M2[x0,x1] ↦ (M3[x0,x1], M4[x0,x1]), X[x1] ↦ \x0: u. M2[x0,x1], F[x0] ↦ ((((x0) (M0[x0])).0) (M1[x0])).0 },{ M7[x0,x1,x2] ↦ x2, M5[x0,x1,x2] ↦ (M6[x0,x1,x2], M7[x0,x1,x2]), M3[x1,x2] ↦ \x0: u. M5[x0,x1,x2], M2[x0,x1] ↦ (M3[x0,x1], M4[x0,x1]), X[x1] ↦ \x0: u. M2[x0,x1], F[x0] ↦ ((((x0) (M0[x0])).0) (M1[x0])).1 }]
+--
+-- >>> constraint = Constraint [] (First (Meta _X [])) (First (Constant "A" (TPair t t)))
+-- >>> metas = Metavariables [(_X, ([], TPair t t))] (freshMetavariables someMetas)
+-- >>> solutionSubstitutions <$> solve [Problem metas [constraint]]
+-- [{ X[] ↦ A: (t, t) },{ M0[] ↦ (A: (t, t)).0, X[] ↦ (M0[], M1[]) }]
 solve :: [Problem] -> [Solution]
 solve = go . fmap withoutSubstitutions
  where
