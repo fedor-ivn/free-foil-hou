@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Language.Lambda.Huet where
 
@@ -15,12 +16,14 @@ data Type
   = Base String
   | Function Type Type
   | TPair Type Type
+  | Sum Type Type
   deriving (Eq)
 
 instance Show Type where
   show (Base typ) = typ
   show (Function from to) = "(" <> show from <> ") -> " <> show to
   show (TPair first second) = "(" <> show first <> ", " <> show second <> ")"
+  show (Sum left right) = "(" <> show left <> ") + (" <> show right <> ")"
 
 newtype Var = Var String deriving (Eq, Show)
 newtype Metavar = Metavar String deriving (Eq, Show)
@@ -36,6 +39,9 @@ data Ast
   | Pair Ast Ast
   | First Ast
   | Second Ast
+  | SLeft Ast Type
+  | SRight Type Ast
+  | Match Ast (Var, Ast) (Var, Ast)
   | Meta Metavar [Ast]
   deriving (Eq)
 
@@ -47,6 +53,9 @@ isFlexible (Apply function _) = isFlexible function
 isFlexible Pair{} = False
 isFlexible (First pair) = isFlexible pair
 isFlexible (Second pair) = isFlexible pair
+isFlexible SLeft{} = False
+isFlexible SRight{} = False
+isFlexible (Match expr _ _) = isFlexible expr
 isFlexible Meta{} = True
 
 -- >>> (x, f, t) = (Var "x", Var "f", Base "t")
@@ -74,6 +83,14 @@ eval node = case node of
   Second pair -> case eval pair of
     Pair _ second -> eval second
     pair' -> Second pair'
+  SLeft inner typ -> SLeft (eval inner) typ
+  SRight typ inner -> SRight typ (eval inner)
+  Match expr left right -> case eval expr of
+    SLeft inner _ -> eval' inner left
+    SRight _ inner -> eval' inner right
+    expr' -> Match expr' (eval <$> left) (eval <$> right)
+   where
+    eval' value (binder, body) = eval (substituteVar binder value body)
   Meta _ _ -> node
 
 -- Naive rename
@@ -84,21 +101,7 @@ eval node = case node of
 -- >>> rename x y (Lambda x (Base "A") (Variable x))
 -- \x: A. x
 rename :: Var -> Var -> Ast -> Ast
-rename from to node = case node of
-  Variable variable
-    | variable == from -> Variable to
-    | otherwise -> Variable variable
-  Constant constant typ -> Constant constant typ
-  Lambda binder typ body -> Lambda binder typ body'
-   where
-    body'
-      | binder == from = body
-      | otherwise = rename from to body
-  Apply left right -> Apply (rename from to left) (rename from to right)
-  Pair first second -> Pair (rename from to first) (rename from to second)
-  First pair -> First (rename from to pair)
-  Second pair -> Second (rename from to pair)
-  Meta metavariable arguments -> Meta metavariable (rename from to <$> arguments)
+rename from to = substituteVar from (Variable to)
 
 -- >>> x = Var "x"
 -- >>> typeOf [(x, Base "X")] [] (Lambda x (Base "Y") (Variable x))
@@ -125,6 +128,15 @@ typeOf variables metavariables node = case node of
   Second pair -> do
     TPair _ second <- typeOf variables metavariables pair
     Just second
+  SLeft inner right -> Sum <$> typeOf variables metavariables inner <*> pure right
+  SRight left inner -> Sum left <$> typeOf variables metavariables inner
+  Match expr (leftBinder, leftBody) (rightBinder, rightBody) -> do
+    Sum leftType rightType <- typeOf variables metavariables expr
+    bodyType <- typeOf ((leftBinder, leftType) : variables) metavariables leftBody
+    bodyType' <- typeOf ((rightBinder, rightType) : variables) metavariables rightBody
+    if bodyType == bodyType'
+      then Just bodyType
+      else Nothing
   Meta metavariable _arguments -> snd <$> lookup metavariable metavariables
 
 substituteVar :: Var -> Ast -> Ast -> Ast
@@ -135,37 +147,42 @@ substituteVar expected substitution node = case node of
     | otherwise -> Variable variable
   Lambda binder typ body
     | binder == expected -> node
-    | otherwise -> Lambda binder typ (substituteVar expected substitution body)
-  Apply function argument ->
-    Apply (substituteVar expected substitution function) (substituteVar expected substitution argument)
-  Pair first second ->
-    Pair (substituteVar expected substitution first) (substituteVar expected substitution second)
-  First pair -> First (substituteVar expected substitution pair)
-  Second pair -> Second (substituteVar expected substitution pair)
-  Meta meta arguments ->
-    Meta meta (substituteVar expected substitution <$> arguments)
+    | otherwise -> Lambda binder typ (go body)
+  Apply function argument -> Apply (go function) (go argument)
+  Pair first second -> Pair (go first) (go second)
+  First pair -> First (go pair)
+  Second pair -> Second (go pair)
+  SLeft inner right -> SLeft (go inner) right
+  SRight left inner -> SRight left (go inner)
+  Match expr left right -> Match (go expr) (go' left) (go' right)
+   where
+    go' (binder, body)
+      | binder == expected = (binder, body)
+      | otherwise = (binder, go body)
+  Meta meta arguments -> Meta meta (go <$> arguments)
+ where
+  go = substituteVar expected substitution
 
 substituteMetavar :: Substitution -> Ast -> Ast
 substituteMetavar substitution node = case node of
   Constant{} -> node
   Variable{} -> node
-  Lambda binder typ body ->
-    Lambda binder typ (substituteMetavar substitution body)
-  Apply function argument ->
-    Apply
-      (substituteMetavar substitution function)
-      (substituteMetavar substitution argument)
-  Pair first second ->
-    Pair
-      (substituteMetavar substitution first)
-      (substituteMetavar substitution second)
-  First pair -> First (substituteMetavar substitution pair)
-  Second pair -> Second (substituteMetavar substitution pair)
+  Lambda binder typ body -> Lambda binder typ (go body)
+  Apply function argument -> Apply (go function) (go argument)
+  Pair first second -> Pair (go first) (go second)
+  First pair -> First (go pair)
+  Second pair -> Second (go pair)
+  SLeft inner right -> SLeft (go inner) right
+  SRight left inner -> SRight left (go inner)
+  Match expr (leftBinder, leftBody) (rightBinder, rightBody) ->
+    Match (go expr) (leftBinder, go leftBody) (rightBinder, go rightBody)
   Meta meta arguments
     | Substitution expected parameters body <- substitution
     , meta == expected ->
         foldr (uncurry substituteVar) body (zip parameters arguments)
-    | otherwise -> Meta meta (substituteMetavar substitution <$> arguments)
+    | otherwise -> Meta meta (go <$> arguments)
+ where
+  go = substituteMetavar substitution
 
 instance Show Ast where
   show (Constant constant typ) = constant <> ": " <> show typ
@@ -175,6 +192,15 @@ instance Show Ast where
   show (Pair first second) = "(" <> show first <> ", " <> show second <> ")"
   show (First pair) = "(" <> show pair <> ").0"
   show (Second pair) = "(" <> show pair <> ").1"
+  show (SLeft inner typ) = "(" <> show inner <> ") <+ " <> show typ
+  show (SRight typ inner) = show typ <> " +> (" <> show inner <> ")"
+  show (Match expr (Var leftBinder, leftBody) (Var rightBinder, rightBody)) =
+    "match "
+      <> show expr
+      <> " { "
+      <> (leftBinder <> " <+ => " <> show leftBody)
+      <> ("; +> " <> rightBinder <> " => " <> show rightBody)
+      <> " }"
   show (Meta (Metavar metavariable) arguments) = metavariable <> show arguments
 
 data Constraint = Constraint
@@ -292,22 +318,22 @@ data Decomposition
 
 -- >>> (t, u) = (Base "t", Base "u")
 -- >>> (x, y, _M) = (Var "x", Var "y", Metavar "M")
--- >>> decompose (Constraint [(x, t)] (Variable x) (Variable x))
+-- >>> decompose someMetas (Constraint [(x, t)] (Variable x) (Variable x))
 -- Decomposed []
--- >>> decompose (Constraint [(x, t), (y, u)] (Variable x) (Variable y))
+-- >>> decompose someMetas (Constraint [(x, t), (y, u)] (Variable x) (Variable y))
 -- Failed
--- >>> decompose (Constraint [(x, t), (y, u)] (Apply (Variable x) (Variable y)) (Apply (Constant "A" t) (Constant "B" u)))
+-- >>> decompose someMetas (Constraint [(x, t), (y, u)] (Apply (Variable x) (Variable y)) (Apply (Constant "A" t) (Constant "B" u)))
 -- Decomposed [forall x: t, y: u. y = B: u,forall x: t, y: u. x = A: t]
--- >>> decompose (Constraint [] (Lambda x t (Variable x)) (Lambda y t (Variable y)))
+-- >>> decompose someMetas (Constraint [] (Lambda x t (Variable x)) (Lambda y t (Variable y)))
 -- Decomposed [forall x: t. x = x]
--- >>> decompose (Constraint [(x, t), (y, u)] (Apply (Variable x) (Variable y)) (Variable x))
+-- >>> decompose someMetas (Constraint [(x, t), (y, u)] (Apply (Variable x) (Variable y)) (Variable x))
 -- Failed
--- >>> decompose (Constraint [(x, t), (y, t)] (Apply (Meta _M []) (Variable x)) (Variable y))
+-- >>> decompose someMetas (Constraint [(x, t), (y, t)] (Apply (Meta _M []) (Variable x)) (Variable y))
 -- Failed
--- >>> decompose (Constraint [(x, t), (y, t)] (Meta _M []) (Variable y))
+-- >>> decompose someMetas (Constraint [(x, t), (y, t)] (Meta _M []) (Variable y))
 -- Flexible
-decompose :: Constraint -> Decomposition
-decompose (Constraint forall_ left right) = case (left, right) of
+decompose :: Metavariables -> Constraint -> Decomposition
+decompose metas (Constraint forall_ left right) = case (left, right) of
   (Meta{}, _) -> Flexible
   (_, Meta{}) -> Flexible
   (Constant{}, Constant{}) | left == right -> Decomposed []
@@ -325,6 +351,25 @@ decompose (Constraint forall_ left right) = case (left, right) of
       ]
   (First left, First right) -> Decomposed [Constraint forall_ left right]
   (Second left, Second right) -> Decomposed [Constraint forall_ left right]
+  (SLeft left _, SLeft right _) -> Decomposed [Constraint forall_ left right]
+  (SRight _ left, SRight _ right) -> Decomposed [Constraint forall_ left right]
+  ( Match leftExpr (leftSLeftBinder, leftSLeftBody) (leftSRightBinder, leftSRightBody)
+    , Match rightExpr (rightSLeftBinder, rightSLeftBody) (rightSRightBinder, rightSRightBody)
+    ) ->
+      case typeOf forall_ (metavariables metas) leftExpr of
+        Just (Sum leftType rightType) ->
+          Decomposed
+            [ Constraint forall_ leftExpr rightExpr
+            , Constraint
+                ((leftSLeftBinder, leftType) : forall_)
+                leftSLeftBody
+                (rename rightSLeftBinder leftSLeftBinder rightSLeftBody)
+            , Constraint
+                ((leftSRightBinder, rightType) : forall_)
+                leftSRightBody
+                (rename rightSRightBinder leftSRightBinder rightSRightBody)
+            ]
+        _ -> Failed
   (Apply leftFunction leftArgument, Apply rightFunction rightArgument) ->
     Decomposed
       [ Constraint forall_ leftArgument rightArgument
@@ -334,23 +379,23 @@ decompose (Constraint forall_ left right) = case (left, right) of
 
 -- >>> (t, u) = (Base "t", Base "u")
 -- >>> (x, y, _M) = (Var "x", Var "y", Metavar "M")
--- >>> decomposeRigidRigid (Constraint [(x, t)] (Variable x) (Variable x))
+-- >>> decomposeRigidRigid someMetas (Constraint [(x, t)] (Variable x) (Variable x))
 -- Decomposed []
--- >>> decomposeRigidRigid (Constraint [(x, t), (y, u)] (Variable x) (Variable y))
+-- >>> decomposeRigidRigid someMetas (Constraint [(x, t), (y, u)] (Variable x) (Variable y))
 -- Failed
--- >>> decomposeRigidRigid (Constraint [(x, t), (y, u)] (Apply (Variable x) (Variable y)) (Apply (Constant "A" t) (Constant "B" u)))
+-- >>> decomposeRigidRigid someMetas (Constraint [(x, t), (y, u)] (Apply (Variable x) (Variable y)) (Apply (Constant "A" t) (Constant "B" u)))
 -- Decomposed [forall x: t, y: u. y = B: u,forall x: t, y: u. x = A: t]
--- >>> decomposeRigidRigid (Constraint [] (Lambda x t (Variable x)) (Lambda y t (Variable y)))
+-- >>> decomposeRigidRigid someMetas (Constraint [] (Lambda x t (Variable x)) (Lambda y t (Variable y)))
 -- Decomposed [forall x: t. x = x]
--- >>> decomposeRigidRigid (Constraint [(x, t), (y, u)] (Apply (Variable x) (Variable y)) (Variable x))
+-- >>> decomposeRigidRigid someMetas (Constraint [(x, t), (y, u)] (Apply (Variable x) (Variable y)) (Variable x))
 -- Failed
--- >>> decomposeRigidRigid (Constraint [(x, t), (y, t)] (Apply (Meta _M []) (Variable x)) (Variable y))
+-- >>> decomposeRigidRigid someMetas (Constraint [(x, t), (y, t)] (Apply (Meta _M []) (Variable x)) (Variable y))
 -- Flexible
-decomposeRigidRigid :: Constraint -> Decomposition
-decomposeRigidRigid constraint@(Constraint _ left right)
+decomposeRigidRigid :: Metavariables -> Constraint -> Decomposition
+decomposeRigidRigid metas constraint@(Constraint _ left right)
   | isFlexible left = Flexible
   | isFlexible right = Flexible
-  | otherwise = decompose constraint
+  | otherwise = decompose metas constraint
 
 decomposeAll :: (Constraint -> Decomposition) -> [Constraint] -> Maybe [Constraint]
 decomposeAll _ [] = Just []
@@ -362,7 +407,7 @@ decomposeAll f (constraint : rest) = case f constraint of
 decomposeProblems :: [Solution] -> [Solution]
 decomposeProblems problems = do
   Solution metas constraints substitutions <- problems
-  constraints' <- maybeToList (decomposeAll decomposeRigidRigid (evalConstraint <$> constraints))
+  constraints' <- maybeToList (decomposeAll (decomposeRigidRigid metas) (evalConstraint <$> constraints))
   return (Solution metas constraints' substitutions)
 
 data MatchContext = MatchContext
@@ -420,6 +465,21 @@ imitate metas (Constraint forall_ left right) = case (left, right) of
       return (metas'', Pair first' second')
     First pair -> fmap First <$> go' metas parameters pair
     Second pair -> fmap Second <$> go' metas parameters pair
+    SLeft left rightType -> do
+      leftType <- typeOf forall_ (metavariables metas) left
+      let (metas', left') = fresh parameters leftType metas
+      return (metas', SLeft left' rightType)
+    SRight leftType right -> do
+      rightType <- typeOf forall_ (metavariables metas) right
+      let (metas', right') = fresh parameters rightType metas
+      return (metas', SRight leftType right')
+    Match expr (leftBinder, leftBody) (rightBinder, _rightBody) -> do
+      (metas', expr') <- go' metas parameters expr
+      Sum leftType rightType <- typeOf forall_ (metavariables metas) expr
+      returnType <- typeOf ((leftBinder, leftType) : forall_) (metavariables metas) leftBody
+      let (metas'', leftBody') = fresh ((leftBinder, leftType) : parameters) returnType metas'
+      let (metas''', rightBody') = fresh ((rightBinder, rightType) : parameters) returnType metas''
+      return (metas''', Match expr' (leftBinder, leftBody') (rightBinder, rightBody'))
     Meta{} -> Nothing
 
 -- >>> (t, u, v) = (Base "t", Base "u", Base "v")
@@ -445,6 +505,15 @@ reduce metas parameters expectedType actualType term = reflexive <> typed
     TPair first second -> do
       reduce metas parameters expectedType first (First term)
         <> reduce metas parameters expectedType second (Second term)
+    Sum left right -> do
+      let binder = Var "s0"
+      -- TODO: this feels limiting (what if reduction alone is not enough, but
+      -- the context provides all the necessary to produce a term of the
+      -- expected type?), but without any restrictions search becomes uselessly
+      -- infinite
+      (metas', leftBody) <- reduce metas ((binder, left) : parameters) expectedType left (Variable binder)
+      (metas'', rightBody) <- reduce metas' ((binder, right) : parameters) expectedType right (Variable binder)
+      [(metas'', Match term (binder, leftBody) (binder, rightBody))]
 
 -- >>> (t, u) = (Base "t", Base "u")
 -- >>> _M = Metavar "M"
@@ -470,27 +539,36 @@ project metas (Constraint _ left right) = case (left, right) of
 -- >>> metas = Metavariables [(_M, ([], Function t t))] (freshMetavariables someMetas)
 -- >>> snd <$> introduce metas (Constraint [] (Apply (Meta _M []) (Meta _X [])) (Apply (Constant "a" (Function t t)) (Constant "b" t)))
 -- Just M[] ↦ \x0: t. M0[x0]
-introduce :: Metavariables -> Constraint -> Maybe (Metavariables, Substitution)
+introduce :: Metavariables -> Constraint -> [(Metavariables, Substitution)]
 introduce metas (Constraint _ left right) = go left <|> go right
  where
-  go Variable{} = Nothing
-  go Constant{} = Nothing
-  go Lambda{} = Nothing
-  go (Apply (Meta meta _) _) = do
+  go Variable{} = []
+  go Constant{} = []
+  go Lambda{} = []
+  go (Apply (Meta meta _) _) = maybeToList $ do
     (parameterTypes, Function binderType bodyType) <- lookup meta (metavariables metas)
     let (binder : someParameters') = someParameters
     let parameters = zip someParameters' parameterTypes
     let (metas', substitution) = fresh ((binder, binderType) : parameters) bodyType metas
     return (metas', Substitution meta (fst <$> parameters) (Lambda binder binderType substitution))
   go (Apply function _) = go function
-  go Pair{} = Nothing
+  go Pair{} = []
   go (First (Meta meta _)) = goPair meta
   go (First pair) = go pair
   go (Second (Meta meta _)) = goPair meta
   go (Second pair) = go pair
-  go Meta{} = Nothing
+  go (Match (Meta meta _) _ _) = do
+    (parameterTypes, Sum leftType rightType) <- maybeToList (lookup meta (metavariables metas))
+    let parameters = zip someParameters parameterTypes
+    let left = fmap (`SLeft` rightType) (fresh parameters leftType metas)
+    let right = fmap (SRight leftType) (fresh parameters rightType metas)
+    fmap (Substitution meta (fst <$> parameters)) <$> [left, right]
+  go (Match expr _ _) = go expr
+  go SLeft{} = []
+  go SRight{} = []
+  go Meta{} = []
 
-  goPair meta = do
+  goPair meta = maybeToList $ do
     (parameterTypes, TPair firstType secondType) <- lookup meta (metavariables metas)
     let parameters = zip someParameters parameterTypes
     let (metas', first) = fresh parameters firstType metas
@@ -507,14 +585,14 @@ introduce metas (Constraint _ left right) = go left <|> go right
 -- [Solution {solutionMetavariables = Metavariables {metavariables = [(Metavar "F",([],(t) -> t)),(Metavar "X",([],t))], freshMetavariables = Stream}, solutionConstraints = [forall . b: t = X[],forall . a: (t) -> t = F[]], solutionSubstitutions = { }},Solution {solutionMetavariables = Metavariables {metavariables = [(Metavar "M0",([t],t)),(Metavar "F",([],(t) -> t)),(Metavar "X",([],t))], freshMetavariables = Stream}, solutionConstraints = [forall . (a: (t) -> t) (b: t) = (\x0: t. M0[x0]) (X[])], solutionSubstitutions = { F[] ↦ \x0: t. M0[x0] }}]
 step :: Constraint -> Solution -> [Solution]
 step constraint (Solution metas constraints substitutions) =
-  maybeToList decomposed <> solved
+  decomposed <> solved
  where
   imitations = imitate metas constraint
   projections = project metas constraint
   introductions = introduce metas constraint
 
   solved = do
-    (metas', substitution) <- maybeToList imitations <> projections <> maybeToList introductions
+    (metas', substitution) <- maybeToList imitations <> projections <> introductions
     let constraints' = substituteConstraint substitution <$> (constraint : constraints)
     return (Solution metas' constraints' (addSubstitution substitution substitutions))
 
@@ -522,7 +600,7 @@ step constraint (Solution metas constraints substitutions) =
   -- structurally. Try structural decomposition once we dealt with the semantics
   decomposed = do
     _ <- introductions
-    decomposition <- decomposeAll decompose [constraint]
+    decomposition <- maybeToList (decomposeAll (decompose metas) [constraint])
     return (Solution metas (decomposition <> constraints) substitutions)
 
 -- >>> t = Base "t"
@@ -582,6 +660,17 @@ step constraint (Solution metas constraints substitutions) =
 -- >>> metas = Metavariables [(_X, ([], TPair t t))] (freshMetavariables someMetas)
 -- >>> solutionSubstitutions <$> solve [Problem metas [constraint]]
 -- [{ X[] ↦ A: (t, t) },{ M0[] ↦ (A: (t, t)).0, X[] ↦ (M0[], M1[]) }]
+--
+-- >>> constraint = Constraint [] (Meta _F [Meta _X []]) (Constant "A" t)
+-- >>> metas = Metavariables [(_F, ([Sum t t], t)), (_X, ([], Sum t t))] (freshMetavariables someMetas)
+-- >>> solutionSubstitutions <$> solve [Problem metas [constraint]]
+-- [{ F[x0] ↦ A: t },{ M0[] ↦ A: t, X[] ↦ (M0[]) <+ t, F[x0] ↦ match x0 { s0 <+ => s0; +> s0 => s0 } },{ M0[] ↦ A: t, X[] ↦ t +> (M0[]), F[x0] ↦ match x0 { s0 <+ => s0; +> s0 => s0 } }]
+--
+-- >>> first = Constraint [(x, t)] (Apply (Meta _F []) (SLeft (Variable x) (TPair t u))) (Variable x)
+-- >>> second = Constraint [(x, t)] (Apply (Meta _F []) (SRight t (Pair (Variable x) (Constant "B" u)))) (Variable x)
+-- >>> metas = Metavariables [(_F, ([], Function (Sum t (TPair t u)) t))] (freshMetavariables someMetas)
+-- >>> solutionSubstitutions <$> solve [Problem metas [first, second]]
+-- [{ M0[x0] ↦ match x0 { s0 <+ => s0; +> s0 => (s0).0 }, F[] ↦ \x0: (t) + ((t, u)). M0[x0] }]
 solve :: [Problem] -> [Solution]
 solve = go . fmap withoutSubstitutions
  where
