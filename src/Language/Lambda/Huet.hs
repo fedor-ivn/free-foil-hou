@@ -2,9 +2,6 @@
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Language.Lambda.Huet (
-  Var (..),
-  Metavar (..),
-  Ast (..),
   Constraint (..),
   Metavariables (..),
   Substitution (..),
@@ -16,7 +13,7 @@ module Language.Lambda.Huet (
 
 import Control.Applicative ((<|>))
 import Data.List (intercalate)
-import Data.Maybe (maybeToList)
+import Data.Maybe (fromMaybe, isJust, maybeToList)
 import qualified Language.Lambda.Syntax.Abs as Raw
 import qualified Language.Lambda.Syntax.Print as Raw
 
@@ -25,113 +22,105 @@ data Stream a = Stream a (Stream a) deriving (Eq, Functor)
 instance Show (Stream a) where
   show _ = "Stream"
 
-newtype Var = Var String deriving (Eq, Show)
-newtype Metavar = Metavar String deriving (Eq, Show)
+someParameters :: [Raw.VarIdent]
+someParameters = fmap (\n -> Raw.VarIdent ("x" <> show n)) [0 :: Integer ..]
 
-someParameters :: [Var]
-someParameters = fmap (\n -> Var ("x" <> show n)) [0 :: Integer ..]
+isFlexible :: Raw.Term -> Bool
+isFlexible Raw.Var{} = False
+isFlexible Raw.Lam{} = False
+isFlexible Raw.Let{} = False
+isFlexible (Raw.App function _) = isFlexible function
+isFlexible Raw.MetaVar{} = True
 
-data Ast
-  = Constant String Raw.Type
-  | Variable Var
-  | Lambda Var Raw.Type Ast
-  | Apply Ast Ast
-  | Meta Metavar [Ast]
-  deriving (Eq)
-
-isFlexible :: Ast -> Bool
-isFlexible Constant{} = False
-isFlexible Variable{} = False
-isFlexible Lambda{} = False
-isFlexible (Apply function _) = isFlexible function
-isFlexible Meta{} = True
-
--- >>> (x, f, t) = (Var "x", Var "f", Raw.Base (Raw.VarIdent "t"))
--- >>> eval (Lambda x t (Lambda f (Raw.Fun t t) (Apply (Variable f) (Variable x))))
--- \x: t. \f: t -> t. (f) (x)
--- >>> eval (Apply (Lambda x t (Lambda f (Raw.Fun t t) (Apply (Variable f) (Variable x)))) (Constant "A" t))
--- \f: t -> t. (f) (A: t)
--- >>> eval (Apply (Apply (Lambda x t (Lambda f (Raw.Fun t t) (Apply (Variable f) (Variable x)))) (Constant "A" t)) (Lambda x t (Constant "B" t)))
--- B: t
-eval :: Ast -> Ast
+-- >>> (x, f, t) = (Raw.VarIdent "x", Raw.VarIdent "f", Raw.Base (Raw.VarIdent "t"))
+-- >>> Raw.printTree $ eval (Raw.Lam (Raw.APattern x) t (Raw.AScopedTerm (Raw.Lam (Raw.APattern f) (Raw.Fun t t) (Raw.AScopedTerm (Raw.App (Raw.Var f) (Raw.Var x))))))
+-- "\955 x : t . \955 f : t -> t . f x"
+-- >>> Raw.printTree $ eval (Raw.App (Raw.Lam (Raw.APattern x) t (Raw.AScopedTerm (Raw.Lam (Raw.APattern f) (Raw.Fun t t) (Raw.AScopedTerm (Raw.App (Raw.Var f) (Raw.Var x)))))) (Raw.Var (Raw.VarIdent "a")))
+-- "\955 f : t -> t . f a"
+-- >>> Raw.printTree $ eval (Raw.App (Raw.App (Raw.Lam (Raw.APattern x) t (Raw.AScopedTerm (Raw.Lam (Raw.APattern f) (Raw.Fun t t) (Raw.AScopedTerm (Raw.App (Raw.Var f) (Raw.Var x)))))) (Raw.Var (Raw.VarIdent "A"))) (Raw.Lam (Raw.APattern x) t (Raw.AScopedTerm (Raw.Var (Raw.VarIdent "B")))))
+-- "B"
+eval :: Raw.Term -> Raw.Term
 eval node = case node of
-  Constant _ _ -> node
-  Variable _ -> node
-  Lambda binder binderType body -> Lambda binder binderType (eval body)
-  Apply function argument ->
+  Raw.Var{} -> node
+  Raw.Lam binder binderType (Raw.AScopedTerm body) ->
+    Raw.Lam binder binderType (Raw.AScopedTerm (eval body))
+  Raw.Let (Raw.APattern binder) value (Raw.AScopedTerm body) ->
+    eval (substituteVars [(binder, value)] body)
+  Raw.App function argument ->
     case eval function of
-      Lambda binder _typ body -> eval (substituteVar binder argument body)
-      function' -> Apply function' argument
-  Meta _ _ -> node
+      Raw.Lam (Raw.APattern binder) _typ (Raw.AScopedTerm body) -> eval (substituteVars [(binder, argument)] body)
+      function' -> Raw.App function' argument
+  Raw.MetaVar{} -> node
 
 -- Naive rename
 --
--- >>> (x, y, z) = (Var "x", Var "y", Var "z")
--- >>> rename x y (Apply (Variable x) (Variable z))
--- (y) (z)
--- >>> rename x y (Lambda x (Raw.Base (Raw.VarIdent "t")) (Variable x))
--- \x: t. x
-rename :: Var -> Var -> Ast -> Ast
-rename from to = substituteVar from (Variable to)
+-- >>> (x, y, z) = (Raw.VarIdent "x", Raw.VarIdent "y", Raw.VarIdent "z")
+-- >>> Raw.printTree $ rename x y (Raw.App (Raw.Var x) (Raw.Var z))
+-- "y z"
+-- >>> Raw.printTree $ rename x y (Raw.Lam (Raw.APattern x) (Raw.Base (Raw.VarIdent "t")) (Raw.AScopedTerm (Raw.Var x)))
+-- "\955 x : t . x"
+rename :: Raw.VarIdent -> Raw.VarIdent -> Raw.Term -> Raw.Term
+rename from to = substituteVars [(from, Raw.Var to)]
 
--- >>> (x, t, u) = (Var "x", Raw.Base (Raw.VarIdent "t"), Raw.Base (Raw.VarIdent "u"))
--- >>> Raw.printTree <$> typeOf [(x, t)] [] (Lambda x u (Variable x))
+-- >>> (a, x, t, u) = (Raw.VarIdent "a", Raw.VarIdent "x", Raw.Base (Raw.VarIdent "t"), Raw.Base (Raw.VarIdent "u"))
+-- >>> Raw.printTree <$> typeOf [(x, t)] [] (Raw.Lam (Raw.APattern x) u (Raw.AScopedTerm (Raw.Var x)))
 -- Just "u -> u"
--- >>> Raw.printTree <$> typeOf [] [] (Apply (Lambda x t (Variable x)) (Constant "A" t))
+-- >>> Raw.printTree <$> typeOf [(a, t)] [] (Raw.App (Raw.Lam (Raw.APattern x) t (Raw.AScopedTerm (Raw.Var x))) (Raw.Var a))
 -- Just "t"
-typeOf :: [(Var, Raw.Type)] -> [(Metavar, ([Raw.Type], Raw.Type))] -> Ast -> Maybe Raw.Type
+typeOf :: [(Raw.VarIdent, Raw.Type)] -> [(Raw.MetaVarIdent, MetaType)] -> Raw.Term -> Maybe Raw.Type
 typeOf variables metavariables node = case node of
-  Constant _ typ -> Just typ
-  Variable var -> lookup var variables
-  Lambda binder binderType body ->
+  Raw.Var var -> lookup var variables
+  Raw.Lam (Raw.APattern binder) binderType (Raw.AScopedTerm body) ->
     Raw.Fun binderType <$> typeOf ((binder, binderType) : variables) metavariables body
-  Apply function argument -> do
+  Raw.Let (Raw.APattern binder) value (Raw.AScopedTerm body) -> do
+    binderType <- typeOf variables metavariables value
+    typeOf ((binder, binderType) : variables) metavariables body
+  Raw.App function argument -> do
     Raw.Fun argumentType returnType <- typeOf variables metavariables function
     argumentType' <- typeOf variables metavariables argument
     if argumentType == argumentType'
       then Just returnType
       else Nothing
-  Meta metavariable _arguments -> snd <$> lookup metavariable metavariables
+  Raw.MetaVar metavariable _arguments ->
+    fmap (\(MetaType _ typ) -> typ) (lookup metavariable metavariables)
 
-substituteVar :: Var -> Ast -> Ast -> Ast
-substituteVar expected substitution node = case node of
-  Constant{} -> node
-  Variable variable
-    | variable == expected -> substitution
-    | otherwise -> Variable variable
-  Lambda binder typ body
-    | binder == expected -> node
-    | otherwise -> Lambda binder typ (go body)
-  Apply function argument -> Apply (go function) (go argument)
-  Meta meta arguments -> Meta meta (go <$> arguments)
+substituteVars :: [(Raw.VarIdent, Raw.Term)] -> Raw.Term -> Raw.Term
+substituteVars substitutions node = case node of
+  Raw.Var variable -> fromMaybe node (lookup variable substitutions)
+  Raw.Lam (Raw.APattern binder) typ (Raw.AScopedTerm body)
+    | isJust (lookup binder substitutions) -> node
+    | otherwise -> Raw.Lam (Raw.APattern binder) typ (Raw.AScopedTerm (go body))
+  Raw.Let (Raw.APattern binder) value (Raw.AScopedTerm body) ->
+    Raw.Let (Raw.APattern binder) (go value) (Raw.AScopedTerm body')
+   where
+    body'
+      | isJust (lookup binder substitutions) = body
+      | otherwise = go body
+  Raw.App function argument -> Raw.App (go function) (go argument)
+  Raw.MetaVar meta arguments -> Raw.MetaVar meta (go <$> arguments)
  where
-  go = substituteVar expected substitution
+  go = substituteVars substitutions
 
-substituteMetavar :: Substitution -> Ast -> Ast
+substituteMetavar :: Substitution -> Raw.Term -> Raw.Term
 substituteMetavar substitution node = case node of
-  Constant{} -> node
-  Variable{} -> node
-  Lambda binder typ body -> Lambda binder typ (go body)
-  Apply function argument -> Apply (go function) (go argument)
-  Meta meta arguments
+  Raw.Var{} -> node
+  Raw.Lam binder typ (Raw.AScopedTerm body) ->
+    Raw.Lam binder typ (Raw.AScopedTerm (go body))
+  Raw.App function argument -> Raw.App (go function) (go argument)
+  Raw.Let binder value (Raw.AScopedTerm body) ->
+    Raw.Let binder (go value) (Raw.AScopedTerm (go body))
+  Raw.MetaVar meta arguments
     | Substitution expected parameters body <- substitution
     , meta == expected ->
-        foldr (uncurry substituteVar) body (zip parameters arguments)
-    | otherwise -> Meta meta (go <$> arguments)
+        substituteVars (zip parameters arguments) body
+    | otherwise -> Raw.MetaVar meta (go <$> arguments)
  where
   go = substituteMetavar substitution
 
-instance Show Ast where
-  show (Constant constant typ) = constant <> ": " <> Raw.printTree typ
-  show (Variable (Var variable)) = variable
-  show (Lambda (Var binder) typ body) = "\\" <> binder <> ": " <> Raw.printTree typ <> ". " <> show body
-  show (Apply left right) = "(" <> show left <> ") (" <> show right <> ")"
-  show (Meta (Metavar metavariable) arguments) = metavariable <> show arguments
-
 data Constraint = Constraint
-  { constraintForall :: [(Var, Raw.Type)]
-  , constraintLhs :: Ast
-  , constraintRhs :: Ast
+  { constraintForall :: [(Raw.VarIdent, Raw.Type)]
+  , constraintLhs :: Raw.Term
+  , constraintRhs :: Raw.Term
   }
   deriving (Eq)
 
@@ -145,36 +134,42 @@ substituteConstraint substitution (Constraint forall_ left right) =
 instance Show Constraint where
   show (Constraint vars left right) =
     "forall "
-      <> intercalate ", " (fmap (\(Var x, typ) -> x <> ": " <> Raw.printTree typ) vars)
+      <> intercalate ", " (fmap (\(Raw.VarIdent x, typ) -> x <> ": " <> Raw.printTree typ) vars)
       <> ". "
-      <> show left
+      <> Raw.printTree left
       <> " = "
-      <> show right
+      <> Raw.printTree right
 
 data Metavariables = Metavariables
-  { metavariables :: [(Metavar, ([Raw.Type], Raw.Type))]
-  , freshMetavariables :: Stream Metavar
+  { metavariables :: [(Raw.MetaVarIdent, MetaType)]
+  , freshMetavariables :: Stream Raw.MetaVarIdent
   }
   deriving (Show, Eq)
+
+data MetaType = MetaType [Raw.Type] Raw.Type deriving (Eq)
+
+instance Show MetaType where
+  show (MetaType parameterTypes returnType) =
+    "[" <> intercalate ", " (Raw.printTree <$> parameterTypes) <> "]" <> Raw.printTree returnType
 
 someMetas :: Metavariables
 someMetas = Metavariables [] freshMetavariables
  where
-  freshMetavariables = fmap (\i -> Metavar ("M" <> show i)) (nats (0 :: Integer))
+  freshMetavariables = fmap (\i -> Raw.MetaVarIdent ("M" <> show i)) (nats (0 :: Integer))
   nats i = Stream i (nats (i + 1))
 
-fresh :: [(Var, Raw.Type)] -> Raw.Type -> Metavariables -> (Metavariables, Ast)
+fresh :: [(Raw.VarIdent, Raw.Type)] -> Raw.Type -> Metavariables -> (Metavariables, Raw.Term)
 fresh parameters typ (Metavariables metavariables (Stream metavar freshMetavariables)) =
-  (Metavariables ((metavar, metavarType) : metavariables) freshMetavariables, Meta metavar parameters')
+  (Metavariables ((metavar, metavarType) : metavariables) freshMetavariables, Raw.MetaVar metavar parameters')
  where
-  parameters' = Variable . fst <$> parameters
-  metavarType = (snd <$> parameters, typ)
+  parameters' = Raw.Var . fst <$> parameters
+  metavarType = MetaType (snd <$> parameters) typ
 
-data Substitution = Substitution Metavar [Var] Ast
+data Substitution = Substitution Raw.MetaVarIdent [Raw.VarIdent] Raw.Term
 
 instance Show Substitution where
-  show (Substitution (Metavar meta) parameters body) =
-    meta <> "[" <> intercalate "," (fmap (\(Var var) -> var) parameters) <> "] ↦ " <> show body
+  show (Substitution (Raw.MetaVarIdent meta) parameters body) =
+    meta <> "[" <> intercalate "," (fmap (\(Raw.VarIdent var) -> var) parameters) <> "] ↦ " <> Raw.printTree body
 
 newtype Substitutions = Substitutions [Substitution]
 
@@ -182,9 +177,9 @@ makeSubstitutions :: Metavariables -> Substitutions
 makeSubstitutions metas = Substitutions substitutions
  where
   substitutions = do
-    (name, (arguments, _returnType)) <- metavariables metas
+    (name, MetaType arguments _returnType) <- metavariables metas
     let parameters = take (length arguments) someParameters
-    let reflexive = Meta name (Variable <$> parameters)
+    let reflexive = Raw.MetaVar name (Raw.Var <$> parameters)
     return (Substitution name parameters reflexive)
 
 substitute :: Substitution -> Substitutions -> Substitutions
@@ -237,54 +232,41 @@ data Decomposition
   deriving (Show)
 
 -- >>> (t, u) = (Raw.Base (Raw.VarIdent "t"), Raw.Base (Raw.VarIdent "u"))
--- >>> (x, y, _M) = (Var "x", Var "y", Metavar "M")
--- >>> decompose someMetas (Constraint [(x, t)] (Variable x) (Variable x))
+-- >>> (a, b, x, y, _M) = (Raw.VarIdent "A", Raw.VarIdent "B", Raw.VarIdent "x", Raw.VarIdent "y", Raw.MetaVarIdent "M")
+-- >>> decompose someMetas (Constraint [(x, t)] (Raw.Var x) (Raw.Var x))
 -- Decomposed []
--- >>> decompose someMetas (Constraint [(x, t), (y, u)] (Variable x) (Variable y))
+-- >>> decompose someMetas (Constraint [(x, t), (y, u)] (Raw.Var x) (Raw.Var y))
 -- Failed
--- >>> decompose someMetas (Constraint [(x, t), (y, u)] (Apply (Variable x) (Variable y)) (Apply (Constant "A" t) (Constant "B" u)))
--- Decomposed [forall x: t, y: u. y = B: u,forall x: t, y: u. x = A: t]
--- >>> decompose someMetas (Constraint [] (Lambda x t (Variable x)) (Lambda y t (Variable y)))
+-- >>> decompose someMetas (Constraint [(x, Raw.Fun u t), (y, u), (a, Raw.Fun u t), (b, u)] (Raw.App (Raw.Var x) (Raw.Var y)) (Raw.App (Raw.Var a) (Raw.Var b)))
+-- Decomposed [forall x: u -> t, y: u, A: u -> t, B: u. y = B,forall x: u -> t, y: u, A: u -> t, B: u. x = A]
+-- >>> decompose someMetas (Constraint [] (Raw.Lam (Raw.APattern x) t (Raw.AScopedTerm (Raw.Var x))) (Raw.Lam (Raw.APattern y) t (Raw.AScopedTerm (Raw.Var y))))
 -- Decomposed [forall x: t. x = x]
--- >>> decompose someMetas (Constraint [(x, t), (y, u)] (Apply (Variable x) (Variable y)) (Variable x))
+-- >>> decompose someMetas (Constraint [(x, t), (y, u)] (Raw.App (Raw.Var x) (Raw.Var y)) (Raw.Var x))
 -- Failed
--- >>> decompose someMetas (Constraint [(x, t), (y, t)] (Apply (Meta _M []) (Variable x)) (Variable y))
+-- >>> decompose someMetas (Constraint [(x, t), (y, t)] (Raw.App (Raw.MetaVar _M []) (Raw.Var x)) (Raw.Var y))
 -- Failed
--- >>> decompose someMetas (Constraint [(x, t), (y, t)] (Meta _M []) (Variable y))
+-- >>> decompose someMetas (Constraint [(x, t), (y, t)] (Raw.MetaVar _M []) (Raw.Var y))
 -- Flexible
 decompose :: Metavariables -> Constraint -> Decomposition
 decompose _ (Constraint forall_ left right) = case (left, right) of
-  (Meta{}, _) -> Flexible
-  (_, Meta{}) -> Flexible
-  (Constant{}, Constant{}) | left == right -> Decomposed []
-  (Variable{}, Variable{}) | left == right -> Decomposed []
-  (Lambda leftBinder leftBinderType leftBody, Lambda rightBinder rightBinderType rightBody)
-    | leftBinderType == rightBinderType ->
-        Decomposed [Constraint forall' leftBody rightBody']
-   where
-    forall' = (leftBinder, leftBinderType) : forall_
-    rightBody' = rename rightBinder leftBinder rightBody
-  (Apply leftFunction leftArgument, Apply rightFunction rightArgument) ->
+  (Raw.MetaVar{}, _) -> Flexible
+  (_, Raw.MetaVar{}) -> Flexible
+  (Raw.Var{}, Raw.Var{}) | left == right -> Decomposed []
+  ( Raw.Lam (Raw.APattern leftBinder) leftBinderType (Raw.AScopedTerm leftBody)
+    , Raw.Lam (Raw.APattern rightBinder) rightBinderType (Raw.AScopedTerm rightBody)
+    )
+      | leftBinderType == rightBinderType ->
+          Decomposed [Constraint forall' leftBody rightBody']
+     where
+      forall' = (leftBinder, leftBinderType) : forall_
+      rightBody' = rename rightBinder leftBinder rightBody
+  (Raw.App leftFunction leftArgument, Raw.App rightFunction rightArgument) ->
     Decomposed
       [ Constraint forall_ leftArgument rightArgument
       , Constraint forall_ leftFunction rightFunction
       ]
   _ -> Failed
 
--- >>> (t, u) = (Raw.Base (Raw.VarIdent "t"), Raw.Base (Raw.VarIdent "u"))
--- >>> (x, y, _M) = (Var "x", Var "y", Metavar "M")
--- >>> decomposeRigidRigid someMetas (Constraint [(x, t)] (Variable x) (Variable x))
--- Decomposed []
--- >>> decomposeRigidRigid someMetas (Constraint [(x, t), (y, u)] (Variable x) (Variable y))
--- Failed
--- >>> decomposeRigidRigid someMetas (Constraint [(x, t), (y, u)] (Apply (Variable x) (Variable y)) (Apply (Constant "A" t) (Constant "B" u)))
--- Decomposed [forall x: t, y: u. y = B: u,forall x: t, y: u. x = A: t]
--- >>> decomposeRigidRigid someMetas (Constraint [] (Lambda x t (Variable x)) (Lambda y t (Variable y)))
--- Decomposed [forall x: t. x = x]
--- >>> decomposeRigidRigid someMetas (Constraint [(x, t), (y, u)] (Apply (Variable x) (Variable y)) (Variable x))
--- Failed
--- >>> decomposeRigidRigid someMetas (Constraint [(x, t), (y, t)] (Apply (Meta _M []) (Variable x)) (Variable y))
--- Flexible
 decomposeRigidRigid :: Metavariables -> Constraint -> Decomposition
 decomposeRigidRigid metas constraint@(Constraint _ left right)
   | isFlexible left = Flexible
@@ -319,40 +301,40 @@ decomposeProblems problems = do
 -- Just M[x0] ↦ (B: t -> t) (M0[x0])
 imitate :: Metavariables -> Constraint -> Maybe (Metavariables, Substitution)
 imitate metas (Constraint forall_ left right) = case (left, right) of
-  (Meta meta _, rhs) -> go meta rhs
-  (rhs, Meta meta _) -> go meta rhs
+  (Raw.MetaVar meta _, rhs) -> go meta rhs
+  (rhs, Raw.MetaVar meta _) -> go meta rhs
   _ -> Nothing
  where
   go meta rhs = do
-    (parameterTypes, _) <- lookup meta (metavariables metas)
+    MetaType parameterTypes _ <- lookup meta (metavariables metas)
     let parameters = zip someParameters parameterTypes
     (metas', imitiation) <- go' metas parameters rhs
     return (metas', Substitution meta (fst <$> parameters) imitiation)
 
   go' metas parameters rhs = case rhs of
-    Variable{} -> Nothing
-    Constant{} -> Just (metas, rhs)
-    Lambda binder binderType body -> do
+    Raw.Var{} -> Nothing
+    Raw.Lam (Raw.APattern binder) binderType (Raw.AScopedTerm body) -> do
       bodyType <- typeOf ((binder, binderType) : forall_) (metavariables metas) body
       let (metas', body') = fresh ((binder, binderType) : parameters) bodyType metas
-      return (metas', Lambda binder binderType body')
-    Apply function argument -> do
+      return (metas', Raw.Lam (Raw.APattern binder) binderType (Raw.AScopedTerm body'))
+    Raw.Let _ _ (Raw.AScopedTerm body) -> go' metas parameters body
+    Raw.App function argument -> do
       (metas', function') <- go' metas parameters function
       argumentType <- typeOf forall_ (metavariables metas) argument
       let (metas'', argument') = fresh parameters argumentType metas'
-      return (metas'', Apply function' argument')
-    Meta{} -> Nothing
+      return (metas'', Raw.App function' argument')
+    Raw.MetaVar{} -> Nothing
 
 -- >>> (t, u, v) = (Raw.Base (Raw.VarIdent "t"), Raw.Base (Raw.VarIdent "u"), Raw.Base (Raw.VarIdent "v"))
--- >>> parameters = [(Var "x", v)]
--- >>> y = Variable (Var "y")
--- >>> snd <$> reduce someMetas parameters t t y
--- [y]
--- >>> snd <$> reduce someMetas parameters t u y
+-- >>> parameters = [(Raw.VarIdent "x", v)]
+-- >>> y = Raw.Var (Raw.VarIdent "y")
+-- >>> Raw.printTree . snd <$> reduce someMetas parameters t t y
+-- ["y"]
+-- >>> Raw.printTree . snd <$> reduce someMetas parameters t u y
 -- []
--- >>> snd <$> reduce someMetas parameters t (Raw.Fun u t) y
--- [(y) (M0[x])]
-reduce :: Metavariables -> [(Var, Raw.Type)] -> Raw.Type -> Raw.Type -> Ast -> [(Metavariables, Ast)]
+-- >>> Raw.printTree . snd <$> reduce someMetas parameters t (Raw.Fun u t) y
+-- ["y M0 [x]"]
+reduce :: Metavariables -> [(Raw.VarIdent, Raw.Type)] -> Raw.Type -> Raw.Type -> Raw.Term -> [(Metavariables, Raw.Term)]
 reduce metas parameters expectedType actualType term = reflexive <> typed
  where
   reflexive
@@ -362,7 +344,7 @@ reduce metas parameters expectedType actualType term = reflexive <> typed
     Raw.Base{} -> []
     Raw.Fun argumentType returnType -> do
       let (metas', argument) = fresh parameters argumentType metas
-      reduce metas' parameters expectedType returnType (Apply term argument)
+      reduce metas' parameters expectedType returnType (Raw.App term argument)
 
 -- >>> (t, u) = (Raw.Base (Raw.VarIdent "t"), Raw.Base (Raw.VarIdent "u"))
 -- >>> _M = Metavar "M"
@@ -372,16 +354,16 @@ reduce metas parameters expectedType actualType term = reflexive <> typed
 -- [M[x0,x1,x2] ↦ ((x0) (M0[x0,x1,x2])) (M1[x0,x1,x2]),M[x0,x1,x2] ↦ x2]
 project :: Metavariables -> Constraint -> [(Metavariables, Substitution)]
 project metas (Constraint _ left right) = case (left, right) of
-  (Meta{}, Meta{}) -> []
-  (Meta meta _, _) -> go meta
-  (_, Meta meta _) -> go meta
+  (Raw.MetaVar{}, Raw.MetaVar{}) -> []
+  (Raw.MetaVar meta _, _) -> go meta
+  (_, Raw.MetaVar meta _) -> go meta
   (_, _) -> []
  where
   go meta = do
-    (parameterTypes, rhsType) <- maybeToList (lookup meta (metavariables metas))
+    MetaType parameterTypes rhsType <- maybeToList (lookup meta (metavariables metas))
     let parameters = zip someParameters parameterTypes
     (parameter, parameterType) <- parameters
-    (metas', projection) <- reduce metas parameters rhsType parameterType (Variable parameter)
+    (metas', projection) <- reduce metas parameters rhsType parameterType (Raw.Var parameter)
     return (metas', Substitution meta (fst <$> parameters) projection)
 
 -- >>> (_M, _X, t) = (Metavar "M", Metavar "X", Raw.Base (Raw.VarIdent "t"))
@@ -391,26 +373,28 @@ project metas (Constraint _ left right) = case (left, right) of
 introduce :: Metavariables -> Constraint -> [(Metavariables, Substitution)]
 introduce metas (Constraint _ left right) = go left <|> go right
  where
-  go Variable{} = []
-  go Constant{} = []
-  go Lambda{} = []
-  go (Apply (Meta meta _) _) = maybeToList $ do
-    (parameterTypes, Raw.Fun binderType bodyType) <- lookup meta (metavariables metas)
-    let binder = Var "y0"
+  go Raw.Var{} = []
+  go Raw.Lam{} = []
+  go (Raw.Let _ _ (Raw.AScopedTerm inner)) = go inner
+  go (Raw.App (Raw.MetaVar meta _) _) = maybeToList $ do
+    MetaType parameterTypes (Raw.Fun binderType bodyType) <- lookup meta (metavariables metas)
+    let binder = Raw.VarIdent "y0"
     let parameters = zip someParameters parameterTypes
-    let (metas', substitution) = fresh ((binder, binderType) : parameters) bodyType metas
-    return (metas', Substitution meta (fst <$> parameters) (Lambda binder binderType substitution))
-  go (Apply function _) = go function
-  go Meta{} = []
+    let (metas', body) = fresh ((binder, binderType) : parameters) bodyType metas
+    let substitution = Raw.Lam (Raw.APattern binder) binderType (Raw.AScopedTerm body)
+    return (metas', Substitution meta (fst <$> parameters) substitution)
+  go (Raw.App function _) = go function
+  go Raw.MetaVar{} = []
 
--- >>> t = Raw.Base (Raw.VarIdent "t")
--- >>> left = Apply (Constant "a" (Raw.Fun t t)) (Constant "b" t)
--- >>> right = Apply (Meta (Metavar "F") []) (Meta (Metavar "X") [])
--- >>> metas = Metavariables [(Metavar "F", ([], Raw.Fun t t)), (Metavar "X", ([], t))] (freshMetavariables someMetas)
--- >>> constraint = Constraint [] left right
+-- >>> (a, b, t) = (Raw.VarIdent "a", Raw.VarIdent "b", Raw.Base (Raw.VarIdent "t"))
+-- >>> (_F, _X) = (Raw.MetaVarIdent "F", Raw.MetaVarIdent "X")
+-- >>> left = Raw.App (Raw.Var a) (Raw.Var b)
+-- >>> right = Raw.App (Raw.MetaVar _F []) (Raw.MetaVar _X [])
+-- >>> metas = Metavariables [(_F, MetaType [] (Raw.Fun t t)), (_X, MetaType [] t)] (freshMetavariables someMetas)
+-- >>> constraint = Constraint [(a, Raw.Fun t t), (b, t)] left right
 -- >>> flexRigid = pickFlexRigid (Solution metas [constraint] (makeSubstitutions metas))
 -- >>> uncurry step =<< maybeToList flexRigid
--- [Solution {solutionMetavariables = Metavariables {metavariables = [(Metavar "F",([],Fun (Base (VarIdent "t")) (Base (VarIdent "t")))),(Metavar "X",([],Base (VarIdent "t")))], freshMetavariables = Stream}, solutionConstraints = [forall . b: t = X[],forall . a: t -> t = F[]], solutionSubstitutions = { F[] ↦ F[], X[] ↦ X[] }},Solution {solutionMetavariables = Metavariables {metavariables = [(Metavar "M0",([Base (VarIdent "t")],Base (VarIdent "t"))),(Metavar "F",([],Fun (Base (VarIdent "t")) (Base (VarIdent "t")))),(Metavar "X",([],Base (VarIdent "t")))], freshMetavariables = Stream}, solutionConstraints = [forall . (a: t -> t) (b: t) = (\y0: t. M0[y0]) (X[])], solutionSubstitutions = { F[] ↦ \y0: t. M0[y0], X[] ↦ X[] }}]
+-- [Solution {solutionMetavariables = Metavariables {metavariables = [(MetaVarIdent "F",[]t -> t),(MetaVarIdent "X",[]t)], freshMetavariables = Stream}, solutionConstraints = [forall a: t -> t, b: t. b = X [],forall a: t -> t, b: t. a = F []], solutionSubstitutions = { F[] ↦ F [], X[] ↦ X [] }},Solution {solutionMetavariables = Metavariables {metavariables = [(MetaVarIdent "M0",[t]t),(MetaVarIdent "F",[]t -> t),(MetaVarIdent "X",[]t)], freshMetavariables = Stream}, solutionConstraints = [forall a: t -> t, b: t. a b = (λ y0 : t . M0 [y0]) X []], solutionSubstitutions = { F[] ↦ λ y0 : t . M0 [y0], X[] ↦ X [] }}]
 step :: Constraint -> Solution -> [Solution]
 step constraint (Solution metas constraints substitutions) =
   decomposed <> solved
@@ -432,28 +416,28 @@ step constraint (Solution metas constraints substitutions) =
     return (Solution metas (decomposition <> constraints) substitutions)
 
 -- >>> t = Raw.Base (Raw.VarIdent "t")
--- >>> left = Apply (Constant "a" (Raw.Fun t t)) (Constant "b" t)
--- >>> right = Apply (Meta (Metavar "F") []) (Meta (Metavar "X") [])
--- >>> metas = Metavariables [(Metavar "F", ([], Raw.Fun t t)), (Metavar "X", ([], t))] (freshMetavariables someMetas)
--- >>> constraint = Constraint [] left right
--- >>> solutionSubstitutions <$> solve [Problem metas [constraint]]
--- [{ F[] ↦ \y0: t. (a: t -> t) (b: t), X[] ↦ X[] },{ F[] ↦ a: t -> t, X[] ↦ b: t },{ F[] ↦ \y0: t. y0, X[] ↦ (a: t -> t) (b: t) },{ F[] ↦ \y0: t. (a: t -> t) (y0), X[] ↦ b: t }]
+-- >>> (_F, _X) = (Raw.MetaVarIdent "F", Raw.MetaVarIdent "X")
+-- >>> (a, b, c) = (Raw.VarIdent "a", Raw.VarIdent "b", Raw.VarIdent "c")
 --
--- >>> left = Apply (Apply (Constant "a" (Raw.Fun t (Raw.Fun t t))) (Constant "b" t)) (Constant "c" t)
--- >>> right = Apply (Meta (Metavar "F") []) (Meta (Metavar "X") [])
--- >>> metas = Metavariables [(Metavar "F", ([], Raw.Fun t (Raw.Fun t t))), (Metavar "X", ([], t)), (Metavar "Y", ([], t))] (freshMetavariables someMetas)
--- >>> constraint = Constraint [] left right
+-- >>> left = Raw.App (Raw.Var a) (Raw.Var b)
+-- >>> right = Raw.App (Raw.MetaVar _F [Raw.Var a, Raw.Var b]) (Raw.MetaVar _X [Raw.Var a, Raw.Var b])
+-- >>> metas = Metavariables [(_F, MetaType [Raw.Fun t t, t] (Raw.Fun t t)), (_X, MetaType [Raw.Fun t t, t] t)] (freshMetavariables someMetas)
+-- >>> constraint = Constraint [(a, Raw.Fun t t), (b, t)] left right
 -- >>> solutionSubstitutions <$> solve [Problem metas [constraint]]
--- [{ F[] ↦ (a: t -> t -> t) (b: t), X[] ↦ c: t, Y[] ↦ Y[] },{ F[] ↦ \y0: t. ((a: t -> t -> t) (b: t)) (c: t), X[] ↦ X[], Y[] ↦ Y[] },{ F[] ↦ \y0: t. ((a: t -> t -> t) (b: t)) (y0), X[] ↦ c: t, Y[] ↦ Y[] },{ F[] ↦ \y0: t. ((a: t -> t -> t) (y0)) (c: t), X[] ↦ b: t, Y[] ↦ Y[] }]
+-- [{ F[x0,x1] ↦ λ y0 : t . x0 x1, X[x0,x1] ↦ X [x0, x1] },{ F[x0,x1] ↦ x0, X[x0,x1] ↦ x1 },{ F[x0,x1] ↦ λ y0 : t . x0 y0, X[x0,x1] ↦ x1 },{ F[x0,x1] ↦ λ y0 : t . y0, X[x0,x1] ↦ x0 x1 }]
 --
--- >>> (_F, _X) = (Metavar "F", Metavar "X")
--- >>> a = Constant "a" (Raw.Fun t t)
--- >>> b = Constant "b" t
--- >>> left = Meta _F [Meta _X [], b]
--- >>> right = Apply a b
--- >>> metas = Metavariables [(_F, ([Raw.Fun t (Raw.Fun t t), t], t)), (_X, ([], Raw.Fun t (Raw.Fun t t)))] (freshMetavariables someMetas)
--- >>> take 5 $ solutionSubstitutions <$> solve [Problem metas [Constraint [] left right]]
--- [{ F[x0,x1] ↦ (a: t -> t) (x1), X[] ↦ X[] },{ F[x0,x1] ↦ (a: t -> t) (b: t), X[] ↦ X[] },{ F[x0,x1] ↦ ((x0) (M0[x0,x1])) (M1[x0,x1]), X[] ↦ \y0: t. \y0: t. (a: t -> t) (b: t) },{ F[x0,x1] ↦ ((x0) (M0[x0,x1])) (b: t), X[] ↦ \y0: t. a: t -> t },{ F[x0,x1] ↦ ((x0) (M0[x0,x1])) (x1), X[] ↦ \y0: t. a: t -> t }]
+-- >>> left = Raw.App (Raw.App (Raw.Var a) (Raw.Var b)) (Raw.Var c)
+-- >>> right = Raw.App (Raw.MetaVar _F [Raw.Var a, Raw.Var b, Raw.Var c]) (Raw.MetaVar _X [Raw.Var a, Raw.Var b, Raw.Var c])
+-- >>> metas = Metavariables [(_F, MetaType [Raw.Fun t (Raw.Fun t t), t, t] (Raw.Fun t t)), (_X, MetaType [Raw.Fun t (Raw.Fun t t), t, t] t)] (freshMetavariables someMetas)
+-- >>> constraint = Constraint [(a, Raw.Fun t (Raw.Fun t t)), (b, t), (c, t)] left right
+-- >>> solutionSubstitutions <$> solve [Problem metas [constraint]]
+-- [{ F[x0,x1,x2] ↦ x0 x1, X[x0,x1,x2] ↦ x2 },{ F[x0,x1,x2] ↦ λ y0 : t . x0 x1 x2, X[x0,x1,x2] ↦ X [x0, x1, x2] },{ F[x0,x1,x2] ↦ λ y0 : t . y0, X[x0,x1,x2] ↦ x0 x1 x2 },{ F[x0,x1,x2] ↦ λ y0 : t . x0 y0 x2, X[x0,x1,x2] ↦ x1 },{ F[x0,x1,x2] ↦ λ y0 : t . x0 x1 y0, X[x0,x1,x2] ↦ x2 }]
+--
+-- >>> left = Raw.MetaVar _F [Raw.MetaVar _X [Raw.Var a, Raw.Var b], Raw.Var a, Raw.Var b]
+-- >>> right = Raw.App (Raw.Var a) (Raw.Var b)
+-- >>> metas = Metavariables [(_F, MetaType [Raw.Fun t (Raw.Fun t t), Raw.Fun t t, t] t), (_X, MetaType [Raw.Fun t t, t] (Raw.Fun t (Raw.Fun t t)))] (freshMetavariables someMetas)
+-- >>> take 5 $ solutionSubstitutions <$> solve [Problem metas [Constraint [(a, Raw.Fun t t), (b, t)] left right]]
+-- [{ F[x0,x1,x2] ↦ x1 x2, X[x0,x1] ↦ X [x0, x1] },{ F[x0,x1,x2] ↦ x1 (x0 M1 [x0, x1, x2] M2 [x0, x1, x2]), X[x0,x1] ↦ λ y0 : t . λ y0 : t . x1 },{ F[x0,x1,x2] ↦ x0 M0 [x0, x1, x2] M1 [x0, x1, x2], X[x0,x1] ↦ λ y0 : t . λ y0 : t . x0 x1 },{ F[x0,x1,x2] ↦ x0 M0 [x0, x1, x2] x2, X[x0,x1] ↦ λ y0 : t . x0 },{ F[x0,x1,x2] ↦ x0 M0 [x0, x1, x2] x2, X[x0,x1] ↦ λ y0 : t . λ y0 : t . x0 y0 }]
 solve :: [Problem] -> [Solution]
 solve = go . fmap withSubstitutions
  where
