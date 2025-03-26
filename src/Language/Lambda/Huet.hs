@@ -267,12 +267,21 @@ instance Show Substitution where
 
 newtype Substitutions = Substitutions [Substitution]
 
-emptySubstitutions :: Substitutions
-emptySubstitutions = Substitutions []
+makeSubstitutions :: Metavariables -> Substitutions
+makeSubstitutions metas = Substitutions substitutions
+ where
+  substitutions = do
+    (name, (arguments, _returnType)) <- metavariables metas
+    let parameters = take (length arguments) someParameters
+    let reflexive = Meta name (Variable <$> parameters)
+    return (Substitution name parameters reflexive)
 
-addSubstitution :: Substitution -> Substitutions -> Substitutions
-addSubstitution substitution (Substitutions substitutions) =
-  Substitutions (substitution : substitutions)
+substitute :: Substitution -> Substitutions -> Substitutions
+substitute substitution (Substitutions substitutions) =
+  Substitutions (go <$> substitutions)
+ where
+  go (Substitution meta parameters body) =
+    Substitution meta parameters (substituteMetavar substitution body)
 
 instance Show Substitutions where
   show (Substitutions []) = "{ }"
@@ -291,8 +300,8 @@ data Solution = Solution
   }
   deriving (Show)
 
-withoutSubstitutions :: Problem -> Solution
-withoutSubstitutions (Problem metas constraints) = Solution metas constraints emptySubstitutions
+withSubstitutions :: Problem -> Solution
+withSubstitutions (Problem metas constraints) = Solution metas constraints (makeSubstitutions metas)
 
 pickFlexRigid :: Solution -> Maybe (Constraint, Solution)
 pickFlexRigid (Solution metas constraints substitutions) = go id constraints
@@ -538,7 +547,7 @@ project metas (Constraint _ left right) = case (left, right) of
 -- >>> (_M, _X, t) = (Metavar "M", Metavar "X", Base "t")
 -- >>> metas = Metavariables [(_M, ([], Function t t))] (freshMetavariables someMetas)
 -- >>> snd <$> introduce metas (Constraint [] (Apply (Meta _M []) (Meta _X [])) (Apply (Constant "a" (Function t t)) (Constant "b" t)))
--- Just M[] ↦ \x0: t. M0[x0]
+-- [M[] ↦ \y0: t. M0[y0]]
 introduce :: Metavariables -> Constraint -> [(Metavariables, Substitution)]
 introduce metas (Constraint _ left right) = go left <|> go right
  where
@@ -547,8 +556,8 @@ introduce metas (Constraint _ left right) = go left <|> go right
   go Lambda{} = []
   go (Apply (Meta meta _) _) = maybeToList $ do
     (parameterTypes, Function binderType bodyType) <- lookup meta (metavariables metas)
-    let (binder : someParameters') = someParameters
-    let parameters = zip someParameters' parameterTypes
+    let binder = Var "y0"
+    let parameters = zip someParameters parameterTypes
     let (metas', substitution) = fresh ((binder, binderType) : parameters) bodyType metas
     return (metas', Substitution meta (fst <$> parameters) (Lambda binder binderType substitution))
   go (Apply function _) = go function
@@ -580,9 +589,9 @@ introduce metas (Constraint _ left right) = go left <|> go right
 -- >>> right = Apply (Meta (Metavar "F") []) (Meta (Metavar "X") [])
 -- >>> metas = Metavariables [(Metavar "F", ([], Function t t)), (Metavar "X", ([], t))] (freshMetavariables someMetas)
 -- >>> constraint = Constraint [] left right
--- >>> flexRigid = pickFlexRigid (Solution metas [constraint] emptySubstitutions)
+-- >>> flexRigid = pickFlexRigid (Solution metas [constraint] (makeSubstitutions metas))
 -- >>> uncurry step =<< maybeToList flexRigid
--- [Solution {solutionMetavariables = Metavariables {metavariables = [(Metavar "F",([],(t) -> t)),(Metavar "X",([],t))], freshMetavariables = Stream}, solutionConstraints = [forall . b: t = X[],forall . a: (t) -> t = F[]], solutionSubstitutions = { }},Solution {solutionMetavariables = Metavariables {metavariables = [(Metavar "M0",([t],t)),(Metavar "F",([],(t) -> t)),(Metavar "X",([],t))], freshMetavariables = Stream}, solutionConstraints = [forall . (a: (t) -> t) (b: t) = (\x0: t. M0[x0]) (X[])], solutionSubstitutions = { F[] ↦ \x0: t. M0[x0] }}]
+-- [Solution {solutionMetavariables = Metavariables {metavariables = [(Metavar "F",([],(t) -> t)),(Metavar "X",([],t))], freshMetavariables = Stream}, solutionConstraints = [forall . b: t = X[],forall . a: (t) -> t = F[]], solutionSubstitutions = { F[] ↦ F[], X[] ↦ X[] }},Solution {solutionMetavariables = Metavariables {metavariables = [(Metavar "M0",([t],t)),(Metavar "F",([],(t) -> t)),(Metavar "X",([],t))], freshMetavariables = Stream}, solutionConstraints = [forall . (a: (t) -> t) (b: t) = (\y0: t. M0[y0]) (X[])], solutionSubstitutions = { F[] ↦ \y0: t. M0[y0], X[] ↦ X[] }}]
 step :: Constraint -> Solution -> [Solution]
 step constraint (Solution metas constraints substitutions) =
   decomposed <> solved
@@ -594,7 +603,7 @@ step constraint (Solution metas constraints substitutions) =
   solved = do
     (metas', substitution) <- maybeToList imitations <> projections <> introductions
     let constraints' = substituteConstraint substitution <$> (constraint : constraints)
-    return (Solution metas' constraints' (addSubstitution substitution substitutions))
+    return (Solution metas' constraints' (substitute substitution substitutions))
 
   -- `F[] X[] = a b` does not decompose semantically, but it decomposes
   -- structurally. Try structural decomposition once we dealt with the semantics
@@ -609,14 +618,14 @@ step constraint (Solution metas constraints substitutions) =
 -- >>> metas = Metavariables [(Metavar "F", ([], Function t t)), (Metavar "X", ([], t))] (freshMetavariables someMetas)
 -- >>> constraint = Constraint [] left right
 -- >>> solutionSubstitutions <$> solve [Problem metas [constraint]]
--- [{ M1[x0] ↦ b: t, M0[x0] ↦ (a: (t) -> t) (M1[x0]), F[] ↦ \x0: t. M0[x0] },{ F[] ↦ a: (t) -> t, X[] ↦ b: t },{ M1[] ↦ b: t, X[] ↦ (a: (t) -> t) (M1[]), M0[x0] ↦ x0, F[] ↦ \x0: t. M0[x0] },{ X[] ↦ b: t, M1[x0] ↦ x0, M0[x0] ↦ (a: (t) -> t) (M1[x0]), F[] ↦ \x0: t. M0[x0] }]
+-- [{ F[] ↦ \y0: t. (a: (t) -> t) (b: t), X[] ↦ X[] },{ F[] ↦ a: (t) -> t, X[] ↦ b: t },{ F[] ↦ \y0: t. y0, X[] ↦ (a: (t) -> t) (b: t) },{ F[] ↦ \y0: t. (a: (t) -> t) (y0), X[] ↦ b: t }]
 --
 -- >>> left = Apply (Apply (Constant "a" (Function t (Function t t))) (Constant "b" t)) (Constant "c" t)
 -- >>> right = Apply (Meta (Metavar "F") []) (Meta (Metavar "X") [])
 -- >>> metas = Metavariables [(Metavar "F", ([], Function t (Function t t))), (Metavar "X", ([], t)), (Metavar "Y", ([], t))] (freshMetavariables someMetas)
 -- >>> constraint = Constraint [] left right
 -- >>> solutionSubstitutions <$> solve [Problem metas [constraint]]
--- [{ M0[] ↦ b: t, F[] ↦ (a: (t) -> (t) -> t) (M0[]), X[] ↦ c: t },{ M1[x0] ↦ b: t, M2[x0] ↦ c: t, M0[x0] ↦ ((a: (t) -> (t) -> t) (M1[x0])) (M2[x0]), F[] ↦ \x0: t. M0[x0] },{ M1[x0] ↦ b: t, X[] ↦ c: t, M2[x0] ↦ x0, M0[x0] ↦ ((a: (t) -> (t) -> t) (M1[x0])) (M2[x0]), F[] ↦ \x0: t. M0[x0] },{ X[] ↦ b: t, M1[x0] ↦ x0, M2[x0] ↦ c: t, M0[x0] ↦ ((a: (t) -> (t) -> t) (M1[x0])) (M2[x0]), F[] ↦ \x0: t. M0[x0] }]
+-- [{ F[] ↦ (a: (t) -> (t) -> t) (b: t), X[] ↦ c: t, Y[] ↦ Y[] },{ F[] ↦ \y0: t. ((a: (t) -> (t) -> t) (b: t)) (c: t), X[] ↦ X[], Y[] ↦ Y[] },{ F[] ↦ \y0: t. ((a: (t) -> (t) -> t) (b: t)) (y0), X[] ↦ c: t, Y[] ↦ Y[] },{ F[] ↦ \y0: t. ((a: (t) -> (t) -> t) (y0)) (c: t), X[] ↦ b: t, Y[] ↦ Y[] }]
 --
 -- >>> (_F, _X) = (Metavar "F", Metavar "X")
 -- >>> a = Constant "a" (Function t t)
@@ -625,54 +634,54 @@ step constraint (Solution metas constraints substitutions) =
 -- >>> right = Apply a b
 -- >>> metas = Metavariables [(_F, ([Function t (Function t t), t], t)), (_X, ([], Function t (Function t t)))] (freshMetavariables someMetas)
 -- >>> take 5 $ solutionSubstitutions <$> solve [Problem metas [Constraint [] left right]]
--- [{ M0[x0,x1] ↦ x1, F[x0,x1] ↦ (a: (t) -> t) (M0[x0,x1]) },{ M0[x0,x1] ↦ b: t, F[x0,x1] ↦ (a: (t) -> t) (M0[x0,x1]) },{ M4[x0,x1] ↦ b: t, M3[x0,x1] ↦ (a: (t) -> t) (M4[x0,x1]), M2[x1] ↦ \x0: t. M3[x0,x1], X[] ↦ \x0: t. M2[x0], F[x0,x1] ↦ ((x0) (M0[x0,x1])) (M1[x0,x1]) },{ M2[x0] ↦ a: (t) -> t, M1[x0,x1] ↦ b: t, X[] ↦ \x0: t. M2[x0], F[x0,x1] ↦ ((x0) (M0[x0,x1])) (M1[x0,x1]) },{ M2[x0] ↦ a: (t) -> t, M1[x0,x1] ↦ x1, X[] ↦ \x0: t. M2[x0], F[x0,x1] ↦ ((x0) (M0[x0,x1])) (M1[x0,x1]) }]
+-- [{ F[x0,x1] ↦ (a: (t) -> t) (x1), X[] ↦ X[] },{ F[x0,x1] ↦ (a: (t) -> t) (b: t), X[] ↦ X[] },{ F[x0,x1] ↦ ((x0) (M0[x0,x1])) (M1[x0,x1]), X[] ↦ \y0: t. \y0: t. (a: (t) -> t) (b: t) },{ F[x0,x1] ↦ ((x0) (M0[x0,x1])) (b: t), X[] ↦ \y0: t. a: (t) -> t },{ F[x0,x1] ↦ ((x0) (M0[x0,x1])) (x1), X[] ↦ \y0: t. a: (t) -> t }]
 --
 -- >>> first = Constraint [] (First (Meta _X [])) (Constant "A" t)
 -- >>> second = Constraint [] (Second (Meta _X [])) (Constant "B" t)
 -- >>> metas = Metavariables [(_X, ([], TPair t t))] (freshMetavariables someMetas)
 -- >>> solutionSubstitutions <$> solve [Problem metas [first, second]]
--- [{ M1[] ↦ B: t, M0[] ↦ A: t, X[] ↦ (M0[], M1[]) }]
+-- [{ X[] ↦ (A: t, B: t) }]
 --
 -- >>> first = Constraint [] (First (Meta _X [])) (Second (Meta _X []))
 -- >>> second = Constraint [] (First (Meta _X [])) (Constant "A" t)
 -- >>> solutionSubstitutions <$> solve [Problem metas [first, second]]
--- [{ M1[] ↦ A: t, M0[] ↦ A: t, X[] ↦ (M0[], M1[]) }]
+-- [{ X[] ↦ (A: t, A: t) }]
 --
 -- >>> x = Var "x"
 -- >>> first = Constraint [] (First (Apply (Meta _F []) (Constant "A" t))) (Second (Apply (Meta _F []) (Constant "B" t)))
 -- >>> second = Constraint [(x, t)] (First (Apply (Meta _F []) (Variable x))) (Variable x)
 -- >>> metas = Metavariables [(_F, ([], Function t (TPair t t)))] (freshMetavariables someMetas)
 -- >>> solutionSubstitutions <$> solve [Problem metas [first, second]]
--- [{ M2[x0] ↦ A: t, M1[x0] ↦ x0, M0[x0] ↦ (M1[x0], M2[x0]), F[] ↦ \x0: t. M0[x0] }]
+-- [{ F[] ↦ \y0: t. (y0, A: t) }]
 --
 -- >>> constraint = Constraint [] (Apply (Meta _F []) (Pair (Constant "A" t) (Constant "A" t))) (Constant "A" t)
 -- >>> metas = Metavariables [(_F, ([], Function (TPair t t) t))] (freshMetavariables someMetas)
 -- >>> solutionSubstitutions <$> solve [Problem metas [constraint]]
--- [{ M0[x0] ↦ (x0).1, F[] ↦ \x0: (t, t). M0[x0] },{ M0[x0] ↦ (x0).0, F[] ↦ \x0: (t, t). M0[x0] },{ M0[x0] ↦ A: t, F[] ↦ \x0: (t, t). M0[x0] }]
+-- [{ F[] ↦ \y0: (t, t). (y0).1 },{ F[] ↦ \y0: (t, t). (y0).0 },{ F[] ↦ \y0: (t, t). A: t }]
 --
 -- >>> u = Base "u"
 -- >>> constraint = Constraint [(x, t)] (Meta _F [Meta _X [Variable x]]) (Variable x)
 -- >>> metas = Metavariables [(_F, ([Function u (TPair (Function u (TPair t t)) t)], t)), (_X, ([t], Function u (TPair (Function u (TPair t t)) t)))] (freshMetavariables someMetas)
 -- >>> solutionSubstitutions <$> solve [Problem metas [constraint]]
--- [{ M3[x0,x1] ↦ x1, M1[x0,x1] ↦ (M2[x0,x1], M3[x0,x1]), X[x1] ↦ \x0: u. M1[x0,x1], F[x0] ↦ ((x0) (M0[x0])).1 },{ M6[x0,x1,x2] ↦ x2, M5[x0,x1,x2] ↦ (M6[x0,x1,x2], M7[x0,x1,x2]), M3[x1,x2] ↦ \x0: u. M5[x0,x1,x2], M2[x0,x1] ↦ (M3[x0,x1], M4[x0,x1]), X[x1] ↦ \x0: u. M2[x0,x1], F[x0] ↦ ((((x0) (M0[x0])).0) (M1[x0])).0 },{ M7[x0,x1,x2] ↦ x2, M5[x0,x1,x2] ↦ (M6[x0,x1,x2], M7[x0,x1,x2]), M3[x1,x2] ↦ \x0: u. M5[x0,x1,x2], M2[x0,x1] ↦ (M3[x0,x1], M4[x0,x1]), X[x1] ↦ \x0: u. M2[x0,x1], F[x0] ↦ ((((x0) (M0[x0])).0) (M1[x0])).1 }]
+-- [{ F[x0] ↦ ((x0) (M0[x0])).1, X[x0] ↦ \y0: u. (M2[y0,y0], y0) },{ F[x0] ↦ ((((x0) (M0[x0])).0) (M1[x0])).0, X[x0] ↦ \y0: u. (\y0: u. (y0, M7[y0,y0,y0]), M4[y0,y0]) },{ F[x0] ↦ ((((x0) (M0[x0])).0) (M1[x0])).1, X[x0] ↦ \y0: u. (\y0: u. (M6[y0,y0,y0], y0), M4[y0,y0]) }]
 --
 -- >>> constraint = Constraint [] (First (Meta _X [])) (First (Constant "A" (TPair t t)))
 -- >>> metas = Metavariables [(_X, ([], TPair t t))] (freshMetavariables someMetas)
 -- >>> solutionSubstitutions <$> solve [Problem metas [constraint]]
--- [{ X[] ↦ A: (t, t) },{ M0[] ↦ (A: (t, t)).0, X[] ↦ (M0[], M1[]) }]
+-- [{ X[] ↦ A: (t, t) },{ X[] ↦ ((A: (t, t)).0, M1[]) }]
 --
 -- >>> constraint = Constraint [] (Meta _F [Meta _X []]) (Constant "A" t)
 -- >>> metas = Metavariables [(_F, ([Sum t t], t)), (_X, ([], Sum t t))] (freshMetavariables someMetas)
 -- >>> solutionSubstitutions <$> solve [Problem metas [constraint]]
--- [{ F[x0] ↦ A: t },{ M0[] ↦ A: t, X[] ↦ (M0[]) <+ t, F[x0] ↦ match x0 { s0 <+ => s0; +> s0 => s0 } },{ M0[] ↦ A: t, X[] ↦ t +> (M0[]), F[x0] ↦ match x0 { s0 <+ => s0; +> s0 => s0 } }]
+-- [{ F[x0] ↦ A: t, X[] ↦ X[] },{ F[x0] ↦ match x0 { s0 <+ => s0; +> s0 => s0 }, X[] ↦ (A: t) <+ t },{ F[x0] ↦ match x0 { s0 <+ => s0; +> s0 => s0 }, X[] ↦ t +> (A: t) }]
 --
 -- >>> first = Constraint [(x, t)] (Apply (Meta _F []) (SLeft (Variable x) (TPair t u))) (Variable x)
 -- >>> second = Constraint [(x, t)] (Apply (Meta _F []) (SRight t (Pair (Variable x) (Constant "B" u)))) (Variable x)
 -- >>> metas = Metavariables [(_F, ([], Function (Sum t (TPair t u)) t))] (freshMetavariables someMetas)
 -- >>> solutionSubstitutions <$> solve [Problem metas [first, second]]
--- [{ M0[x0] ↦ match x0 { s0 <+ => s0; +> s0 => (s0).0 }, F[] ↦ \x0: (t) + ((t, u)). M0[x0] }]
+-- [{ F[] ↦ \y0: (t) + ((t, u)). match y0 { s0 <+ => s0; +> s0 => (s0).0 } }]
 solve :: [Problem] -> [Solution]
-solve = go . fmap withoutSubstitutions
+solve = go . fmap withSubstitutions
  where
   go [] = []
   go problems = do
