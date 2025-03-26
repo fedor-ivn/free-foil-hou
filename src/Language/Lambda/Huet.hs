@@ -1,7 +1,19 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
-module Language.Lambda.Huet where
+module Language.Lambda.Huet (
+  Type (..),
+  Var (..),
+  Metavar (..),
+  Ast (..),
+  Constraint (..),
+  Metavariables (..),
+  Substitution (..),
+  Substitutions (..),
+  Problem (..),
+  Solution (..),
+  solve,
+) where
 
 import Control.Applicative ((<|>))
 import Data.List (intercalate)
@@ -226,20 +238,6 @@ instance Show Constraint where
       <> " = "
       <> show right
 
-data FlexRigid = FlexRigid
-  { flexRigidForall :: [(Var, Type)]
-  , flexRigidMetavariable :: Metavar
-  , flexRigidArguments :: [Ast]
-  , flexRigidRhs :: Ast
-  }
-  deriving (Show)
-
-toFlexRigid :: Constraint -> Maybe FlexRigid
-toFlexRigid (Constraint _ Meta{} Meta{}) = Nothing
-toFlexRigid (Constraint forall_ (Meta meta arguments) rhs) = Just (FlexRigid forall_ meta arguments rhs)
-toFlexRigid (Constraint forall_ rhs (Meta meta arguments)) = Just (FlexRigid forall_ meta arguments rhs)
-toFlexRigid _ = Nothing
-
 data Metavariables = Metavariables
   { metavariables :: [(Metavar, ([Type], Type))]
   , freshMetavariables :: Stream Metavar
@@ -419,19 +417,9 @@ decomposeProblems problems = do
   constraints' <- maybeToList (decomposeAll (decomposeRigidRigid metas) (evalConstraint <$> constraints))
   return (Solution metas constraints' substitutions)
 
-data MatchContext = MatchContext
-  { matchMetavariables :: Metavariables
-  , matchParameters :: [(Var, Type)]
-  , matchForall :: [(Var, Type)]
-  , matchRhs :: Ast
-  , matchRhsType :: Type
-  }
-  deriving (Show)
-
 -- >>> (x, y, _M) = (Var "x", Var "y", Metavar "M")
 -- >>> (t, u, v) = (Base "t", Base "u", Base "v")
 -- >>> metas = Metavariables [(Metavar "M", ([u], t))] (freshMetavariables someMetas)
--- >>> context = MatchContext someMetas [(y, v)]
 -- >>> snd <$> imitate metas (Constraint [(x, t)] (Meta _M [Variable x]) (Constant "B" t))
 -- Just M[x0] ↦ B: t
 -- >>> snd <$> imitate metas (Constraint [(x, t)] (Constant "B" t) (Meta _M [Variable x]))
