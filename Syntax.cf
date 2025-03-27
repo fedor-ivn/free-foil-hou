@@ -3,7 +3,7 @@ comment "--" ;
 layout toplevel ;
 
 token VarIdent (lower (letter | digit | '_' | '\'')*) ;
-token MetaVarIdent (upper (letter | digit | '_' | '\'')*) ;
+token MetavarIdent (upper (letter | digit | '_' | '\'')*) ;
 
 -- A Program is a list of Commands
 AProgram. Program ::= [Command] ;
@@ -14,10 +14,10 @@ terminator Command ";" ;
 
 -- Terms in the lambda calculus
 Lam.     Term  ::= "λ" Pattern ":" Type "." ScopedTerm ;
-Let.     Term  ::= "let" Pattern "=" Term "in" ScopedTerm ;
+-- Let.     Term  ::= "let" Pattern "=" Term "in" ScopedTerm ;
 App.     Term1 ::= Term1 Term2 ; -- x y z  =  (x y) z  ≠  x (y z)
 Var.     Term2 ::= VarIdent ;
-MetaVar. Term2 ::= MetaVarIdent "[" [Term] "]";
+Metavar. Term2 ::= MetavarIdent "[" [Term] "]" ;
 _.       Term  ::= Term1 ;
 _.       Term1 ::= Term2 ;
 _.       Term2 ::= "(" Term ")" ;
@@ -27,11 +27,13 @@ separator Term "," ;
 AScopedTerm. ScopedTerm ::= Term ;
 APattern. Pattern ::= VarIdent ;
 
-ABinder. Binder ::= VarIdent ":" Type ;
-separator Binder "," ;
+AVarBinder. VarBinder ::= VarIdent ":" Type ;
+separator VarBinder "," ;
 
-AMetaSubst. MetaSubst ::= MetaVarIdent "[" [Binder] "]" "↦" ScopedTerm ;
-AUnificationConstraint. UnificationConstraint ::= "∀" [Binder] "." ScopedTerm "=" ScopedTerm ;
+AMetavarBinder. MetavarBinder ::= MetavarIdent ":" "[" [Type] "]" Type ;
+
+AMetaSubst. MetaSubst ::= MetavarIdent "[" [VarIdent] "]" "↦" ScopedTerm ;
+AUnificationConstraint. UnificationConstraint ::= "∀" [VarBinder] "." ScopedTerm "=" ScopedTerm ;
 
 separator VarIdent "," ;
 
@@ -39,3 +41,4 @@ separator VarIdent "," ;
 Fun.    Type ::= Type1 "->" Type ;
 Base.   Type1 ::= VarIdent ;
 coercions Type 1;
+separator Type "," ;

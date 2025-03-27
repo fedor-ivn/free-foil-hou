@@ -33,6 +33,7 @@ dependencies:
   kind-generics-th:
   text:
   tomland:
+  doctest:
 
 build-tools:
   alex: ">= 3.2.4"
@@ -72,7 +73,7 @@ executables:
 tests:
   spec:
     main: Spec.hs
-    source-dirs: test
+    source-dirs: test/hspec
     ghc-options:
       - -threaded
       - -rtsopts
@@ -82,3 +83,12 @@ tests:
       - hspec
       - hspec-discover
       - QuickCheck
+
+  doctests:
+    main: Doctests.hs
+    source-dirs: test/doctests
+    ghc-options:
+      - -Wall
+    dependencies:
+      - free-foil-hou
+      - doctest
