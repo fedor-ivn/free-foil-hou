@@ -150,9 +150,6 @@ instance TypedSignature TermSig Raw.MetavarIdent Raw.Type where
            in return (LamSig binderType body')
     _ -> Nothing
 
--- debugSig :: forall binder ext n. AST binder (AnnSig Raw.Type (Sum TermSig ext)) n -> String
--- debugSig term = let term' = unsafeCoerce term :: MetaTerm Raw.MetavarIdent n Raw.Type in show term'
-
 instance TypedBinder FoilPattern Raw.Type where
   addBinderTypes (FoilAPattern nameBinder) = Foil.addNameBinder nameBinder
   mapBinderWithTypes f typ (FoilAPattern nameBinder) = [f nameBinder typ]
@@ -862,10 +859,16 @@ parseConfigAndValidate = do
 -- >>> lhsSubsts = MetaSubsts [lhsSubst]
 -- >>> rhsSubsts = MetaSubsts []
 -- >>> moreGeneralThan metavarBinders lhsSubsts rhsSubsts
--- True
+-- False
+-- >>> rawMetavarBinders = ["F: [t -> t, t] t", "X: [t -> t] t", "Y: [] t", "H: [t -> t, t] t"]
+-- >>> Right metavarBinders = parseMetavarBinders rawMetavarBinders
+-- >>> Right lhsSubst = parseMetaSubst metavarBinders "M[x] ↦ λy:t.λz:t.x"
+-- >>> lhsSubsts = MetaSubsts [lhsSubst]
+-- >>> rhsSubsts = MetaSubsts []
+-- >>> moreGeneralThan metavarBinders lhsSubsts rhsSubsts
+-- <interactive>:1:2-68: Non-exhaustive patterns in Right lhsSubst
 moreGeneralThan :: MetavarBinders -> MetaSubsts' -> MetaSubsts' -> Bool
 moreGeneralThan metavarBinders lhs rhs =
-  -- LHS is more general if all metavariables passed the check
   flip
     all
     lhsSubsts
@@ -930,8 +933,7 @@ matchMetaAbs
              in match scope metavarBinders lhsBinderTypes (lhsTerm, type_) (rhsTerm', type_)
       Foil.RenameBothBinders commonBinders rename1 rename2 -> undefined
       Foil.NotUnifiable ->
-        -- Binders cannot be unified
-        trace "here" []
+        trace "Binders cannot be unified" []
 
 main :: IO ()
 -- main = parseConfigAndValidate

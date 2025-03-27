@@ -181,21 +181,21 @@ newtype MetaSubsts binder sig metavar t = MetaSubsts
 
 -- | Apply metavariable substitutions to a SOAS term.
 applyMetaSubsts
-  :: forall sig metavar n binder t
+  :: forall sig metavar metavar' n binder t
    . ( Bifunctor sig
      , Eq metavar
      , Foil.Distinct n
      , Foil.CoSinkable binder
      , Foil.SinkableK binder
+     , metavar ~ metavar'
      )
-  =>
-  Foil.Scope n
+  => Foil.Scope n
   -- ^ Scope of terms.
-  -> MetaSubsts binder (AnnSig t (Sum sig (MetaAppSig metavar))) metavar t
+  -> MetaSubsts binder (AnnSig t (Sum sig (MetaAppSig metavar'))) metavar t
   -- ^ Metavariable substitutions.
   -> TypedSOAS binder metavar sig n t
   -- ^ The original SOAS term.
-  -> TypedSOAS binder metavar sig n t
+  -> TypedSOAS binder metavar' sig n t
 applyMetaSubsts scope substs = \case
   Var x -> Var x
   MetaApp metavar args ann ->
@@ -204,7 +204,7 @@ applyMetaSubsts scope substs = \case
         let nameMap = toNameMap Foil.emptyNameMap names args'
             substs' = Foil.nameMapToSubstitution nameMap
             body' = substitute scope substs' body
-         in applyMetaSubsts scope substs body'
+         in body'
       Nothing -> MetaApp metavar args' ann
    where
     args' = map go args
@@ -311,7 +311,7 @@ match scope metavarTypes varTypes (lhs, lhsReturnType) (rhs, rhsReturnType) =
   trace "matching non-scoped lhs and rhs" $
     case (lhs, rhs) of
       (Var x, Var y) | x == y -> trace "matched same vars" return (MetaSubsts [])
-      (Node (AnnSig (R2 (MetaAppSig metavar args)) metavarType), _) ->
+      (Node (AnnSig (R2 (MetaAppSig metavar args)) _metavarType), _) ->
         case trace "looking up metavar" Map.lookup metavar metavarTypes of
           Just (argTypes, leftType) | leftType == rhsReturnType ->
             withFreshNameBinderList
@@ -520,7 +520,7 @@ matchMetavar
      ]
 matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWithTypes (rhs, expectedType) =
   let projections = project metavarNameBinders argsWithTypes
-      imitations = trace ("imitate on: ") $ case rhs of
+      imitations = trace "imitate on: " $ case rhs of
         Var _ -> []
         Node sig -> do
           let maybeSig = mapSigWithTypes varTypes metavarTypes (,) (,) sig expectedType
@@ -531,7 +531,7 @@ matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWit
               (matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWithTypes)
               sigWithTypes
           let term = Node (bimap fst fst traversedSig)
-          substs <- combineMetaSubsts (biList (bimap snd snd (trace ("end imitate on: ") traversedSig)))
+          substs <- combineMetaSubsts (biList (bimap snd snd (trace "end imitate on: " traversedSig)))
           return (term, substs)
    in trace (show $ map length [projections, imitations]) $
         projections ++ imitations

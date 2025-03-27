@@ -11,6 +11,7 @@ import System.Exit (exitFailure)
 import Test.Hspec
 import qualified Toml
 
+import Data.SOAS (MetaSubsts (..))
 import Language.Lambda.Impl as Impl
 
 handleErr :: (Show e) => Either e a -> IO a
@@ -30,4 +31,51 @@ spec = do
           it (Text.unpack solutionName) $ do
             Impl.validateSolution problemConstraints solution `shouldSatisfy` isRight
 
+  describe "moreGeneralThan (substitution comparison)" $ do
+    -- Helper function to set up the test case
+    let parseSubsts metavarBinders strs = do
+          substs <- traverse (parseMetaSubst metavarBinders) strs
+          return (MetaSubsts substs)
+        testMoreGeneralThan rawMetavarBinder rawLhsSubst rawRhsSubst expectedResult = do
+          Right metavarBinders <- pure $ parseMetavarBinders rawMetavarBinder
+          Right lhsSubsts <- pure $ parseSubsts metavarBinders rawLhsSubst
+          Right rhsSubsts <- pure $ parseSubsts metavarBinders rawRhsSubst
+          let result = moreGeneralThan metavarBinders lhsSubsts rhsSubsts
+          result `shouldBe` expectedResult
 
+    context "when comparing simple substitutions" $ do
+      it "should recognize that M[x] ↦ λy:t.N[x] is more general than M[x] ↦ λy:t.λz:t.x" $ do
+        testMoreGeneralThan
+          ["M : [t] t -> t -> t", "N : [t] t -> t"]
+          ["M[x] ↦ λy:t.N[x]"]
+          ["M[x] ↦ λy:t.λz:t.x"]
+          True
+
+      it "should recognize that M[x] ↦ λy:t.λz:t.x is not more general than M[x] ↦ λy:t.N[x]" $ do
+        testMoreGeneralThan
+          ["M : [t] t -> t -> t", "N : [t] t -> t"]
+          ["M[x] ↦ λy:t.λz:t.x"]
+          ["M[x] ↦ λy:t.N[x]"]
+          False
+
+    context "with identity and empty substitutions" $ do
+      it "any substitution should be more general than itself" $ do
+        testMoreGeneralThan
+          ["M : [t] t"]
+          ["M[x] ↦ x"]
+          ["M[x] ↦ x"]
+          True
+
+      it "a non-empty substitution should not be more general than an empty one" $ do
+        Right metavarBinders <- pure $ parseMetavarBinders ["M : [] t -> t"]
+        Right lhsSubsts <- pure $ parseSubsts metavarBinders ["M[] ↦ λy:t.y"]
+        let rhsSubsts = MetaSubsts []
+        moreGeneralThan metavarBinders lhsSubsts rhsSubsts `shouldBe` False
+
+    context "with multiple metavariables" $ do
+      it "should correctly compare substitutions with multiple metavariables" $ do
+        testMoreGeneralThan
+          ["M : [t] t", "F : [t -> t, t] t"]
+          ["M[x] ↦ x", "F[f, y] ↦ f y"]
+          ["M[x] ↦ x"]
+          False
