@@ -84,7 +84,6 @@ module Language.Lambda.Impl (
 
   -- * Re-exports
   alphaEquiv,
-  match,
 ) where
 
 import Control.Monad (guard)
@@ -101,7 +100,20 @@ import Data.Bitraversable (Bitraversable)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (isJust, listToMaybe)
-import Data.SOAS
+import Data.SOAS (
+  AnnSig (..),
+  MetaAbs (..),
+  MetaAppSig (..),
+  MetaSubst (..),
+  MetaSubsts (..),
+  TypedBinder (..),
+  TypedSOAS,
+  TypedSignature (..),
+  match,
+  push,
+  toNameMap,
+  pattern MetaApp,
+ )
 import Data.String (IsString (..))
 import Data.ZipMatchK
 import Data.ZipMatchK.Bifunctor ()
@@ -163,12 +175,6 @@ instance ZipMatchK Raw.MetavarIdent where zipMatchWithK = zipMatchViaEq
 
 instance ZipMatchK Raw.Type where zipMatchWithK = zipMatchViaEq
 
--- instance TypedSignature TermSig where
---   mapSigWithTypes f g sig t = case sig of
---     AppSig h x -> AppSig (fmap f f) (fmap f x)
---     Lam typ binder body | Raw.Fun _ b <- t -> Lam typ binder (f body (typ, b))
---     MetavarSig metavar args -> MetavarSig metavar (fmap (mapSigWithTypes f g) args)
-
 instance TypedSignature TermSig Raw.MetavarIdent Raw.Type where
   mapSigWithTypes varTypes _ f g sig t = case sig of
     AppSig fun arg -> do
@@ -187,7 +193,6 @@ instance TypedSignature TermSig Raw.MetavarIdent Raw.Type where
 
 instance TypedBinder FoilPattern Raw.Type where
   addBinderTypes (FoilAPattern nameBinder) = Foil.addNameBinder nameBinder
-  mapBinderWithTypes f typ (FoilAPattern nameBinder) = [f nameBinder typ]
 
 -- ** Pattern synonyms
 
@@ -306,7 +311,7 @@ toMetaSubst metavarBinders (Raw.AMetaSubst metavar argIdents term) =
             binderTypes
             (toTerm scope env (getTermFromScopedTerm term))
         guard (termType == metavarType)
-        let metaAbs = MetaAbs binderList binderTypes term'
+        let metaAbs = MetaAbs binderList term'
         pure (MetaSubst (metavar, metaAbs))
  where
   with =
@@ -364,7 +369,7 @@ type MetaSubsts' =
     Raw.Type
 
 fromMetaSubst :: MetaSubst' -> Raw.MetaSubst
-fromMetaSubst (MetaSubst (metavar, MetaAbs binderList _binderTypes term)) =
+fromMetaSubst (MetaSubst (metavar, MetaAbs binderList term)) =
   let term' = Raw.AScopedTerm $ fromTerm $ fromMetaTerm term
       idents = toIdents binderList
    in Raw.AMetaSubst metavar idents term'
@@ -402,8 +407,9 @@ data UnificationConstraint where
     -> (MetaTerm Raw.MetavarIdent n Raw.Type, Raw.Type)
     -> UnificationConstraint
 
-type MetavarBinder = (Raw.MetavarIdent, ([Raw.Type], Raw.Type))
-type MetavarBinders = Map Raw.MetavarIdent ([Raw.Type], Raw.Type)
+type MetavarType = ([Raw.Type], Raw.Type)
+type MetavarBinder = (Raw.MetavarIdent, MetavarType)
+type MetavarBinders = Map Raw.MetavarIdent MetavarType
 
 -- ** Conversion helpers for 'MetaTerm'
 
@@ -436,8 +442,7 @@ annotate metavarTypes varTypes (App function argument) = do
            in Just (term, returnType)
     _ -> Nothing
 annotate metavarTypes varTypes (Lam typ binder body) = do
-  let (FoilAPattern name) = binder
-      varTypes' = Foil.addNameBinder name typ varTypes
+  let varTypes' = addBinderTypes binder typ varTypes
   (body', returnType) <- annotate metavarTypes varTypes' body
   let lamType = Raw.Fun typ returnType
       annSig = AnnSig (L2 (LamSig typ (ScopedAST binder body'))) lamType
@@ -629,7 +634,8 @@ moreGeneralThan metavarBinders lhs rhs =
     $ \(metavar, lhsAbs) ->
       let maybeSubsts = do
             rhsAbs <- lookup metavar rhsSubsts
-            let substs = matchMetaAbs metavarBinders lhsAbs rhsAbs
+            (argTypes, _) <- Map.lookup metavar metavarBinders
+            let substs = matchMetaAbs argTypes metavarBinders lhsAbs rhsAbs
             listToMaybe substs
        in isJust maybeSubsts
  where
@@ -656,32 +662,37 @@ matchMetaAbs
      , TypedSignature sig Raw.MetavarIdent Raw.Type
      , TypedSignature ext Raw.MetavarIdent Raw.Type
      )
-  => MetavarBinders
+  => [Raw.Type]
+  -> MetavarBinders
   -> MetaAbs binder (AnnSig Raw.Type (Sum sig (MetaAppSig Raw.MetavarIdent))) Raw.Type
   -> MetaAbs binder (AnnSig Raw.Type (Sum sig ext)) Raw.Type
   -> [MetaSubsts binder (AnnSig Raw.Type (Sum sig ext)) Raw.MetavarIdent Raw.Type]
 matchMetaAbs
+  metavarArgTypes
   metavarBinders
-  (MetaAbs lhsBinderList lhsBinderTypes lhsTerm)
-  (MetaAbs rhsBinderList rhsBinderTypes rhsTerm) =
+  (MetaAbs lhsBinderList lhsTerm)
+  (MetaAbs rhsBinderList rhsTerm) =
     case Foil.unifyPatterns lhsBinderList rhsBinderList of
       Foil.SameNameBinders _ ->
         case Foil.assertDistinct lhsBinderList of
           Foil.Distinct ->
             let scope = Foil.extendScopePattern lhsBinderList Foil.emptyScope
-             in trace "dbg" $ match scope metavarBinders lhsBinderTypes lhsTerm rhsTerm
+                argTypes = toNameMap Foil.emptyNameMap lhsBinderList metavarArgTypes
+             in trace "dbg" $ match scope metavarBinders argTypes lhsTerm rhsTerm
       Foil.RenameLeftNameBinder _ rename ->
         case Foil.assertDistinct rhsBinderList of
           Foil.Distinct ->
             let scope = Foil.extendScopePattern rhsBinderList Foil.emptyScope
+                argTypes = toNameMap Foil.emptyNameMap rhsBinderList metavarArgTypes
                 lhsTerm' = Foil.liftRM scope (Foil.fromNameBinderRenaming rename) lhsTerm
-             in match scope metavarBinders rhsBinderTypes lhsTerm' rhsTerm
+             in match scope metavarBinders argTypes lhsTerm' rhsTerm
       Foil.RenameRightNameBinder _ rename ->
         case Foil.assertDistinct lhsBinderList of
           Foil.Distinct ->
             let scope = Foil.extendScopePattern lhsBinderList Foil.emptyScope
+                argTypes = toNameMap Foil.emptyNameMap lhsBinderList metavarArgTypes
                 rhsTerm' = Foil.liftRM scope (Foil.fromNameBinderRenaming rename) rhsTerm
-             in match scope metavarBinders lhsBinderTypes lhsTerm rhsTerm'
+             in match scope metavarBinders argTypes lhsTerm rhsTerm'
       Foil.RenameBothBinders _commonBinders _rename1 _rename2 -> undefined
       Foil.NotUnifiable ->
         trace "Binders cannot be unified" []

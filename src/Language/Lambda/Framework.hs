@@ -37,7 +37,7 @@ module Language.Lambda.Framework (
 
   -- * Main entry point
   main,
-  IsCanonicalTerm (..),
+  IsCanonicalConstraint (..),
 ) where
 
 import Control.Monad (forM_)
@@ -64,7 +64,6 @@ import Language.Lambda.Config (
 import Language.Lambda.Impl (
   MetaSubst',
   MetaSubsts',
-  MetaTerm,
   MetavarBinder,
   MetavarBinders,
   matchMetaAbs,
@@ -77,11 +76,13 @@ import qualified Language.Lambda.Syntax.Par as Raw
 
 -- ** Test framework implementation
 
-type CanonicalTerm n = MetaTerm Raw.MetavarIdent n Raw.Type
+class IsCanonicalConstraint a where
+  toCanonicalConstraint :: a -> Maybe UnificationConstraint
+  fromCanonicalConstraint :: UnificationConstraint -> Maybe a
 
-class IsCanonicalTerm a where
-  toTerm :: a -> CanonicalTerm n
-  fromTerm :: CanonicalTerm n -> a
+class IsCanonicalSubstitution a where
+  toCanonicalSubstitution :: a -> Maybe MetaSubst'
+  fromCanonicalSubstitution :: MetaSubst' -> Maybe a
 
 -- ** Parsing functions
 parseMetavarBinder :: String -> Either String MetavarBinder
@@ -357,23 +358,26 @@ main :: IO ()
 main = mainMatchDebug
 
 mainMatchDebug :: IO ()
-mainMatchDebug = do
-  let rawMetavarBinders = ["M : [t] t -> t", "H1 : [t] t -> t", "H2 : [t] t -> t"]
-  let subst = ["F[a, x] ↦ a H[a, x]"]
-      Right metavarBinders = parseMetavarBinders rawMetavarBinders
-      Right lhs = parseMetaSubst metavarBinders "M[x] ↦ H1[x]"
-      Right rhs = parseMetaSubst metavarBinders "M[x] ↦ H2[x]"
-      (_, lhsAbs) = getMetaSubst lhs
-      (_, rhsAbs) = getMetaSubst rhs
-  print $ matchMetaAbs metavarBinders lhsAbs rhsAbs
+mainMatchDebug = either print print result
+ where
+  result = do
+    let rawMetavarBinders = ["M : [t] t -> t", "H1 : [t] t -> t", "H2 : [t] t -> t"]
+    metavarBinders <- parseMetavarBinders rawMetavarBinders
+    let res = Map.lookup "M" metavarBinders
+    (argTypes, _) <- maybe (Left "not found") Right res
+    lhs <- parseMetaSubst metavarBinders "M[x] ↦ H1[x]"
+    rhs <- parseMetaSubst metavarBinders "M[x] ↦ H2[x]"
+    let (_, lhsAbs) = getMetaSubst lhs
+        (_, rhsAbs) = getMetaSubst rhs
+    pure $ matchMetaAbs argTypes metavarBinders lhsAbs rhsAbs
 
-mainDebug :: IO ()
-mainDebug = do
-  let rawMetavarBinder = "N : [t -> t] t -> t"
-  let metavarBinders = ["X : [t, t] t"]
-      constraint = "∀ m: t, n: t. X[m, n] = n"
-      substs = ["X [x, y] ↦ y"]
-  print $ matchUnificationConstraint metavarBinders constraint
+-- mainDebug :: IO ()
+-- mainDebug = do
+--   let rawMetavarBinder = "N : [t -> t] t -> t"
+--   let metavarBinders = ["X : [t, t] t"]
+--       constraint = "∀ m: t, n: t. X[m, n] = n"
+--       substs = ["X [x, y] ↦ y"]
+--   print $ matchUnificationConstraint metavarBinders constraint
 
 -- print $ isSolvedUnificationConstraint [rawMetavarBinder] rawConstraint [rawSubst]
 

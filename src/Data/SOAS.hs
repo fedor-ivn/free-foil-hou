@@ -16,7 +16,25 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Data.SOAS where
+module Data.SOAS (
+  AnnSig (..),
+  TypedSignature (..),
+  TypedBinder (..),
+  MetaAppSig (..),
+  TypedSOAS,
+  TypedScopedSOAS,
+  SOAS,
+  ScopedSOAS,
+  MetaSubst (..),
+  MetaSubsts (..),
+  pattern MetaApp,
+  MetaAbs (..),
+  match,
+  push,
+  toNameMap,
+  applyMetaSubsts,
+)
+where
 
 import Control.Monad (guard)
 import qualified Control.Monad.Foil as Foil
@@ -74,22 +92,12 @@ class TypedSignature sig metavar t where
     -> Maybe (sig scopedTerm term)
     -- ^ результат
 
--- debugSig
---   :: AST binder (AnnSig t sig) n
---   -> String
-
 class TypedBinder binder t where
   addBinderTypes
     :: binder n l
     -> t
     -> Foil.NameMap n t
     -> Foil.NameMap l t
-
-  mapBinderWithTypes
-    :: (Foil.NameBinder n l -> t -> a)
-    -> t
-    -> binder n l
-    -> [a]
 
 instance (Ord metavar, Eq typ) => TypedSignature (MetaAppSig metavar) metavar typ where
   mapSigWithTypes _ metavarTypes _ g (MetaAppSig metavar args) expectedType = do
@@ -162,8 +170,6 @@ data MetaAbs binder sig t where
   MetaAbs
     :: Foil.NameBinderList Foil.VoidS n
     -- ^ A list of binders corresponding to metavariable arguments.
-    -> Foil.NameMap n t
-    -- ^ Types of parameters.
     -> AST binder sig n
     -- ^ Term to substitute the metavariable with.
     -> MetaAbs binder sig t
@@ -200,7 +206,7 @@ applyMetaSubsts scope substs = \case
   Var x -> Var x
   MetaApp metavar args ann ->
     case lookup metavar (getMetaSubst <$> getMetaSubsts substs) of
-      Just (MetaAbs names _types body) ->
+      Just (MetaAbs names body) ->
         let nameMap = toNameMap Foil.emptyNameMap names args'
             substs' = Foil.nameMapToSubstitution nameMap
             body' = substitute scope substs' body
@@ -219,15 +225,15 @@ applyMetaSubsts scope substs = \case
           Foil.Distinct ->
             ScopedAST binder (applyMetaSubsts scope' substs body)
 
-  toNameMap
-    :: Foil.NameMap m a
-    -> Foil.NameBinderList m l
-    -> [a]
-    -> Foil.NameMap l a
-  toNameMap nameMap Foil.NameBinderListEmpty [] = nameMap
-  toNameMap nameMap (Foil.NameBinderListCons binder rest) (x : xs) =
-    toNameMap (Foil.addNameBinder binder x nameMap) rest xs
-  toNameMap _ _ _ = error "mismatched name list and argument list"
+toNameMap
+  :: Foil.NameMap m a
+  -> Foil.NameBinderList m l
+  -> [a]
+  -> Foil.NameMap l a
+toNameMap nameMap Foil.NameBinderListEmpty [] = nameMap
+toNameMap nameMap (Foil.NameBinderListCons binder rest) (x : xs) =
+  toNameMap (Foil.addNameBinder binder x nameMap) rest xs
+toNameMap _ _ _ = error "mismatched name list and argument list"
 
 -- | Combine (compose) metavariable substitutions.
 --
@@ -251,8 +257,8 @@ combineMetaSubsts (subst : substs) = foldr (mapMaybe . combine) [subst] substs
     | otherwise = trace "no conflicts" return (MetaSubsts (xs ++ ys))
    where
     conflicts = or $ do
-      MetaSubst (m, MetaAbs binders _types body) <- xs
-      MetaSubst (m', MetaAbs binders' _types' body') <- ys
+      MetaSubst (m, MetaAbs binders body) <- xs
+      MetaSubst (m', MetaAbs binders' body') <- ys
       guard (m == m')
       pure $
         case Foil.unifyPatterns binders binders' of
@@ -318,14 +324,13 @@ match scope metavarTypes varTypes lhs rhs =
             withFreshNameBinderList
               argTypes
               Foil.emptyScope
-              Foil.emptyNameMap
               Foil.NameBinderListEmpty
-              $ \scope' metavarTypes' binderList ->
+              $ \scope' binderList ->
                 trace
                   "matching metavar"
                   map
                   ( \(term, MetaSubsts substs) ->
-                      let metaAbs = MetaAbs binderList metavarTypes' term
+                      let metaAbs = MetaAbs binderList term
                           subst = MetaSubst (metavar, metaAbs)
                        in MetaSubsts (subst : substs)
                   )
@@ -624,25 +629,22 @@ matchMetavarScoped
 -- This is useful to generate proper name binders of metavariable parameters.
 withFreshNameBinderList
   :: (Foil.Distinct n)
-  => [t]
+  => [a]
   -> Foil.Scope n
-  -> Foil.NameMap n t
   -> Foil.NameBinderList i n
   -> ( forall l
         . (Foil.Distinct l)
        => Foil.Scope l
-       -> Foil.NameMap l t
        -> Foil.NameBinderList i l
        -> r
      )
   -> r
-withFreshNameBinderList [] scope typesNameMap binders cont = cont scope typesNameMap binders
-withFreshNameBinderList (typ : types) scope typesNameMap binders cont =
+withFreshNameBinderList [] scope binders cont = cont scope binders
+withFreshNameBinderList (_ : types) scope binders cont =
   Foil.withFresh scope $ \binder ->
     let scope' = Foil.extendScope binder scope
         binders' = push binder binders
-        typesNameMap' = Foil.addNameBinder binder typ typesNameMap
-     in withFreshNameBinderList types scope' typesNameMap' binders' cont
+     in withFreshNameBinderList types scope' binders' cont
 
 -- | /O(n)/. Push a name binder into the end of a name binder list.
 --
