@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 
 -- | Framework for testing and validating pattern matching and unification.
@@ -51,6 +52,7 @@ import GHC.Generics (Generic)
 import Toml (TomlCodec, (.=))
 import qualified Toml
 
+import qualified Control.Monad.Foil.Internal as Foil
 import Control.Monad.Free.Foil (alphaEquiv)
 import Language.Lambda.Config (
   Config (..),
@@ -122,11 +124,12 @@ matchUnificationConstraint
   rawMetavarBinders
   rawUnificationConstraint = do
     metavarBindersMap <- parseMetavarBinders rawMetavarBinders
-    (UnificationConstraint scope _ binderTypes lhs rhs) <-
+    (UnificationConstraint binders binderTypes lhs rhs) <-
       parseUnificationConstraint
         metavarBindersMap
         rawUnificationConstraint
-    let substs = match scope metavarBindersMap binderTypes lhs rhs
+    let scope = nameBinderListToScope binders
+        substs = match scope metavarBindersMap binderTypes lhs rhs
     pure substs
 
 -- | Apply substitutions to both sides of a unification constraint
@@ -136,14 +139,34 @@ solveUnificationConstraint
   -> UnificationConstraint
 solveUnificationConstraint
   substs
-  (UnificationConstraint scope binders binderTypes lhs rhs) =
-    let solve = nfMetaTerm scope . applyMetaSubsts scope substs
+  (UnificationConstraint binders binderTypes lhs rhs) =
+    let scope = nameBinderListToScope binders
+        solve = nfMetaTerm scope . applyMetaSubsts scope substs
      in UnificationConstraint
-          scope
           binders
           binderTypes
           (solve lhs)
           (solve rhs)
+
+nameBinderListToScope
+  :: (Foil.Distinct n)
+  => Foil.NameBinderList Foil.VoidS n
+  -> Foil.Scope n
+nameBinderListToScope = extendScopeWithNameBinderList Foil.emptyScope
+
+extendScopeWithNameBinderList
+  :: ( Foil.Distinct n
+     , Foil.Distinct l
+     )
+  => Foil.Scope n
+  -> Foil.NameBinderList n l
+  -> Foil.Scope l
+extendScopeWithNameBinderList scope Foil.NameBinderListEmpty = scope
+extendScopeWithNameBinderList scope (Foil.NameBinderListCons x xs) =
+  case Foil.assertDistinct x of
+    Foil.Distinct -> do
+      let scope' = Foil.extendScope x scope
+       in extendScopeWithNameBinderList scope' xs
 
 -- | Check if a unification constraint is solved by specific substitutions
 isSolvedUnificationConstraint
@@ -154,11 +177,13 @@ isSolvedUnificationConstraint
 isSolvedUnificationConstraint rawMetavarBinders rawUnificationConstraint rawMetaSubsts = do
   metavarBinders <- traverse parseMetavarBinder rawMetavarBinders
   let metavarBindersMap = Map.fromList metavarBinders
-  (UnificationConstraint scope _ _ lhs rhs) <-
+  (UnificationConstraint binders _ lhs rhs) <-
     trace "parsed unification constraint" $
       parseUnificationConstraint metavarBindersMap rawUnificationConstraint
   metaSubsts <- traverse (parseMetaSubst metavarBindersMap) rawMetaSubsts
-  let solve = nfMetaTerm scope . applyMetaSubsts scope (MetaSubsts metaSubsts)
+  let
+    scope = nameBinderListToScope binders
+    solve = nfMetaTerm scope . applyMetaSubsts scope (MetaSubsts metaSubsts)
   pure $
     alphaEquiv
       scope
@@ -167,8 +192,9 @@ isSolvedUnificationConstraint rawMetavarBinders rawUnificationConstraint rawMeta
 
 -- | Check if a constraint is solved (left-hand side equals right-hand side)
 isSolved :: UnificationConstraint -> Bool
-isSolved (UnificationConstraint scope _binders _binderTypes lhs rhs) =
-  alphaEquiv scope lhs rhs
+isSolved (UnificationConstraint binders _binderTypes lhs rhs) =
+  let scope = nameBinderListToScope binders
+   in alphaEquiv scope lhs rhs
 
 -- Data types
 data RawConfig = RawConfig

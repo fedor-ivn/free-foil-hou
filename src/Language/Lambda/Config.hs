@@ -14,7 +14,7 @@ module Language.Lambda.Config (
 )
 where
 
-import Control.Monad.Foil (Distinct, NameBinderList, Scope)
+import Control.Monad.Foil (Distinct, NameBinderList)
 import qualified Control.Monad.Foil as Foil
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -58,8 +58,7 @@ data Solution = Solution
 data UnificationConstraint where
   UnificationConstraint
     :: (Distinct n)
-    => Scope n
-    -> NameBinderList Foil.VoidS n
+    => NameBinderList Foil.VoidS n
     -> Foil.NameMap n Raw.Type
     -> MetaTerm Raw.MetavarIdent n Raw.Type
     -> MetaTerm Raw.MetavarIdent n Raw.Type
@@ -70,7 +69,7 @@ instance Show UnificationConstraint where
   show = Raw.printTree . fromUnificationConstraint
 
 fromUnificationConstraint :: UnificationConstraint -> Raw.UnificationConstraint
-fromUnificationConstraint (UnificationConstraint _ binders binderTypes lhs rhs) =
+fromUnificationConstraint (UnificationConstraint binders binderTypes lhs rhs) =
   let fromMetaTerm' = Raw.AScopedTerm . fromTerm . fromMetaTerm
    in Raw.AUnificationConstraint
         (toBinders binders binderTypes)
@@ -98,6 +97,6 @@ toUnificationConstraint metavarBinders (Raw.AUnificationConstraint vars lhs rhs)
        in do
             (lhs', _) <- annotate' lhs
             (rhs', _) <- annotate' rhs
-            pure (UnificationConstraint scope binderList binderTypes lhs' rhs')
+            pure (UnificationConstraint binderList binderTypes lhs' rhs')
  where
   binders = map (\(Raw.AVarBinder ident typ) -> (ident, typ)) vars
