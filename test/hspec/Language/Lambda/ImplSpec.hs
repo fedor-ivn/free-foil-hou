@@ -12,35 +12,37 @@ import Test.Hspec
 import qualified Toml
 
 import Data.SOAS (MetaSubsts (..))
-import Language.Lambda.Impl as Impl
+import Language.Lambda.Config (Config (..), Problem (..), Solution (..))
+import qualified Language.Lambda.Framework as Framework
+import qualified Language.Lambda.Impl as Impl
 
 handleErr :: (Show e) => Either e a -> IO a
 handleErr = either (\err -> print err >> exitFailure) pure
 
 spec :: Spec
 spec = do
-  Impl.Config{..} <- runIO $ do
-    configResult <- Toml.decodeFileEither configCodec "config.toml" >>= handleErr
-    handleErr (Impl.parseRawConfig configResult)
+  Config{..} <- runIO $ do
+    configResult <- Toml.decodeFileEither Framework.configCodec "config.toml" >>= handleErr
+    handleErr (Framework.parseRawConfig configResult)
 
   let title = Text.unpack (configLanguage <> " (fragment: " <> configFragment <> ")")
   describe title $
-    forM_ (zip [1 ..] configProblems) $ \(i, Impl.Problem{..}) -> do
+    forM_ (zip [1 ..] configProblems) $ \(i, Problem{..}) -> do
       describe ("problem #" <> show i) $ do
-        forM_ problemSolutions $ \solution@Impl.Solution{..} -> do
+        forM_ problemSolutions $ \solution@Solution{..} -> do
           it (Text.unpack solutionName) $ do
-            Impl.validateSolution problemConstraints solution `shouldSatisfy` isRight
+            Framework.validateSolution problemConstraints solution `shouldSatisfy` isRight
 
   describe "moreGeneralThan (substitution comparison)" $ do
     -- Helper function to set up the test case
     let parseSubsts metavarBinders strs = do
-          substs <- traverse (parseMetaSubst metavarBinders) strs
+          substs <- traverse (Impl.parseMetaSubst metavarBinders) strs
           return (MetaSubsts substs)
         testMoreGeneralThan rawMetavarBinder rawLhsSubst rawRhsSubst expectedResult = do
-          Right metavarBinders <- pure $ parseMetavarBinders rawMetavarBinder
+          Right metavarBinders <- pure $ Framework.parseMetavarBinders rawMetavarBinder
           Right lhsSubsts <- pure $ parseSubsts metavarBinders rawLhsSubst
           Right rhsSubsts <- pure $ parseSubsts metavarBinders rawRhsSubst
-          let result = moreGeneralThan metavarBinders lhsSubsts rhsSubsts
+          let result = Impl.moreGeneralThan metavarBinders lhsSubsts rhsSubsts
           result `shouldBe` expectedResult
 
     context "when comparing simple substitutions" $ do
@@ -67,10 +69,10 @@ spec = do
           True
 
       it "a non-empty substitution should not be more general than an empty one" $ do
-        Right metavarBinders <- pure $ parseMetavarBinders ["M : [] t -> t"]
+        Right metavarBinders <- pure $ Framework.parseMetavarBinders ["M : [] t -> t"]
         Right lhsSubsts <- pure $ parseSubsts metavarBinders ["M[] ↦ λy:t.y"]
         let rhsSubsts = MetaSubsts []
-        moreGeneralThan metavarBinders lhsSubsts rhsSubsts `shouldBe` False
+        Impl.moreGeneralThan metavarBinders lhsSubsts rhsSubsts `shouldBe` False
 
     context "with multiple metavariables" $ do
       it "should correctly compare substitutions with multiple metavariables" $ do
