@@ -1,11 +1,14 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Language.Lambda.Huet (
@@ -24,7 +27,7 @@ import Control.Monad.Foil (
   Distinct,
   DistinctEvidence (Distinct),
   NameBinder,
-  NameBinderList (NameBinderListCons, NameBinderListEmpty),
+  NameBinderList (NameBinderListEmpty),
   NameBinders,
   NameMap,
   S (VoidS),
@@ -40,7 +43,6 @@ import Control.Monad.Foil (
   extendScopePattern,
   fromNameBinderRenaming,
   lookupName,
-  nameId,
   nameOf,
   namesOfPattern,
   sink,
@@ -51,9 +53,9 @@ import Control.Monad.Foil (
 import qualified Control.Monad.Foil as Foil
 import Control.Monad.Foil.Internal (nameBindersList)
 import Control.Monad.Foil.Relative (liftRM)
-import Control.Monad.Free.Foil (AST (Node, Var), substitute)
+import Control.Monad.Free.Foil (AST (Node, Var), ScopedAST (ScopedAST), substitute)
 import qualified Control.Monad.Free.Foil as Foil
-import Data.Bifunctor (Bifunctor)
+import Data.Bifunctor (Bifunctor (bimap))
 import Data.Kind (Type)
 import Data.List (intercalate)
 import Data.Maybe (maybeToList)
@@ -64,6 +66,7 @@ import Data.SOAS (
   push,
   withFreshNameBinderList,
   pattern MetaApp,
+  pattern Node',
  )
 import Language.Lambda.Impl (
   FoilPattern (FoilAPattern),
@@ -145,14 +148,17 @@ data Constraint typ metavar binder sig where
     -> TypedSOAS binder metavar sig n typ
     -> Constraint typ metavar binder sig
 
-instance Show (Constraint Raw.Type Raw.MetavarIdent FoilPattern TermSig) where
+instance
+  (Show typ, forall n. Show (TypedSOAS binder metavar sig n typ))
+  => Show (Constraint typ metavar binder sig)
+  where
   show (Constraint binders binderTypes lhs rhs) =
     forall_ <> show lhs <> " = " <> show rhs
    where
     forall_
       | NameBinderListEmpty <- binders = ""
       | otherwise = "∀ " <> intercalate ", " (showBinder <$> namesOfPattern binders) <> ". "
-    showBinder name = "x" <> show (nameId name) <> ": " <> show (lookupName name binderTypes)
+    showBinder name = "x" <> show name <> ": " <> show (lookupName name binderTypes)
 
 evalConstraint
   :: Constraint Raw.Type metavar FoilPattern TermSig
@@ -161,16 +167,6 @@ evalConstraint (Constraint binder types left right) =
   Constraint binder types (eval scope left) (eval scope right)
  where
   scope = extendScopePattern binder emptyScope
-
-substituteConstraint
-  :: (Eq metavar)
-  => Substitution Raw.Type metavar FoilPattern TermSig
-  -> Constraint Raw.Type metavar FoilPattern TermSig
-  -> Constraint Raw.Type metavar FoilPattern TermSig
-substituteConstraint substitution (Constraint forall_ forallTypes left right) =
-  Constraint forall_ forallTypes (go left) (go right)
- where
-  go = substituteMetavar substitution (extendScopePattern forall_ emptyScope)
 
 data Metavariables typ metavar = Metavariables
   { metavariables :: MetaTypes typ metavar
@@ -213,7 +209,7 @@ fresh metaType@(MetaType _ typ) parameters (Metavariables metavariables (Stream 
   (Metavariables metavariables' freshMetavariables, term)
  where
   metavariables' = addMetaType meta metaType metavariables
-  term = MetaApp meta (makeArguments parameters) typ
+  term = MetaApp meta (Var <$> namesOfPattern parameters) typ
 
 data Substitution typ metavar binder sig where
   Substitution
@@ -222,31 +218,23 @@ data Substitution typ metavar binder sig where
     -> TypedSOAS binder metavar sig n typ
     -> Substitution typ metavar binder sig
 
-instance Show (Substitution Raw.Type Raw.MetavarIdent FoilPattern TermSig) where
-  show (Substitution (Raw.MetavarIdent meta) parameters body) =
-    meta <> "[" <> intercalate "," (go parameters) <> "] ↦ " <> show body
+instance
+  (Show metavar, forall n. Show (TypedSOAS binder metavar sig n typ))
+  => Show (Substitution typ metavar binder sig)
+  where
+  show (Substitution meta parameters body) =
+    show meta <> "[" <> intercalate ", " parameters' <> "] ↦ " <> show body
    where
-    go :: NameBinderList n l -> [String]
-    go NameBinderListEmpty = []
-    go (NameBinderListCons binder rest) = "x" <> show (nameOf binder) : go rest
+    parameters' = fmap (\name -> "x" <> show name) (namesOfPattern parameters)
 
-substituteMetavar
-  :: (Eq metavar, Distinct n)
-  => Substitution Raw.Type metavar FoilPattern TermSig
+applySubstitutionInTerm
+  :: (Eq metavar, CoSinkable binder, SinkableK binder, Bifunctor sig, Distinct n)
+  => Substitution typ metavar binder sig
   -> Scope n
-  -> TypedSOAS FoilPattern metavar TermSig n Raw.Type
-  -> TypedSOAS FoilPattern metavar TermSig n Raw.Type
-substituteMetavar substitution scope node = case node of
+  -> TypedSOAS binder metavar sig n typ
+  -> TypedSOAS binder metavar sig n typ
+applySubstitutionInTerm substitution scope node = case node of
   Var{} -> node
-  Lam' binder binderType body typ
-    | Distinct <- assertDistinct binder ->
-        let scope' = extendScopePattern binder scope
-            body' = substituteMetavar substitution scope' body
-         in Lam' binder binderType body' typ
-  App' function argument typ -> App' (go function) (go argument) typ
-   where
-    go = substituteMetavar substitution scope
-  MetaVar'{} -> error "wtf"
   MetaApp meta arguments _
     | Substitution expectedMeta parameters body <- substitution
     , meta == expectedMeta ->
@@ -254,7 +242,15 @@ substituteMetavar substitution scope node = case node of
             substs' = Foil.nameMapToSubstitution nameMap
          in substitute scope substs' body
   MetaApp meta parameters typ ->
-    MetaApp meta (substituteMetavar substitution scope <$> parameters) typ
+    MetaApp meta (applySubstitutionInTerm substitution scope <$> parameters) typ
+  Node' term typ -> Node' (bimap goScoped go term) typ
+   where
+    go = applySubstitutionInTerm substitution scope
+    goScoped (ScopedAST binder term)
+      | Distinct <- assertDistinct binder =
+          ScopedAST binder (applySubstitutionInTerm substitution scope' term)
+     where
+      scope' = extendScopePattern binder scope
 
 toNameMap
   :: Foil.NameMap m a
@@ -266,6 +262,16 @@ toNameMap nameMap (Foil.NameBinderListCons binder rest) (x : xs) =
   toNameMap (Foil.addNameBinder binder x nameMap) rest xs
 toNameMap _ _ _ = error "mismatched name list and argument list"
 
+applySubstitutionInConstraint
+  :: (Eq metavar, CoSinkable binder, SinkableK binder, Bifunctor sig)
+  => Substitution typ metavar binder sig
+  -> Constraint typ metavar binder sig
+  -> Constraint typ metavar binder sig
+applySubstitutionInConstraint substitution (Constraint forall_ forallTypes left right) =
+  Constraint forall_ forallTypes (go left) (go right)
+ where
+  go = applySubstitutionInTerm substitution (extendScopePattern forall_ emptyScope)
+
 newtype Substitutions typ metavar binder sig = Substitutions [Substitution typ metavar binder sig]
 
 makeSubstitutions :: Metavariables typ metavar -> Substitutions typ metavar binder sig
@@ -273,27 +279,27 @@ makeSubstitutions metas = Substitutions (uncurry go <$> getMetaTypes (metavariab
  where
   go name (MetaType arguments returnType) =
     withFreshNameBinderList arguments emptyScope emptyNameMap NameBinderListEmpty $ \_ _ binder ->
-      let body = MetaApp name (makeArguments binder) returnType
+      let body = MetaApp name (Var <$> namesOfPattern binder) returnType
        in Substitution name binder body
 
-makeArguments :: (Distinct n) => NameBinderList n l -> [AST binder sig l]
-makeArguments = fmap Var . namesOfPattern
-
-applySubstitution
-  :: (Eq metavar)
-  => Substitution Raw.Type metavar FoilPattern TermSig
-  -> Substitutions Raw.Type metavar FoilPattern TermSig
-  -> Substitutions Raw.Type metavar FoilPattern TermSig
-applySubstitution substitution (Substitutions substitutions) =
+applySubstitutionInSubstitutions
+  :: (Eq metavar, CoSinkable binder, SinkableK binder, Bifunctor sig)
+  => Substitution typ metavar binder sig
+  -> Substitutions typ metavar binder sig
+  -> Substitutions typ metavar binder sig
+applySubstitutionInSubstitutions substitution (Substitutions substitutions) =
   Substitutions (go <$> substitutions)
  where
   go (Substitution meta parameters body)
     | Distinct <- assertDistinct parameters =
         let scope = extendScopePattern parameters emptyScope
-            body' = substituteMetavar substitution scope body
+            body' = applySubstitutionInTerm substitution scope body
          in Substitution meta parameters body'
 
-instance Show (Substitutions Raw.Type Raw.MetavarIdent FoilPattern TermSig) where
+instance
+  (Show metavar, forall n. Show (TypedSOAS binder metavar sig n typ))
+  => Show (Substitutions typ metavar binder sig)
+  where
   show (Substitutions []) = "{ }"
   show (Substitutions substitutions) = "{ " <> intercalate ", " (show <$> substitutions) <> " }"
 
@@ -302,7 +308,9 @@ data Problem typ metavar binder sig = Problem
   , problemConstraints :: [Constraint typ metavar binder sig]
   }
 
-deriving instance Show (Problem Raw.Type Raw.MetavarIdent FoilPattern TermSig)
+deriving instance
+  (Show metavar, Show typ, forall n. Show (TypedSOAS binder metavar sig n typ))
+  => Show (Problem typ metavar binder sig)
 
 data Solution typ metavar binder sig = Solution
   { solutionMetavariables :: Metavariables typ metavar
@@ -310,7 +318,9 @@ data Solution typ metavar binder sig = Solution
   , solutionSubstitutions :: Substitutions typ metavar binder sig
   }
 
-deriving instance Show (Solution Raw.Type Raw.MetavarIdent FoilPattern TermSig)
+deriving instance
+  (Show metavar, Show typ, forall n. Show (TypedSOAS binder metavar sig n typ))
+  => Show (Solution typ metavar binder sig)
 
 withSubstitutions :: Problem typ metavar binder sig -> Solution typ metavar binder sig
 withSubstitutions (Problem metas constraints) =
@@ -350,8 +360,6 @@ data Decomposition typ metavar binder sig
   = Failed
   | Flexible
   | Decomposed [Constraint typ metavar binder sig]
-
-deriving instance Show (Decomposition Raw.Type Raw.MetavarIdent FoilPattern TermSig)
 
 unifyWithBinder
   :: (CoSinkable binder, SinkableK binder, Bifunctor sig, Distinct n)
@@ -581,8 +589,8 @@ step constraint (Solution metas constraints substitutions) =
   introductions = introduce metas constraint
   solved = do
     (metas', substitution) <- maybeToList imitations <> projections <> introductions
-    let constraints' = substituteConstraint substitution <$> (constraint : constraints)
-    return (Solution metas' constraints' (applySubstitution substitution substitutions))
+    let constraints' = applySubstitutionInConstraint substitution <$> (constraint : constraints)
+    return (Solution metas' constraints' (applySubstitutionInSubstitutions substitution substitutions))
 
   -- `F[] X[] = a b` does not decompose semantically, but it decomposes
   -- structurally. Try structural decomposition once we dealt with the semantics

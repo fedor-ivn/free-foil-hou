@@ -157,6 +157,14 @@ pattern MetaApp
 pattern MetaApp metavar args ann =
   Node (AnnSig (R2 (MetaAppSig metavar args)) ann)
 
+pattern Node'
+  :: sig (TypedScopedSOAS binder metavar sig n t) (TypedSOAS binder metavar sig n t)
+  -> t
+  -> TypedSOAS binder metavar sig n t
+pattern Node' term ann = Node (AnnSig (L2 term) ann)
+
+{-# COMPLETE Var, MetaApp, Node' #-}
+
 -- | A body of a metavariable substitution for one metavariable.
 data MetaAbs binder sig t where
   MetaAbs
@@ -208,9 +216,7 @@ applyMetaSubsts scope substs = \case
       Nothing -> MetaApp metavar args' ann
    where
     args' = map go args
-  Node (AnnSig (L2 term) ann) ->
-    let term' = bimap goScoped go term in Node (AnnSig (L2 term') ann)
-  _ -> error "unreachable"
+  Node' term ann -> Node' (bimap goScoped go term) ann
  where
   go = applyMetaSubsts scope substs
   goScoped (ScopedAST binder body) =
