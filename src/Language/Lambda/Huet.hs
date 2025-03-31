@@ -1,9 +1,11 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module Language.Lambda.Huet (
@@ -36,6 +38,7 @@ import Control.Monad.Foil (
   extendScopePattern,
   fromNameBinderRenaming,
   lookupName,
+  nameId,
   nameOf,
   namesOfPattern,
   sink,
@@ -51,20 +54,16 @@ import qualified Control.Monad.Free.Foil as Foil
 import Data.Kind (Type)
 import Data.List (intercalate)
 import Data.Maybe (maybeToList)
-import Data.SOAS (AnnSig (AnnSig), concatNameBinderLists, push, withFreshNameBinderList, pattern MetaApp)
+import Data.SOAS (AnnSig (AnnSig), TypedSOAS, concatNameBinderLists, push, withFreshNameBinderList, pattern MetaApp)
 import Language.Lambda.Impl (
   FoilPattern (FoilAPattern),
   MetaTerm,
-  fromMetaTerm,
-  fromTerm,
   matchPattern,
-  toBinders,
   pattern App',
   pattern Lam',
   pattern MetaVar',
  )
 import qualified Language.Lambda.Syntax.Abs as Raw
-import qualified Language.Lambda.Syntax.Print as Raw
 
 data Stream a = Stream a (Stream a) deriving (Eq, Functor)
 
@@ -122,85 +121,96 @@ eval scope node = case node of
 -- "t -> t"
 -- >>> Raw.printTree $ withFresh emptyScope $ \a -> typeOf (addNameBinder a t emptyNameMap) (App' (lam' t (extendScope a emptyScope) t $ \x _ -> Var x) (Var (nameOf a)) t)
 -- "t"
-typeOf :: NameMap n Raw.Type -> MetaTerm metavar n Raw.Type -> Raw.Type
+typeOf :: NameMap n typ -> AST binder (AnnSig typ sig) n -> typ
 typeOf variables (Var name) = lookupName name variables
 typeOf _ (Node (AnnSig _ typ)) = typ
 
-data Constraint where
+data Constraint typ where
   Constraint
     :: (Distinct n)
     => NameBinderList Foil.VoidS n
-    -> Foil.NameMap n Raw.Type
-    -> MetaTerm Raw.MetavarIdent n Raw.Type
-    -> MetaTerm Raw.MetavarIdent n Raw.Type
-    -> Constraint
+    -> NameMap n typ
+    -> MetaTerm Raw.MetavarIdent n typ
+    -> MetaTerm Raw.MetavarIdent n typ
+    -> Constraint typ
 
-instance Show Constraint where
+instance Show (Constraint Raw.Type) where
   show (Constraint binders binderTypes lhs rhs) =
-    Raw.printTree $
-      Raw.AUnificationConstraint (toBinders binders binderTypes) (fromMetaTerm' lhs) (fromMetaTerm' rhs)
+    forall_ <> show lhs <> " = " <> show rhs
    where
-    fromMetaTerm' = Raw.AScopedTerm . fromTerm . fromMetaTerm
+    forall_
+      | NameBinderListEmpty <- binders = ""
+      | otherwise = "∀ " <> intercalate ", " (showBinder <$> namesOfPattern binders) <> ". "
+    showBinder name = "x" <> show (nameId name) <> ": " <> show (lookupName name binderTypes)
 
-evalConstraint :: Constraint -> Constraint
+--  Raw.printTree $
+--    Raw.AUnificationConstraint (toBinders binders binderTypes) (fromMetaTerm' lhs) (fromMetaTerm' rhs)
+-- where
+--  fromMetaTerm' = Raw.AScopedTerm . fromTerm . fromMetaTerm
+
+evalConstraint :: Constraint Raw.Type -> Constraint Raw.Type
 evalConstraint (Constraint binder types left right) =
   Constraint binder types (eval scope left) (eval scope right)
  where
   scope = extendScopePattern binder emptyScope
 
-substituteConstraint :: Substitution -> Constraint -> Constraint
+substituteConstraint :: Substitution Raw.Type -> Constraint Raw.Type -> Constraint Raw.Type
 substituteConstraint substitution (Constraint forall_ forallTypes left right) =
   Constraint forall_ forallTypes (go left) (go right)
  where
   go = substituteMetavar substitution (extendScopePattern forall_ emptyScope)
 
-data Metavariables = Metavariables
-  { metavariables :: MetaTypes
+data Metavariables typ = Metavariables
+  { metavariables :: MetaTypes typ
   , freshMetavariables :: Stream Raw.MetavarIdent
   }
   deriving (Show, Eq)
 
-newtype MetaTypes = MetaTypes {getMetaTypes :: [(Raw.MetavarIdent, MetaType)]} deriving (Eq)
+newtype MetaTypes typ = MetaTypes {getMetaTypes :: [(Raw.MetavarIdent, MetaType typ)]} deriving (Eq)
 
-lookupMetaType :: Raw.MetavarIdent -> MetaTypes -> Maybe MetaType
+lookupMetaType :: Raw.MetavarIdent -> MetaTypes typ -> Maybe (MetaType typ)
 lookupMetaType meta (MetaTypes types) = lookup meta types
 
-addMetaType :: Raw.MetavarIdent -> MetaType -> MetaTypes -> MetaTypes
+addMetaType :: Raw.MetavarIdent -> MetaType typ -> MetaTypes typ -> MetaTypes typ
 addMetaType meta typ (MetaTypes types) = MetaTypes ((meta, typ) : types)
 
-instance Show MetaTypes where
+instance (Show typ) => Show (MetaTypes typ) where
   show (MetaTypes []) = "{}"
   show (MetaTypes types) = "{ " <> intercalate ", " types' <> " }"
    where
     types' = fmap (\(Raw.MetavarIdent name, typ) -> name <> " : " <> show typ) types
 
-data MetaType = MetaType [Raw.Type] Raw.Type deriving (Eq)
+data MetaType typ = MetaType [typ] typ deriving (Eq)
 
-instance Show MetaType where
+instance (Show typ) => Show (MetaType typ) where
   show (MetaType parameterTypes returnType) =
-    "[" <> intercalate ", " (Raw.printTree <$> parameterTypes) <> "]" <> Raw.printTree returnType
+    "[" <> intercalate ", " (show <$> parameterTypes) <> "]" <> show returnType
 
-someMetas :: Metavariables
+someMetas :: Metavariables typ
 someMetas = Metavariables (MetaTypes []) freshMetavariables
  where
   freshMetavariables = fmap (\i -> Raw.MetavarIdent ("M" <> show i)) (nats (0 :: Integer))
   nats i = Stream i (nats (i + 1))
 
-fresh :: MetaType -> NameBinderList VoidS n -> Metavariables -> (Metavariables, MetaTerm Raw.MetavarIdent n Raw.Type)
+fresh
+  :: MetaType typ
+  -> NameBinderList VoidS n
+  -> Metavariables typ
+  -> (Metavariables typ, TypedSOAS binder Raw.MetavarIdent sig n typ)
 fresh metaType@(MetaType _ typ) parameters (Metavariables metavariables (Stream meta freshMetavariables)) =
   (Metavariables metavariables' freshMetavariables, term)
  where
   metavariables' = addMetaType meta metaType metavariables
   term = MetaApp meta (makeArguments parameters) typ
 
-data Substitution where
+data Substitution typ where
   Substitution
     :: Raw.MetavarIdent
     -> NameBinderList VoidS n
-    -> MetaTerm Raw.MetavarIdent n Raw.Type
-    -> Substitution
+    -> MetaTerm Raw.MetavarIdent n typ
+    -> Substitution typ
 
-instance Show Substitution where
+instance Show (Substitution Raw.Type) where
   show (Substitution (Raw.MetavarIdent meta) parameters body) =
     meta <> "[" <> intercalate "," (go parameters) <> "] ↦ " <> show body
    where
@@ -210,7 +220,7 @@ instance Show Substitution where
 
 substituteMetavar
   :: (Distinct n)
-  => Substitution
+  => Substitution Raw.Type
   -> Scope n
   -> MetaTerm Raw.MetavarIdent n Raw.Type
   -> MetaTerm Raw.MetavarIdent n Raw.Type
@@ -243,9 +253,9 @@ toNameMap nameMap (Foil.NameBinderListCons binder rest) (x : xs) =
   toNameMap (Foil.addNameBinder binder x nameMap) rest xs
 toNameMap _ _ _ = error "mismatched name list and argument list"
 
-newtype Substitutions = Substitutions [Substitution]
+newtype Substitutions typ = Substitutions [Substitution typ]
 
-makeSubstitutions :: Metavariables -> Substitutions
+makeSubstitutions :: Metavariables typ -> Substitutions typ
 makeSubstitutions metas = Substitutions (uncurry go <$> getMetaTypes (metavariables metas))
  where
   go name (MetaType arguments returnType) =
@@ -256,7 +266,7 @@ makeSubstitutions metas = Substitutions (uncurry go <$> getMetaTypes (metavariab
 makeArguments :: (Distinct n) => NameBinderList n l -> [AST binder sig l]
 makeArguments = fmap Var . namesOfPattern
 
-applySubstitution :: Substitution -> Substitutions -> Substitutions
+applySubstitution :: Substitution Raw.Type -> Substitutions Raw.Type -> Substitutions Raw.Type
 applySubstitution substitution (Substitutions substitutions) =
   Substitutions (go <$> substitutions)
  where
@@ -266,27 +276,29 @@ applySubstitution substitution (Substitutions substitutions) =
             body' = substituteMetavar substitution scope body
          in Substitution meta parameters body'
 
-instance Show Substitutions where
+instance Show (Substitutions Raw.Type) where
   show (Substitutions []) = "{ }"
   show (Substitutions substitutions) = "{ " <> intercalate ", " (show <$> substitutions) <> " }"
 
-data Problem = Problem
-  { problemMetavariables :: Metavariables
-  , problemConstraints :: [Constraint]
+data Problem typ = Problem
+  { problemMetavariables :: Metavariables typ
+  , problemConstraints :: [Constraint typ]
   }
-  deriving (Show)
 
-data Solution = Solution
-  { solutionMetavariables :: Metavariables
-  , solutionConstraints :: [Constraint]
-  , solutionSubstitutions :: Substitutions
+deriving instance Show (Problem Raw.Type)
+
+data Solution typ = Solution
+  { solutionMetavariables :: Metavariables typ
+  , solutionConstraints :: [Constraint typ]
+  , solutionSubstitutions :: Substitutions typ
   }
-  deriving (Show)
 
-withSubstitutions :: Problem -> Solution
+deriving instance Show (Solution Raw.Type)
+
+withSubstitutions :: Problem typ -> Solution typ
 withSubstitutions (Problem metas constraints) = Solution metas constraints (makeSubstitutions metas)
 
-pickFlexRigid :: Solution -> Maybe (Constraint, Solution)
+pickFlexRigid :: Solution Raw.Type -> Maybe (Constraint Raw.Type, Solution Raw.Type)
 pickFlexRigid (Solution metas constraints substitutions) = go id constraints
  where
   go _ [] = Nothing
@@ -294,7 +306,7 @@ pickFlexRigid (Solution metas constraints substitutions) = go id constraints
     | isFlexible left /= isFlexible right = Just (constraint, Solution metas (previous rest) substitutions)
     | otherwise = go ((constraint :) . previous) rest
 
-splitProblems :: [Solution] -> ([Solution] -> [Solution], [(Constraint, Solution)])
+splitProblems :: [Solution Raw.Type] -> ([Solution Raw.Type] -> [Solution Raw.Type], [(Constraint Raw.Type, Solution Raw.Type)])
 splitProblems = go id id
  where
   go solved unsolved [] = (solved, unsolved [])
@@ -302,23 +314,24 @@ splitProblems = go id id
     Just flexRigid -> go solved ((flexRigid :) . unsolved) problems
     Nothing -> go ((problem :) . solved) unsolved problems
 
-data Decomposition
+data Decomposition typ
   = Failed
   | Flexible
-  | Decomposed [Constraint]
-  deriving (Show)
+  | Decomposed [Constraint typ]
+
+deriving instance Show (Decomposition Raw.Type)
 
 unifyWithBinder
   :: (Distinct n)
   => NameBinderList VoidS n
-  -> NameMap n Raw.Type
-  -> MetaTerm Raw.MetavarIdent l Raw.Type
-  -> MetaTerm Raw.MetavarIdent r Raw.Type
-  -> [Raw.Type]
+  -> NameMap n typ
+  -> MetaTerm Raw.MetavarIdent l typ
+  -> MetaTerm Raw.MetavarIdent r typ
+  -> [typ]
   -> NameBinders n s
   -> (NameBinder n l -> NameBinder n s)
   -> (NameBinder n r -> NameBinder n s)
-  -> Constraint
+  -> Constraint typ
 unifyWithBinder forall_ types left right unifiedBinderTypes unifiedBinder leftRenaming rightRenaming
   | Distinct <- assertDistinct unifiedBinder =
       Constraint
@@ -350,7 +363,7 @@ unifyNameBinders' l r = case unifyNameBinders l r of
   RenameRightNameBinder b r -> RenameBothBinders' b id r
   SameNameBinders b -> RenameBothBinders' b id id
 
-decompose :: Metavariables -> Constraint -> Decomposition
+decompose :: Metavariables Raw.Type -> Constraint Raw.Type -> Decomposition Raw.Type
 decompose _ (Constraint forall_ types left right) = case (left, right) of
   (MetaApp{}, _) -> Flexible
   (_, MetaApp{}) -> Flexible
@@ -371,20 +384,20 @@ decompose _ (Constraint forall_ types left right) = case (left, right) of
       ]
   _ -> Failed
 
-decomposeRigidRigid :: Metavariables -> Constraint -> Decomposition
+decomposeRigidRigid :: Metavariables Raw.Type -> Constraint Raw.Type -> Decomposition Raw.Type
 decomposeRigidRigid metas constraint@(Constraint _ _ left right)
   | isFlexible left = Flexible
   | isFlexible right = Flexible
   | otherwise = decompose metas constraint
 
-decomposeAll :: (Constraint -> Decomposition) -> [Constraint] -> Maybe [Constraint]
+decomposeAll :: (Constraint typ -> Decomposition typ) -> [Constraint typ] -> Maybe [Constraint typ]
 decomposeAll _ [] = Just []
 decomposeAll f (constraint : rest) = case f constraint of
   Failed -> Nothing
   Flexible -> (constraint :) <$> decomposeAll f rest
   Decomposed constraints -> decomposeAll f (constraints <> rest)
 
-decomposeProblems :: [Solution] -> [Solution]
+decomposeProblems :: [Solution Raw.Type] -> [Solution Raw.Type]
 decomposeProblems problems = do
   Solution metas constraints substitutions <- problems
   constraints' <- maybeToList (decomposeAll (decomposeRigidRigid metas) (evalConstraint <$> constraints))
@@ -394,7 +407,7 @@ decomposeProblems problems = do
 -- >>> metas = Metavariables (MetaTypes [(_M, MetaType [] t)]) (freshMetavariables someMetas)
 -- >>> snd <$> imitate metas (Constraint NameBinderListEmpty emptyNameMap (MetaApp _M [] t) (lam' t emptyScope t $ \x _ -> Var x))
 -- Just M[] ↦ λ x0 : t . M0 [x0]
-imitate :: Metavariables -> Constraint -> Maybe (Metavariables, Substitution)
+imitate :: Metavariables Raw.Type -> Constraint Raw.Type -> Maybe (Metavariables Raw.Type, Substitution Raw.Type)
 imitate metas (Constraint _ forallTypes left right) = case (left, right) of
   (MetaApp meta _ _, rhs) -> go meta rhs
   (rhs, MetaApp meta _ _) -> go meta rhs
@@ -408,12 +421,12 @@ imitate metas (Constraint _ forallTypes left right) = case (left, right) of
 
   go'
     :: Scope l
-    -> Metavariables
+    -> Metavariables Raw.Type
     -> NameMap r Raw.Type
     -> NameBinderList VoidS l
     -> [Raw.Type]
     -> MetaTerm Raw.MetavarIdent r Raw.Type
-    -> Maybe (Metavariables, MetaTerm Raw.MetavarIdent l Raw.Type)
+    -> Maybe (Metavariables Raw.Type, MetaTerm Raw.MetavarIdent l Raw.Type)
   go' scope metas forallTypes parameters parameterTypes rhs = case rhs of
     Var{} -> Nothing
     MetaApp{} -> Nothing
@@ -439,13 +452,13 @@ imitate metas (Constraint _ forallTypes left right) = case (left, right) of
 -- >>> withFresh emptyScope $ \x -> show . snd <$> reduce someMetas (NameBinderListCons x NameBinderListEmpty) parameterTypes t (Raw.Fun u t) (Var (nameOf x))
 -- ["x0 M0 [x0]"]
 reduce
-  :: Metavariables
+  :: Metavariables Raw.Type
   -> NameBinderList VoidS n
   -> [Raw.Type]
   -> Raw.Type
   -> Raw.Type
   -> MetaTerm Raw.MetavarIdent n Raw.Type
-  -> [(Metavariables, MetaTerm Raw.MetavarIdent n Raw.Type)]
+  -> [(Metavariables Raw.Type, MetaTerm Raw.MetavarIdent n Raw.Type)]
 reduce metas parameters parameterTypes expectedType actualType term =
   reflexive <> typed
  where
@@ -465,7 +478,7 @@ reduce metas parameters parameterTypes expectedType actualType term =
 -- >>> metas = Metavariables (MetaTypes [(_M, MetaType [xType, yType, zType] t)]) (freshMetavariables someMetas)
 -- >>> fmap snd $ withVar emptyScope $ \x xScope -> withVar xScope $ \y yScope -> withVar yScope $ \z zScope -> project metas (Constraint (NameBinderListCons x (NameBinderListCons y (NameBinderListCons z NameBinderListEmpty))) (addNameBinder z zType (addNameBinder y yType (addNameBinder x xType emptyNameMap))) (MetaApp _M [Var (sink (nameOf x)), Var (sink (nameOf y)), Var (nameOf z)] t) (Var (nameOf z)))
 -- [M[x0,x1,x2] ↦ x0 M0 [x0, x1, x2] M1 [x0, x1, x2],M[x0,x1,x2] ↦ x2]
-project :: Metavariables -> Constraint -> [(Metavariables, Substitution)]
+project :: Metavariables Raw.Type -> Constraint Raw.Type -> [(Metavariables Raw.Type, Substitution Raw.Type)]
 project metas (Constraint _ _ left right) = case (left, right) of
   (MetaApp{}, MetaApp{}) -> []
   (MetaApp meta _ _, _) -> go meta
@@ -483,7 +496,7 @@ project metas (Constraint _ _ left right) = case (left, right) of
 -- >>> metas = Metavariables (MetaTypes [(_M, MetaType [] (Raw.Fun t t))]) (freshMetavariables someMetas)
 -- >>> fmap snd $ withFresh emptyScope $ \a -> introduce metas (Constraint (NameBinderListCons a NameBinderListEmpty) (addNameBinder a t emptyNameMap) (App' (MetaApp _M [] (Raw.Fun t t)) (MetaApp _X [] t) t) (Var (nameOf a)))
 -- [M[] ↦ λ x0 : t . M0 [x0]]
-introduce :: Metavariables -> Constraint -> [(Metavariables, Substitution)]
+introduce :: Metavariables Raw.Type -> Constraint Raw.Type -> [(Metavariables Raw.Type, Substitution Raw.Type)]
 introduce metas (Constraint _ _ left right) = go left <> go right
  where
   go Var{} = []
@@ -500,14 +513,13 @@ introduce metas (Constraint _ _ left right) = go left <> go right
   go MetaApp{} = []
   go MetaVar'{} = error "wtf"
 
-step :: Constraint -> Solution -> [Solution]
+step :: Constraint Raw.Type -> Solution Raw.Type -> [Solution Raw.Type]
 step constraint (Solution metas constraints substitutions) =
   decomposed <> solved
  where
   imitations = imitate metas constraint
   projections = project metas constraint
   introductions = introduce metas constraint
-
   solved = do
     (metas', substitution) <- maybeToList imitations <> projections <> introductions
     let constraints' = substituteConstraint substitution <$> (constraint : constraints)
@@ -537,7 +549,7 @@ step constraint (Solution metas constraints substitutions) =
 -- >>> constraint = withVar emptyScope $ \a aScope -> withVar aScope $ \b bScope -> Constraint (NameBinderListCons a (NameBinderListCons b NameBinderListEmpty)) (addNameBinder b t (addNameBinder a (Raw.Fun t t) emptyNameMap)) (MetaApp _F [MetaApp _X [Var $ sink $ nameOf a, Var $ nameOf b] (Raw.Fun t (Raw.Fun t t)), Var $ sink $ nameOf a, Var $ nameOf b] t) (App' (Var $ sink $ nameOf a) (Var $ nameOf b) t)
 -- >>> take 5 $ solutionSubstitutions <$> solve [Problem metas [constraint]]
 -- [{ F[x0,x1,x2] ↦ x1 x2, X[x0,x1] ↦ X [x0, x1] },{ F[x0,x1,x2] ↦ x1 (x0 M1 [x0, x1, x2] M2 [x0, x1, x2]), X[x0,x1] ↦ λ x2 : t . λ x3 : t . x1 },{ F[x0,x1,x2] ↦ x0 M0 [x0, x1, x2] M1 [x0, x1, x2], X[x0,x1] ↦ λ x2 : t . λ x3 : t . x0 x1 },{ F[x0,x1,x2] ↦ x0 M0 [x0, x1, x2] x2, X[x0,x1] ↦ λ x2 : t . x0 },{ F[x0,x1,x2] ↦ x0 M0 [x0, x1, x2] (x1 x2), X[x0,x1] ↦ λ x2 : t . λ x3 : t . x3 }]
-solve :: [Problem] -> [Solution]
+solve :: [Problem Raw.Type] -> [Solution Raw.Type]
 solve = go . fmap withSubstitutions
  where
   go [] = []
