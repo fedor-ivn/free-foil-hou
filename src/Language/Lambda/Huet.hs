@@ -28,6 +28,7 @@ import Control.Monad.Foil (
   DExt,
   Distinct,
   DistinctEvidence (Distinct),
+  Name,
   NameBinder,
   NameBinderList (NameBinderListCons, NameBinderListEmpty),
   NameBinders,
@@ -45,17 +46,19 @@ import Control.Monad.Foil (
   extendScopePattern,
   fromNameBinderRenaming,
   lookupName,
+  nameMapToSubstitution,
   nameOf,
   namesOfPattern,
   sink,
   unifyNameBinders,
   withFresh,
  )
-import qualified Control.Monad.Foil as Foil
 import Control.Monad.Foil.Internal (nameBindersList)
 import Control.Monad.Foil.Relative (liftRM)
 import Control.Monad.Free.Foil (AST (Node, Var), ScopedAST (ScopedAST), substitute)
 import Data.Bifunctor (Bifunctor (bimap))
+import Data.Bitraversable (Bitraversable (bitraverse))
+import Data.Functor.Const (Const (Const, getConst))
 import Data.Kind (Type)
 import Data.List (intercalate)
 import Data.Maybe (maybeToList)
@@ -69,6 +72,7 @@ import Data.SOAS (
   pattern MetaApp,
   pattern Node',
  )
+import Data.ZipMatchK (ZipMatchK, zipMatch2)
 import Language.Lambda.Impl (
   FoilPattern (FoilAPattern),
   MetaTerm,
@@ -76,7 +80,6 @@ import Language.Lambda.Impl (
   matchPattern,
   pattern App',
   pattern Lam',
-  pattern MetaVar',
  )
 import qualified Language.Lambda.Syntax.Abs as Raw
 
@@ -86,18 +89,31 @@ withVar scope makeTerm = withFresh scope $ \x -> makeTerm x (extendScope x scope
 lam'
   :: (Distinct n)
   => Raw.Type
-  -> Foil.Scope n
+  -> Scope n
   -> Raw.Type
-  -> (forall l. (DExt n l) => Foil.Name l -> Foil.Scope l -> MetaTerm metavar l Raw.Type)
+  -> (forall l. (DExt n l) => Name l -> Scope l -> MetaTerm metavar l Raw.Type)
   -> MetaTerm metavar n Raw.Type
 lam' binderType scope returnType makeBody = withFresh scope $ \x ->
   let body = makeBody (nameOf x) (extendScope x scope)
    in Lam' (FoilAPattern x) binderType body (Raw.Fun binderType returnType)
 
+class (CoSinkable pattern_) => TypedUnifiablePattern typ pattern_ where
+  typedUnifyPatterns :: (Distinct n) => pattern_ n l -> pattern_ n r -> UnifyNameBinders' typ pattern_ n l r
+
 type Sig typ metavar binder sig n =
   sig (TypedScopedSOAS binder metavar sig n typ) (TypedSOAS binder metavar sig n typ)
 
-class (Eq typ, Eq metavar) => HuetPreunifiable typ metavar binder sig where
+class
+  ( Eq typ
+  , Eq metavar
+  , CoSinkable binder
+  , SinkableK binder
+  , TypedUnifiablePattern typ binder
+  , Bitraversable sig
+  , ZipMatchK sig
+  ) =>
+  HuetPreunifiable typ metavar binder sig
+  where
   -- | Bring the term to the normal form after possible substitutions.
   normalize
     :: (Distinct n)
@@ -168,14 +184,18 @@ class (Eq typ, Eq metavar) => HuetPreunifiable typ metavar binder sig where
     -> [(Metavariables typ metavar, Substitution typ metavar binder sig)]
     -- ^ Possible substitutions for the flexible head
 
+  -- | Determines whether the term is flexible. A term is flexible if it is a
+  -- metavariable application or at least one of its heads is flexible.
+  isFlexible :: Sig typ metavar binder sig n -> Bool
+
 -- >>> :set -XTypeApplications
 -- >>> t = Raw.Base (Raw.VarIdent "t")
 -- >>> flip = lam' t emptyScope (Raw.Fun (Raw.Fun t t) t) $ \x scope -> lam' (Raw.Fun t t) scope t $ \f _ -> App' (Var f) (Var (sink x)) t
--- >>> normalize' @_ @Raw.MetavarIdent Foil.emptyScope flip
+-- >>> normalize' @_ @Raw.MetavarIdent emptyScope flip
 -- λ x0 : t . λ x1 : t -> t . x1 x0
 -- >>> withVar emptyScope $ \x scope -> show $ normalize' @_ @Raw.MetavarIdent scope (App' (sink flip) (Var (nameOf x)) (Raw.Fun t t))
 -- "\955 x1 : t -> t . x1 x0"
--- >>> withVar emptyScope $ \x scope -> withVar scope $ \f scope' -> show $ normalize' @_ @Raw.MetavarIdent scope' (App' (App' (Foil.sink flip) (Var (sink (nameOf x))) (Raw.Fun t t)) (Var (nameOf f)) t)
+-- >>> withVar emptyScope $ \x scope -> withVar scope $ \f scope' -> show $ normalize' @_ @Raw.MetavarIdent scope' (App' (App' (sink flip) (Var (sink (nameOf x))) (Raw.Fun t t)) (Var (nameOf f)) t)
 -- "x1 x0"
 normalize'
   :: (HuetPreunifiable typ metavar binder sig, Distinct n)
@@ -220,13 +240,29 @@ introduce' withMeta forallTypes node = case node of
   MetaApp{} -> []
   Node' term typ -> introduce withMeta forallTypes term typ
 
+isFlexible' :: (HuetPreunifiable typ metavar binder sig) => TypedSOAS binder metavar sig n typ -> Bool
+isFlexible' Var{} = False
+isFlexible' MetaApp{} = True
+isFlexible' (Node' term _) = isFlexible term
+
+instance TypedUnifiablePattern Raw.Type FoilPattern where
+  typedUnifyPatterns (FoilAPattern left) (FoilAPattern right) = case unifyNameBinders left right of
+    NotUnifiable -> NotUnifiable'
+    RenameBothBinders unifiedBinder leftRenaming rightRenaming ->
+      RenameBothBinders' unifiedBinder (addNameBinders unifiedBinder []) leftRenaming rightRenaming
+    RenameLeftNameBinder unifiedBinder leftRenaming ->
+      RenameBothBinders' unifiedBinder (addNameBinders unifiedBinder []) leftRenaming id
+    RenameRightNameBinder unifiedBinder rightRenaming ->
+      RenameBothBinders' unifiedBinder (addNameBinders unifiedBinder []) id rightRenaming
+    SameNameBinders unifiedBinder -> RenameBothBinders' unifiedBinder (addNameBinders unifiedBinder []) id id
+
 instance HuetPreunifiable Raw.Type Raw.MetavarIdent FoilPattern TermSig where
   normalize scope node typ = case node of
     LamSig binderType (ScopedAST binder body)
-      | Foil.Distinct <- Foil.assertDistinct binder ->
+      | Distinct <- assertDistinct binder ->
           Lam' binder binderType (normalize' scope' body) typ
      where
-      scope' = Foil.extendScopePattern binder scope
+      scope' = extendScopePattern binder scope
     AppSig function argument -> case normalize' scope function of
       Lam' binder _ body _ -> normalize' scope (substitute scope subst body)
        where
@@ -269,17 +305,14 @@ instance HuetPreunifiable Raw.Type Raw.MetavarIdent FoilPattern TermSig where
     AppSig function _ -> introduce' withMeta forallTypes function
     MetavarSig{} -> []
 
+  isFlexible LamSig{} = False
+  isFlexible (AppSig function _) = isFlexible' function
+  isFlexible MetavarSig{} = error "wtf"
+
 data Stream a = Stream a (Stream a) deriving (Eq, Functor)
 
 instance Show (Stream a) where
   show _ = "Stream"
-
-isFlexible :: MetaTerm metavar n Raw.Type -> Bool
-isFlexible Var{} = False
-isFlexible Lam'{} = False
-isFlexible (App' function _ _) = isFlexible function
-isFlexible MetaApp{} = True
-isFlexible MetaVar'{} = error "wtf"
 
 -- >>> [t, u] = Raw.Base . Raw.VarIdent <$> ["t", "u"]
 -- >>> Raw.printTree $ typeOf emptyNameMap (lam' t emptyScope t $ \x _ -> Var x)
@@ -293,7 +326,7 @@ typeOf _ (Node (AnnSig _ typ)) = typ
 data Constraint typ metavar binder sig where
   Constraint
     :: (Distinct n)
-    => NameBinderList Foil.VoidS n
+    => NameBinderList VoidS n
     -> NameMap n typ
     -> TypedSOAS binder metavar sig n typ
     -> TypedSOAS binder metavar sig n typ
@@ -365,17 +398,6 @@ fresh parameters parameterTypes returnType (Metavariables metavariables (Stream 
   metavariables' = addMetaType meta (MetaType parameterTypes' returnType) metavariables
   term = MetaApp meta (Var <$> namesOfPattern parameters) returnType
 
-fresh'
-  :: MetaType typ
-  -> NameBinderList VoidS n
-  -> Metavariables typ metavar
-  -> (Metavariables typ metavar, TypedSOAS binder metavar sig n typ)
-fresh' metaType@(MetaType _ returnType) parameters (Metavariables metavariables (Stream meta freshMetavariables)) =
-  (Metavariables metavariables' freshMetavariables, term)
- where
-  metavariables' = addMetaType meta metaType metavariables
-  term = MetaApp meta (Var <$> namesOfPattern parameters) returnType
-
 data Substitution typ metavar binder sig where
   Substitution
     :: metavar
@@ -403,8 +425,8 @@ applySubstitutionInTerm substitution scope node = case node of
   MetaApp meta arguments _
     | Substitution expectedMeta parameters body <- substitution
     , meta == expectedMeta ->
-        let nameMap = toNameMap Foil.emptyNameMap parameters arguments
-            substs' = Foil.nameMapToSubstitution nameMap
+        let nameMap = toNameMap emptyNameMap parameters arguments
+            substs' = nameMapToSubstitution nameMap
          in substitute scope substs' body
   MetaApp meta parameters typ ->
     MetaApp meta (applySubstitutionInTerm substitution scope <$> parameters) typ
@@ -418,13 +440,13 @@ applySubstitutionInTerm substitution scope node = case node of
       scope' = extendScopePattern binder scope
 
 toNameMap
-  :: Foil.NameMap m a
-  -> Foil.NameBinderList m l
+  :: NameMap m a
+  -> NameBinderList m l
   -> [a]
-  -> Foil.NameMap l a
-toNameMap nameMap Foil.NameBinderListEmpty [] = nameMap
-toNameMap nameMap (Foil.NameBinderListCons binder rest) (x : xs) =
-  toNameMap (Foil.addNameBinder binder x nameMap) rest xs
+  -> NameMap l a
+toNameMap nameMap NameBinderListEmpty [] = nameMap
+toNameMap nameMap (NameBinderListCons binder rest) (x : xs) =
+  toNameMap (addNameBinder binder x nameMap) rest xs
 toNameMap _ _ _ = error "mismatched name list and argument list"
 
 applySubstitutionInConstraint
@@ -492,27 +514,25 @@ withSubstitutions (Problem metas constraints) =
   Solution metas constraints (makeSubstitutions metas)
 
 pickFlexRigid
-  :: Solution Raw.Type metavar FoilPattern TermSig
+  :: (HuetPreunifiable typ metavar binder sig)
+  => Solution typ metavar binder sig
   -> Maybe
-      ( Constraint Raw.Type metavar FoilPattern TermSig
-      , Solution Raw.Type metavar FoilPattern TermSig
+      ( Constraint typ metavar binder sig
+      , Solution typ metavar binder sig
       )
 pickFlexRigid (Solution metas constraints substitutions) = go id constraints
  where
   go _ [] = Nothing
   go previous (constraint@(Constraint _ _ left right) : rest)
-    | isFlexible left /= isFlexible right =
+    | isFlexible' left /= isFlexible' right =
         Just (constraint, Solution metas (previous rest) substitutions)
     | otherwise = go ((constraint :) . previous) rest
 
 splitProblems
-  :: [Solution Raw.Type metavar FoilPattern TermSig]
-  -> ( [Solution Raw.Type metavar FoilPattern TermSig]
-       -> [Solution Raw.Type metavar FoilPattern TermSig]
-     , [ ( Constraint Raw.Type metavar FoilPattern TermSig
-         , Solution Raw.Type metavar FoilPattern TermSig
-         )
-       ]
+  :: (HuetPreunifiable typ metavar binder sig)
+  => [Solution typ metavar binder sig]
+  -> ( [Solution typ metavar binder sig] -> [Solution typ metavar binder sig]
+     , [(Constraint typ metavar binder sig, Solution typ metavar binder sig)]
      )
 splitProblems = go id id
  where
@@ -526,80 +546,67 @@ data Decomposition typ metavar binder sig
   | Flexible
   | Decomposed [Constraint typ metavar binder sig]
 
-unifyWithBinder
-  :: (CoSinkable binder, SinkableK binder, Bifunctor sig, Distinct n)
-  => NameBinderList VoidS n
-  -> NameMap n typ
-  -> TypedSOAS binder metavar sig l typ
-  -> TypedSOAS binder metavar sig r typ
-  -> [typ]
-  -> NameBinders n s
-  -> (NameBinder n l -> NameBinder n s)
-  -> (NameBinder n r -> NameBinder n s)
-  -> Constraint typ metavar binder sig
-unifyWithBinder forall_ types left right unifiedBinderTypes unifiedBinder leftRenaming rightRenaming
-  | Distinct <- assertDistinct unifiedBinder =
-      Constraint
-        (concatNameBinderLists (nameBindersList unifiedBinder) forall_)
-        (addNameBinders unifiedBinder unifiedBinderTypes types)
-        (liftRM scope' (fromNameBinderRenaming leftRenaming) left)
-        (liftRM scope' (fromNameBinderRenaming rightRenaming) right)
- where
-  scope' = extendScopePattern unifiedBinder (extendScopePattern forall_ emptyScope)
+instance Semigroup (Decomposition typ metavar binder sig) where
+  Failed <> _ = Failed
+  _ <> Failed = Failed
+  Flexible <> _ = Flexible
+  _ <> Flexible = Flexible
+  Decomposed left <> Decomposed right = Decomposed (left <> right)
 
-data UnifyNameBinders' (pattern_ :: S -> S -> Type) n l r where
+instance Monoid (Decomposition typ metavar binder sig) where
+  mempty = Failed
+
+data UnifyNameBinders' typ (pattern_ :: S -> S -> Type) n l r where
   RenameBothBinders'
     :: NameBinders n lr
+    -> (NameMap n typ -> NameMap lr typ)
     -> (NameBinder n l -> NameBinder n lr)
     -> (NameBinder n r -> NameBinder n lr)
-    -> UnifyNameBinders' pattern_ n l r
-  NotUnifiable' :: UnifyNameBinders' pattern_ n l r
-
-unifyNameBinders'
-  :: forall i l r pattern_
-   . (Distinct i)
-  => NameBinder i l
-  -> NameBinder i r
-  -> UnifyNameBinders' pattern_ i l r
-unifyNameBinders' l r = case unifyNameBinders l r of
-  NotUnifiable -> NotUnifiable'
-  RenameBothBinders b l r -> RenameBothBinders' b l r
-  RenameLeftNameBinder b l -> RenameBothBinders' b l id
-  RenameRightNameBinder b r -> RenameBothBinders' b id r
-  SameNameBinders b -> RenameBothBinders' b id id
+    -> UnifyNameBinders' typ pattern_ n l r
+  NotUnifiable' :: UnifyNameBinders' typ pattern_ n l r
 
 decompose
-  :: Metavariables Raw.Type metavar
-  -> Constraint Raw.Type metavar FoilPattern TermSig
-  -> Decomposition Raw.Type metavar FoilPattern TermSig
-decompose _ (Constraint forall_ types left right) = case (left, right) of
+  :: (HuetPreunifiable typ metavar binder sig)
+  => Constraint typ metavar binder sig
+  -> Decomposition typ metavar binder sig
+decompose (Constraint forall_ forallTypes left right) = case (left, right) of
   (MetaApp{}, _) -> Flexible
   (_, MetaApp{}) -> Flexible
-  (Var left', Var right') | left' == right' -> Decomposed []
-  ( Lam' (FoilAPattern leftBinder) leftType leftBody _
-    , Lam' (FoilAPattern rightBinder) rightType rightBody _
-    )
-      | leftType == rightType
-      , RenameBothBinders' unifiedBinder leftRenaming rightRenaming <-
-          unifyNameBinders' leftBinder rightBinder ->
-          Decomposed
-            [ unifyWithBinder forall_ types leftBody rightBody [leftType] unifiedBinder leftRenaming rightRenaming
-            ]
-  (App' leftFunction leftArgument _, App' rightFunction rightArgument _) ->
-    Decomposed
-      [ Constraint forall_ types leftFunction rightFunction
-      , Constraint forall_ types leftArgument rightArgument
-      ]
+  (Var leftName, Var rightName)
+    | leftName == rightName -> Decomposed []
+  (Node' leftTerm leftTyp, Node' rightTerm rightTyp)
+    | leftTyp == rightTyp -> case zipMatch2 leftTerm rightTerm of
+        Nothing -> Failed
+        Just term -> getConst (bitraverse goScoped go term)
+   where
+    go (left', right') = Const (Decomposed [Constraint forall_ forallTypes left' right'])
+    goScoped (ScopedAST leftBinder left', ScopedAST rightBinder right') =
+      case typedUnifyPatterns leftBinder rightBinder of
+        NotUnifiable' -> Const Failed
+        RenameBothBinders' unifiedBinder unifiedBinderTypes leftRenaming rightRenaming
+          | Distinct <- assertDistinct unifiedBinder ->
+              Const
+                ( Decomposed
+                    [ Constraint
+                        forall'
+                        (unifiedBinderTypes forallTypes)
+                        (liftRM scope' (fromNameBinderRenaming leftRenaming) left')
+                        (liftRM scope' (fromNameBinderRenaming rightRenaming) right')
+                    ]
+                )
+         where
+          forall' = concatNameBinderLists (nameBindersList unifiedBinder) forall_
+          scope' = extendScopePattern forall' emptyScope
   _ -> Failed
 
 decomposeRigidRigid
-  :: Metavariables Raw.Type metavar
-  -> Constraint Raw.Type metavar FoilPattern TermSig
-  -> Decomposition Raw.Type metavar FoilPattern TermSig
-decomposeRigidRigid metas constraint@(Constraint _ _ left right)
-  | isFlexible left = Flexible
-  | isFlexible right = Flexible
-  | otherwise = decompose metas constraint
+  :: (HuetPreunifiable typ metavar binder sig)
+  => Constraint typ metavar binder sig
+  -> Decomposition typ metavar binder sig
+decomposeRigidRigid constraint@(Constraint _ _ left right)
+  | isFlexible' left = Flexible
+  | isFlexible' right = Flexible
+  | otherwise = decompose constraint
 
 decomposeAll
   :: (Constraint typ metavar binder sig -> Decomposition typ metavar binder sig)
@@ -612,11 +619,12 @@ decomposeAll f (constraint : rest) = case f constraint of
   Decomposed constraints -> decomposeAll f (constraints <> rest)
 
 decomposeProblems
-  :: [Solution Raw.Type Raw.MetavarIdent FoilPattern TermSig]
-  -> [Solution Raw.Type Raw.MetavarIdent FoilPattern TermSig]
+  :: (HuetPreunifiable typ metavar binder sig)
+  => [Solution typ metavar binder sig]
+  -> [Solution typ metavar binder sig]
 decomposeProblems problems = do
   Solution metas constraints substitutions <- problems
-  constraints' <- maybeToList (decomposeAll (decomposeRigidRigid metas) (normalizeConstraint <$> constraints))
+  constraints' <- maybeToList (decomposeAll decomposeRigidRigid (normalizeConstraint <$> constraints))
   return (Solution metas constraints' substitutions)
 
 -- >>> (_M, t) = (Raw.MetavarIdent "M", Raw.Base (Raw.VarIdent "t"))
@@ -729,9 +737,10 @@ introductionRule metas (Constraint _ forallTypes left right) = go left <> go rig
           return (metas', Substitution meta parameters (Node' term returnType))
 
 step
-  :: Constraint Raw.Type Raw.MetavarIdent FoilPattern TermSig
-  -> Solution Raw.Type Raw.MetavarIdent FoilPattern TermSig
-  -> [Solution Raw.Type Raw.MetavarIdent FoilPattern TermSig]
+  :: (HuetPreunifiable typ metavar binder sig)
+  => Constraint typ metavar binder sig
+  -> Solution typ metavar binder sig
+  -> [Solution typ metavar binder sig]
 step constraint (Solution metas constraints substitutions) =
   decomposed <> solved
  where
@@ -747,7 +756,7 @@ step constraint (Solution metas constraints substitutions) =
   -- structurally. Try structural decomposition once we dealt with the semantics
   decomposed = do
     _ <- introductions
-    decomposition <- maybeToList (decomposeAll (decompose metas) [constraint])
+    decomposition <- maybeToList (decomposeAll decompose [constraint])
     return (Solution metas (decomposition <> constraints) substitutions)
 
 -- >>> t = Raw.Base (Raw.VarIdent "t")
@@ -768,8 +777,9 @@ step constraint (Solution metas constraints substitutions) =
 -- >>> take 5 $ solutionSubstitutions <$> solve [Problem metas [constraint]]
 -- [{ MetavarIdent "F"[x0, x1, x2] ↦ x1 x2, MetavarIdent "X"[x0, x1] ↦ X [x0, x1] },{ MetavarIdent "F"[x0, x1, x2] ↦ x1 (x0 M1 [x0, x1, x2] M2 [x0, x1, x2]), MetavarIdent "X"[x0, x1] ↦ λ x2 : t . λ x3 : t . x1 },{ MetavarIdent "F"[x0, x1, x2] ↦ x0 M0 [x0, x1, x2] M1 [x0, x1, x2], MetavarIdent "X"[x0, x1] ↦ λ x2 : t . λ x3 : t . x0 x1 },{ MetavarIdent "F"[x0, x1, x2] ↦ x0 M0 [x0, x1, x2] x2, MetavarIdent "X"[x0, x1] ↦ λ x2 : t . x0 },{ MetavarIdent "F"[x0, x1, x2] ↦ x0 M0 [x0, x1, x2] (x1 x2), MetavarIdent "X"[x0, x1] ↦ λ x2 : t . λ x3 : t . x3 }]
 solve
-  :: [Problem Raw.Type Raw.MetavarIdent FoilPattern TermSig]
-  -> [Solution Raw.Type Raw.MetavarIdent FoilPattern TermSig]
+  :: (HuetPreunifiable typ metavar binder sig)
+  => [Problem typ metavar binder sig]
+  -> [Solution typ metavar binder sig]
 solve = go . fmap withSubstitutions
  where
   go [] = []
