@@ -8,6 +8,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
@@ -96,7 +97,7 @@ lam' binderType scope returnType makeBody = withFresh scope $ \x ->
 type Sig typ metavar binder sig n =
   sig (TypedScopedSOAS binder metavar sig n typ) (TypedSOAS binder metavar sig n typ)
 
-class (Eq metavar) => HuetPreunifiable typ metavar binder sig where
+class (Eq typ, Eq metavar) => HuetPreunifiable typ metavar binder sig where
   -- | Bring the term to the normal form after possible substitutions.
   normalize
     :: (Distinct n)
@@ -124,6 +125,48 @@ class (Eq metavar) => HuetPreunifiable typ metavar binder sig where
     -- ^ The term to imitate
     -> Maybe (Metavariables typ metavar, Sig typ metavar binder sig substitution)
     -- ^ Constructed imitation of the term, possibly with fresh metavariables
+
+  -- | Construct possible projections from a term of the given type.
+  project
+    :: typ
+    -- ^ Type of the term
+    -> [ Metavariables typ metavar
+       -- \^ Metavariable context for the current branch; for metavariable creation
+       -> NameBinderList VoidS substitution
+       -- \^ Substitution parameters; for metavariable creation
+       -> NameMap substitution typ
+       -- \^ Types of substitution parameters; for metavariable creation
+       -> TypedSOAS binder metavar sig substitution typ
+       -- \^ Current projection term
+       -> (Metavariables typ metavar, TypedSOAS binder metavar sig substitution typ)
+       ]
+    -- ^ Possible projections from a term of the given type
+
+  -- | Produce substitutions for a metavariable in a head position of a term so
+  -- that the term eliminates.
+  introduce
+    :: ( metavar
+         -> ( forall substitution
+               . (Distinct substitution)
+              => Metavariables typ metavar
+              -- \^ Metavariable context for the current branch; for metavariable creation
+              -> NameBinderList VoidS substitution
+              -- \^ Substitution parameters; for metavariable creation
+              -> NameMap substitution typ
+              -- \^ Types of substitution parameters; for metavariable creation
+              -> [(Metavariables typ metavar, Sig typ metavar binder sig substitution)]
+            )
+         -> [(Metavariables typ metavar, Substitution typ metavar binder sig)]
+       )
+    -- ^ Once a metavariable in the head position is found, get its parameters and produce substitutions
+    -> NameMap rhs typ
+    -- ^ Types of variables in the scope of the current term
+    -> Sig typ metavar binder sig rhs
+    -- ^ The flexible term
+    -> typ
+    -- ^ Type annotation for the term
+    -> [(Metavariables typ metavar, Substitution typ metavar binder sig)]
+    -- ^ Possible substitutions for the flexible head
 
 -- >>> :set -XTypeApplications
 -- >>> t = Raw.Base (Raw.VarIdent "t")
@@ -157,6 +200,26 @@ imitate' metas parameters parameterTypes forallTypes node = case node of
   MetaApp{} -> Nothing
   Node' term typ -> fmap (fmap (`Node'` typ)) (imitate metas parameters parameterTypes forallTypes term)
 
+introduce'
+  :: (HuetPreunifiable typ metavar binder sig)
+  => ( metavar
+       -> ( forall substitution
+             . (Distinct substitution)
+            => Metavariables typ metavar
+            -> NameBinderList VoidS substitution
+            -> NameMap substitution typ
+            -> [(Metavariables typ metavar, Sig typ metavar binder sig substitution)]
+          )
+       -> [(Metavariables typ metavar, Substitution typ metavar binder sig)]
+     )
+  -> NameMap rhs typ
+  -> TypedSOAS binder metavar sig rhs typ
+  -> [(Metavariables typ metavar, Substitution typ metavar binder sig)]
+introduce' withMeta forallTypes node = case node of
+  Var{} -> []
+  MetaApp{} -> []
+  Node' term typ -> introduce withMeta forallTypes term typ
+
 instance HuetPreunifiable Raw.Type Raw.MetavarIdent FoilPattern TermSig where
   normalize scope node typ = case node of
     LamSig binderType (ScopedAST binder body)
@@ -185,6 +248,26 @@ instance HuetPreunifiable Raw.Type Raw.MetavarIdent FoilPattern TermSig where
       let (metas'', argument') = fresh parameters parameterTypes argumentType metas'
       return (metas'', AppSig function' argument')
     MetavarSig{} -> error "wtf"
+
+  project Raw.Base{} = []
+  project (Raw.Fun argumentType returnType) =
+    [ \metas parameters parameterTypes term ->
+        let (metas', argument) = fresh parameters parameterTypes argumentType metas
+         in (metas', App' term argument returnType)
+    ]
+
+  introduce withMeta forallTypes node typ = case node of
+    LamSig{} -> []
+    AppSig (MetaApp meta _ _) argument -> do
+      let argumentType = typeOf forallTypes argument
+      withMeta meta $ \metas parameters parameterTypes ->
+        withFresh (extendScopePattern parameters emptyScope) $ \binder -> do
+          let parameters' = push binder parameters
+          let parameterTypes' = addNameBinder binder argumentType parameterTypes
+          let (metas', body') = fresh parameters' parameterTypes' typ metas
+          return (metas', LamSig argumentType (ScopedAST (FoilAPattern binder) body'))
+    AppSig function _ -> introduce' withMeta forallTypes function
+    MetavarSig{} -> []
 
 data Stream a = Stream a (Stream a) deriving (Eq, Functor)
 
@@ -538,8 +621,8 @@ decomposeProblems problems = do
 
 -- >>> (_M, t) = (Raw.MetavarIdent "M", Raw.Base (Raw.VarIdent "t"))
 -- >>> metas = Metavariables (MetaTypes [(_M, MetaType [] t)]) (freshMetavariables someMetas)
--- >>> snd <$> imitate metas (Constraint NameBinderListEmpty emptyNameMap (MetaApp _M [] t) (lam' t emptyScope t $ \x _ -> Var x))
--- Just M[] ↦ λ x0 : t . M0 [x0]
+-- >>> snd <$> imitationRule metas (Constraint NameBinderListEmpty emptyNameMap (MetaApp _M [] t) (lam' t emptyScope t $ \x _ -> Var x))
+-- Just MetavarIdent "M"[] ↦ λ x0 : t . M0 [x0]
 imitationRule
   :: (HuetPreunifiable typ metavar binder sig)
   => Metavariables typ metavar
@@ -557,47 +640,49 @@ imitationRule metas (Constraint _ forallTypes left right) = case (left, right) o
         (metas', imitation) <- imitate' metas parameters parameterTypes' forallTypes rhs
         return (metas', Substitution meta parameters imitation)
 
+-- >>> :set -XTypeApplications
 -- >>> (t, u, v) = (Raw.Base (Raw.VarIdent "t"), Raw.Base (Raw.VarIdent "u"), Raw.Base (Raw.VarIdent "v"))
--- >>> parameterTypes = [v]
--- >>> withFresh emptyScope $ \x -> show . snd <$> reduce someMetas (NameBinderListCons x NameBinderListEmpty) parameterTypes t t (Var (nameOf x))
+-- >>> parameters x = NameBinderListCons x NameBinderListEmpty
+-- >>> parameterTypes x typ = addNameBinder x typ emptyNameMap
+-- >>> project'' = project' @_ @Raw.MetavarIdent @FoilPattern @TermSig
+-- >>> withFresh emptyScope $ \x -> show . snd <$> project'' someMetas (parameters x) (parameterTypes x t) t (Var (nameOf x))
 -- ["x0"]
--- >>> withFresh emptyScope $ \x -> show . snd <$> reduce someMetas (NameBinderListCons x NameBinderListEmpty) parameterTypes t u (Var (nameOf x))
+-- >>> withFresh emptyScope $ \x -> show . snd <$> project'' someMetas (parameters x) (parameterTypes x u) t (Var (nameOf x))
 -- []
--- >>> withFresh emptyScope $ \x -> show . snd <$> reduce someMetas (NameBinderListCons x NameBinderListEmpty) parameterTypes t (Raw.Fun u t) (Var (nameOf x))
+-- >>> withFresh emptyScope $ \x -> show . snd <$> project'' someMetas (parameters x) (parameterTypes x (Raw.Fun u t)) t (Var (nameOf x))
 -- ["x0 M0 [x0]"]
-reduce
-  :: Metavariables Raw.Type metavar
+project'
+  :: (HuetPreunifiable typ metavar binder sig)
+  => Metavariables typ metavar
   -> NameBinderList VoidS n
-  -> [Raw.Type]
-  -> Raw.Type
-  -> Raw.Type
-  -> MetaTerm metavar n Raw.Type
-  -> [(Metavariables Raw.Type metavar, MetaTerm metavar n Raw.Type)]
-reduce metas parameters parameterTypes expectedType actualType term =
-  reflexive <> typed
+  -> NameMap n typ
+  -> typ
+  -> TypedSOAS binder metavar sig n typ
+  -> [(Metavariables typ metavar, TypedSOAS binder metavar sig n typ)]
+project' metas parameters parameterTypes expectedType term = reflexive <> typed
  where
+  actualType = typeOf parameterTypes term
   reflexive
     | expectedType == actualType = [(metas, term)]
     | otherwise = []
-  typed = case actualType of
-    Raw.Base{} -> []
-    Raw.Fun argumentType returnType ->
-      reduce metas' parameters parameterTypes expectedType returnType (App' term argument returnType)
-     where
-      (metas', argument) = fresh' (MetaType parameterTypes argumentType) parameters metas
+  typed = do
+    makeProjection <- project actualType
+    let (metas', projection) = makeProjection metas parameters parameterTypes term
+    project' metas' parameters parameterTypes expectedType projection
 
+-- >>> :set -XTypeApplications
 -- >>> (t, u) = (Raw.Base (Raw.VarIdent "t"), Raw.Base (Raw.VarIdent "u"))
 -- >>> _M = Raw.MetavarIdent "M"
 -- >>> (xType, yType, zType) = (Raw.Fun t (Raw.Fun u t), Raw.Fun t u, t)
 -- >>> metas = Metavariables (MetaTypes [(_M, MetaType [xType, yType, zType] t)]) (freshMetavariables someMetas)
--- >>> fmap snd $ withVar emptyScope $ \x xScope -> withVar xScope $ \y yScope -> withVar yScope $ \z zScope -> project metas (Constraint (NameBinderListCons x (NameBinderListCons y (NameBinderListCons z NameBinderListEmpty))) (addNameBinder z zType (addNameBinder y yType (addNameBinder x xType emptyNameMap))) (MetaApp _M [Var (sink (nameOf x)), Var (sink (nameOf y)), Var (nameOf z)] t) (Var (nameOf z)))
--- [M[x0,x1,x2] ↦ x0 M0 [x0, x1, x2] M1 [x0, x1, x2],M[x0,x1,x2] ↦ x2]
-project
-  :: (Eq metavar)
-  => Metavariables Raw.Type metavar
-  -> Constraint Raw.Type metavar FoilPattern TermSig
-  -> [(Metavariables Raw.Type metavar, Substitution Raw.Type metavar FoilPattern TermSig)]
-project metas (Constraint _ _ left right) = case (left, right) of
+-- >>> fmap snd $ withVar emptyScope $ \x xScope -> withVar xScope $ \y yScope -> withVar yScope $ \z zScope -> projectionRule @_ @_ @FoilPattern @TermSig metas (Constraint (NameBinderListCons x (NameBinderListCons y (NameBinderListCons z NameBinderListEmpty))) (addNameBinder z zType (addNameBinder y yType (addNameBinder x xType emptyNameMap))) (MetaApp _M [Var (sink (nameOf x)), Var (sink (nameOf y)), Var (nameOf z)] t) (Var (nameOf z)))
+-- [MetavarIdent "M"[x0, x1, x2] ↦ x0 M0 [x0, x1, x2] M1 [x0, x1, x2],MetavarIdent "M"[x0, x1, x2] ↦ x2]
+projectionRule
+  :: (HuetPreunifiable typ metavar binder sig)
+  => Metavariables typ metavar
+  -> Constraint typ metavar binder sig
+  -> [(Metavariables typ metavar, Substitution typ metavar binder sig)]
+projectionRule metas (Constraint _ _ left right) = case (left, right) of
   (MetaApp{}, MetaApp{}) -> []
   (MetaApp meta _ _, _) -> go meta
   (_, MetaApp meta _ _) -> go meta
@@ -605,35 +690,43 @@ project metas (Constraint _ _ left right) = case (left, right) of
  where
   go meta = do
     MetaType parameterTypes rhsType <- maybeToList (lookupMetaType meta (metavariables metas))
-    withFreshNameBinderList parameterTypes emptyScope emptyNameMap NameBinderListEmpty $ \_ _ parameters -> do
-      (parameter, parameterType) <- zip (namesOfPattern parameters) parameterTypes
-      (metas', projection) <- reduce metas parameters parameterTypes rhsType parameterType (Var parameter)
-      return (metas', Substitution meta parameters projection)
+    withFreshNameBinderList parameterTypes emptyScope emptyNameMap NameBinderListEmpty $
+      \_ parameterTypes' parameters -> do
+        parameter <- namesOfPattern parameters
+        (metas', projection) <- project' metas parameters parameterTypes' rhsType (Var parameter)
+        return (metas', Substitution meta parameters projection)
 
 -- >>> (_M, _X, t) = (Raw.MetavarIdent "M", Raw.MetavarIdent "X", Raw.Base (Raw.VarIdent "t"))
 -- >>> metas = Metavariables (MetaTypes [(_M, MetaType [] (Raw.Fun t t))]) (freshMetavariables someMetas)
 -- >>> fmap snd $ withFresh emptyScope $ \a -> introduce metas (Constraint (NameBinderListCons a NameBinderListEmpty) (addNameBinder a t emptyNameMap) (App' (MetaApp _M [] (Raw.Fun t t)) (MetaApp _X [] t) t) (Var (nameOf a)))
 -- [M[] ↦ λ x0 : t . M0 [x0]]
-introduce
-  :: (Eq metavar)
-  => Metavariables Raw.Type metavar
-  -> Constraint Raw.Type metavar FoilPattern TermSig
-  -> [(Metavariables Raw.Type metavar, Substitution Raw.Type metavar FoilPattern TermSig)]
-introduce metas (Constraint _ _ left right) = go left <> go right
+introductionRule
+  :: forall typ metavar binder sig
+   . (HuetPreunifiable typ metavar binder sig)
+  => Metavariables typ metavar
+  -> Constraint typ metavar binder sig
+  -> [(Metavariables typ metavar, Substitution typ metavar binder sig)]
+introductionRule metas (Constraint _ forallTypes left right) = go left <> go right
  where
-  go Var{} = []
-  go Lam'{} = []
-  go (App' (MetaApp meta _ _) _ _) = maybeToList $ do
-    MetaType parameterTypes (Raw.Fun binderType returnType) <- lookupMetaType meta (metavariables metas)
-    withFreshNameBinderList parameterTypes emptyScope emptyNameMap NameBinderListEmpty $ \scope _ parameters ->
-      withFresh scope $ \binder ->
-        let metaType = MetaType (parameterTypes <> [binderType]) returnType
-            (metas', body) = fresh' metaType (push binder parameters) metas
-            substitution = Lam' (FoilAPattern binder) binderType body (Raw.Fun binderType returnType)
-         in return (metas', Substitution meta parameters substitution)
-  go (App' function _ _) = go function
-  go MetaApp{} = []
-  go MetaVar'{} = error "wtf"
+  go = introduce' withMeta forallTypes
+
+  withMeta
+    :: metavar
+    -> ( forall substitution
+          . (Distinct substitution)
+         => Metavariables typ metavar
+         -> NameBinderList VoidS substitution
+         -> NameMap substitution typ
+         -> [(Metavariables typ metavar, Sig typ metavar binder sig substitution)]
+       )
+    -> [(Metavariables typ metavar, Substitution typ metavar binder sig)]
+  withMeta meta cont = case lookupMetaType meta (metavariables metas) of
+    Nothing -> []
+    Just (MetaType parameterTypes returnType) ->
+      withFreshNameBinderList parameterTypes emptyScope emptyNameMap NameBinderListEmpty $
+        \_ parameterTypes parameters -> do
+          (metas', term) <- cont metas parameters parameterTypes
+          return (metas', Substitution meta parameters (Node' term returnType))
 
 step
   :: Constraint Raw.Type Raw.MetavarIdent FoilPattern TermSig
@@ -643,8 +736,8 @@ step constraint (Solution metas constraints substitutions) =
   decomposed <> solved
  where
   imitations = imitationRule metas constraint
-  projections = project metas constraint
-  introductions = introduce metas constraint
+  projections = projectionRule metas constraint
+  introductions = introductionRule metas constraint
   solved = do
     (metas', substitution) <- maybeToList imitations <> projections <> introductions
     let constraints' = applySubstitutionInConstraint substitution <$> (constraint : constraints)
