@@ -29,11 +29,10 @@ ConstructorId literals are recognized by the regular expression
 The set of reserved words is the set of terminals appearing in the grammar. Those reserved words that consist of non-letter characters are called symbols, and they are treated in a different way from those that are similar to identifiers. The lexer follows rules familiar from languages like Haskell, C, and Java, including longest match and spacing conventions.
 
 The reserved words used in FCUSyntax are the following:
-
-There are no reserved words in FCUSyntax.
+  | ``λ`` |  |  |
 
 The symbols used in FCUSyntax are the following:
-  | :@ | :.: | ( | )
+  | . | ( | ) |
 
 ===Comments===
 Single-line comments begin with --.There are no multiple-line comments in the grammar.
@@ -47,8 +46,8 @@ All other symbols are terminals.
   | //Term// | -> | //MetavarId//
   |  |  **|**  | //Id//
   |  |  **|**  | //ConstructorId//
-  |  |  **|**  | //Term// ``:@`` //Term//
-  |  |  **|**  | //Pattern// ``:.:`` //ScopedTerm//
+  |  |  **|**  | //Term// //Term//
+  |  |  **|**  | ``λ`` //Pattern// ``.`` //ScopedTerm//
   |  |  **|**  | ``(`` //Term// ``)``
   | //Pattern// | -> | //Id//
   | //ScopedTerm// | -> | //Term//

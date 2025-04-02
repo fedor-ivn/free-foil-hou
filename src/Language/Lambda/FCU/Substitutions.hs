@@ -1,6 +1,6 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Language.Lambda.FCU.Substitutions where
 
@@ -26,9 +26,9 @@ instance Show Substitutions where
 betaReduceOnce :: Raw.Term -> Raw.Term
 betaReduceOnce term =
   case term of
-    Raw.AppTerm (Raw.AbsTerm (Raw.Id x) s) t -> betaReduceOnce (devar (Substitutions [(x, t)]) s)
+    Raw.AppTerm (Raw.AbsTerm (Raw.PatternVar (Raw.Id x)) (Raw.ScopedTerm s)) t -> betaReduceOnce (devar (Substitutions [(x, t)]) s)
     Raw.AppTerm s t -> Raw.AppTerm (betaReduceOnce s) (betaReduceOnce t)
-    Raw.AbsTerm x s -> Raw.AbsTerm x (betaReduceOnce s)
+    Raw.AbsTerm x (Raw.ScopedTerm s) -> Raw.AbsTerm x (Raw.ScopedTerm (betaReduceOnce s))
     _ -> term
 
 -- >>> betaReduceOnce (" ( x :.: y ) :@ z")
@@ -53,7 +53,7 @@ betaReduce term =
 applySubstitutions :: Substitutions -> Raw.Term -> Raw.Term
 applySubstitutions (Substitutions th) s = case s of
   Raw.AppTerm s1 s2 -> Raw.AppTerm (applySubstitutions (Substitutions th) s1) (applySubstitutions (Substitutions th) s2)
-  Raw.AbsTerm x s1 -> Raw.AbsTerm x (applySubstitutions (Substitutions th) s1)
+  Raw.AbsTerm x (Raw.ScopedTerm s1) -> Raw.AbsTerm x (Raw.ScopedTerm (applySubstitutions (Substitutions th) s1))
   Raw.OTerm (Raw.Id x) -> case lookup x th of
     Just t -> t
     Nothing -> Raw.OTerm (Raw.Id x)
@@ -69,19 +69,19 @@ devar :: Substitutions -> Raw.Term -> Raw.Term
 devar th s = betaReduce (applySubstitutions th s)
 
 -- >>> devar (Substitutions [("x", "y")]) ("x")
--- y
+-- OTerm (Id "y")
 
--- >>> devar (Substitutions[("x", "y")]) ("x :@ z :@ x")
--- (y (z y))
+-- >>> devar (Substitutions[("x", "y")]) ("x z x")
+-- AppTerm (OTerm (Id "y")) (AppTerm (OTerm (Id "z")) (OTerm (Id "y")))
 
 rename :: Raw.Id -> Raw.Id -> Raw.Term -> Raw.Term
 rename (Raw.Id x) y s = devar (Substitutions [(x, Raw.OTerm y)]) s
 
--- >>> rename "x" "y" "x :@ z"
--- (y z)
+-- >>> rename "x" "y" "x z"
+-- AppTerm (OTerm (Id "y")) (OTerm (Id "z"))
 
--- >>> rename "x" "y" "x :.: z"
--- λx . z
+-- >>> rename "x" "y" "λ x . z"
+-- AbsTerm (PatternVar (Id "x")) (ScopedTerm (OTerm (Id "z")))
 
 mkvars :: [Raw.Term] -> [Raw.Id]
 mkvars sn = [Raw.Id ("z" ++ show i) | i <- [1 .. length sn]]
