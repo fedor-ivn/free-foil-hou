@@ -72,10 +72,10 @@ deriveGenericK ''TermSig
 -- instance ZipMatchK Raw.BNFC'Position where zipMatchWithK = zipMatchViaChooseLeft
 
 -- | Generic 'ZipMatchK' instance.
-instance ZipMatchK TermSig
+-- instance ZipMatchK TermSig
 
-instance ZipMatch TermSig where
-  zipMatch = genericZipMatch2
+-- instance ZipMatch TermSig where
+--   zipMatch = genericZipMatch2
 
 -- -- * User-defined code
 
