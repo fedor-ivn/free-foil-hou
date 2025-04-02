@@ -9,8 +9,8 @@ token ConstructorId (upper lower*) ;         -- Uppercase letter followed by low
 WTerm.    Term ::= MetavarId ;
 OTerm.    Term ::= Id ;
 CTerm. Term ::= ConstructorId ;
-AppTerm.     Term ::= Term ":@" Term ;
-AbsTerm.    Term ::= Pattern ":.:" ScopedTerm ;
+AppTerm.    Term ::= Term Term ;
+AbsTerm.    Term ::= "λ" Pattern "." ScopedTerm ;
 
 PatternVar. Pattern ::= Id ;
 

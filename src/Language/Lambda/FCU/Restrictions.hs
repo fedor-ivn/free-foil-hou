@@ -1,5 +1,5 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Language.Lambda.FCU.Restrictions where
 
@@ -11,23 +11,22 @@ isRTerm (Raw.OTerm _) = True
 isRTerm (Raw.AppTerm (Raw.CTerm _) t) = isRTerm t
 isRTerm _ = False
 
--- >>> argumentRestriction ["X :@ a :@ b :@ c", "X :@ a :@ b :@ c"]
+-- >>> argumentRestriction ["X a b c", "X a b c"]
 -- False
 
--- >>> argumentRestriction ["Cons :@ c", "a"]
+-- >>> argumentRestriction ["Cons c", "a"]
 -- True
 
 argumentRestriction :: [Raw.Term] -> Bool
 argumentRestriction tn = and [isRTerm t | t <- tn]
 
-
--- >>> localRestriction ["X :@ a :@ b :@ c", "X :@ a :@ b :@ c"]
+-- >>> localRestriction ["X a b c", "X a b c"]
 -- False
 
--- >>> localRestriction ["X :@ a :@ c", "a"]
+-- >>> localRestriction ["X a c", "a"]
 -- False
 
--- >>> localRestriction ["X :@ a :@ b1 :@ c", "X :@ a :@ b2 :@ c"]
+-- >>> localRestriction ["X a b1 c", "X a b2 c"]
 -- True
 
 localRestriction :: [Raw.Term] -> Bool
@@ -44,16 +43,16 @@ localRestriction tn =
 
     checkSubterm :: Raw.Term -> Raw.Term -> Bool
     checkSubterm sub (Raw.AppTerm t1 t2) = checkSubterm sub t1 || checkSubterm sub t2
-    checkSubterm sub (Raw.AbsTerm x t) = checkSubterm sub t
+    checkSubterm sub (Raw.AbsTerm x (Raw.ScopedTerm t)) = checkSubterm sub t
     checkSubterm sub t = sub == t
 
--- >>> globalRestriction ["Cons :@ a :@ b :@ c"] ["Cons :@ a :@ b :@ c"]
+-- >>> globalRestriction ["Cons a b c"] ["Cons a b c"]
 -- True
 
--- >>> globalRestriction ["Cons :@ a :@ c"] ["a"]
+-- >>> globalRestriction ["Cons a c"] ["a"]
 -- False
 
--- >>> globalRestriction ["Cons :@ a :@ b1 :@ c"] ["Cons :@ a :@ b2 :@ c"]
+-- >>> globalRestriction ["Cons a b1 c"] ["Cons a b2 c"]
 -- True
 
 -- >>> globalRestriction ["a", "b1", "c"] ["c", "b2", "a"]
@@ -72,6 +71,5 @@ globalRestriction sn tm =
 
     checkSubterm :: Raw.Term -> Raw.Term -> Bool
     checkSubterm sub (Raw.AppTerm t1 t2) = checkSubterm sub t1 || checkSubterm sub t2
-    checkSubterm sub (Raw.AbsTerm x t) = checkSubterm sub t
+    checkSubterm sub (Raw.AbsTerm x (Raw.ScopedTerm t)) = checkSubterm sub t
     checkSubterm sub t = sub == t
-

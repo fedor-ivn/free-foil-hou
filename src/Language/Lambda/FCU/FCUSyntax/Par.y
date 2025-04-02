@@ -29,8 +29,8 @@ import Language.Lambda.FCU.FCUSyntax.Lex
 %token
   '('             { PT _ (TS _ 1)             }
   ')'             { PT _ (TS _ 2)             }
-  ':.:'           { PT _ (TS _ 3)             }
-  ':@'            { PT _ (TS _ 4)             }
+  '.'             { PT _ (TS _ 3)             }
+  'λ'             { PT _ (TS _ 4)             }
   L_Id            { PT _ (T_Id $$)            }
   L_MetavarId     { PT _ (T_MetavarId $$)     }
   L_ConstructorId { PT _ (T_ConstructorId $$) }
@@ -51,8 +51,8 @@ Term
   : MetavarId { Language.Lambda.FCU.FCUSyntax.Abs.WTerm $1 }
   | Id { Language.Lambda.FCU.FCUSyntax.Abs.OTerm $1 }
   | ConstructorId { Language.Lambda.FCU.FCUSyntax.Abs.CTerm $1 }
-  | Term ':@' Term { Language.Lambda.FCU.FCUSyntax.Abs.AppTerm $1 $3 }
-  | Pattern ':.:' ScopedTerm { Language.Lambda.FCU.FCUSyntax.Abs.AbsTerm $1 $3 }
+  | Term Term { Language.Lambda.FCU.FCUSyntax.Abs.AppTerm $1 $2 }
+  | 'λ' Pattern '.' ScopedTerm { Language.Lambda.FCU.FCUSyntax.Abs.AbsTerm $2 $4 }
   | '(' Term ')' { $2 }
 
 Pattern :: { Language.Lambda.FCU.FCUSyntax.Abs.Pattern }

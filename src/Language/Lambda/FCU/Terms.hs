@@ -1,15 +1,15 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Language.Lambda.FCU.Terms where
 
-import Data.String
+import Data.List (elemIndex)
+import Data.Maybe (maybeToList)
+import Data.String (IsString (..))
 import Language.Lambda.FCU.FCUSyntax.Abs qualified as Raw
 import Language.Lambda.FCU.FCUSyntax.ErrM qualified as Raw
 import Language.Lambda.FCU.FCUSyntax.Par qualified as Raw
-import Data.Maybe
-import Data.List
 
 showRaw :: Raw.Term -> String
 showRaw term = case term of
@@ -17,25 +17,20 @@ showRaw term = case term of
   Raw.OTerm (Raw.Id x) -> x
   Raw.CTerm (Raw.ConstructorId x) -> x
   Raw.AppTerm t1 t2 -> addParens $ showRaw t1 ++ " " ++ showRaw t2
-  Raw.AbsTerm (Raw.Id x) t -> "λ" ++ x ++ " . " ++ showRaw t
+  Raw.AbsTerm (Raw.PatternVar (Raw.Id x)) (Raw.ScopedTerm t) -> "λ" ++ x ++ " . " ++ showRaw t
   where
     addParens s = "(" ++ s ++ ")"
 
-instance Show Raw.Term where
-  show :: Raw.Term -> String
-  show = showRaw
-
 instance IsString Raw.Term where
-  fromString :: String -> Raw.Term
   fromString s = case Raw.pTerm . Raw.myLexer $ s of
     Raw.Ok term -> term
     Raw.Bad err -> error $ "Parse error: " ++ err
 
 -- >>> Raw.AppTerm (Raw.AppTerm (Raw.CTerm (Raw.ConstructorId "Cons")) (Raw.OTerm (Raw.Id "x"))) (Raw.OTerm (Raw.Id "y"))
--- ((Cons x) y)
+-- AppTerm (AppTerm (CTerm (ConstructorId "Cons")) (OTerm (Id "x"))) (OTerm (Id "y"))
 
 -- >>> "X" :: Raw.Term
--- X
+-- WTerm (MetavarId "X")
 
 subset :: [Raw.Term] -> [Raw.Term] -> Bool
 subset sm tn = all (`elem` tn) sm
@@ -59,8 +54,8 @@ permutate zs as bs = [zs !! i | b <- bs, i <- maybeToList $ elemIndex b as]
 -- >>> permutate ["z1", "z2", "z3", "z4"] ["a", "b", "c"] ["b", "a", "d", "c"]
 -- [Id "z2",Id "z1",Id "z3"]
 
-newMetaVarId :: Raw.MetavarId -> String
-newMetaVarId (Raw.MetavarId s) = s ++ "'"
+newMetaVarId :: Raw.MetavarId -> Raw.MetavarId
+newMetaVarId (Raw.MetavarId s) = Raw.MetavarId (s ++ "'")
 
 -- >>> newMetaVarId (Raw.MetavarId "X")
--- "X'"
+-- MetavarId "X'"

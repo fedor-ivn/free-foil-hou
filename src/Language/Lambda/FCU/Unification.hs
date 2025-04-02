@@ -1,13 +1,11 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Language.Lambda.FCU.Unification where
 
-import GHC.Generics qualified as Raw
 import Language.Lambda.FCU.Discharge (discharge)
 import Language.Lambda.FCU.FCUSyntax.Abs qualified as Raw
-import Language.Lambda.FCU.Prune
-import Language.Lambda.FCU.Prune (abst, prune)
+import Language.Lambda.FCU.Prune ( abst, hnf, eqsel, prune )
 import Language.Lambda.FCU.Restrictions
   ( argumentRestriction,
     globalRestriction,
@@ -15,34 +13,53 @@ import Language.Lambda.FCU.Restrictions
   )
 import Language.Lambda.FCU.Strip (strip, unstrip)
 import Language.Lambda.FCU.Substitutions (Substitutions (Substitutions), combineSubstitutions, devar, mkvars, rename)
-import Language.Lambda.FCU.Terms (newMetaVarId, permutate)
-
+import Language.Lambda.FCU.Terms (newMetaVarId, permutate, showRaw)
 
 -- >>> unify [] (Substitutions [], ("x", "x"))
 -- []
 
 -- >>> unify [] (Substitutions [], ("x", "y"))
--- x and y are not unifiable
+-- OTerm (Id "x") and OTerm (Id "y") are not unifiable
 
--- >>> unify [] (Substitutions [], ("l1 :.: ( x :.: l1 )", "l2 :.: ( x :.: l2)" ))
+-- >>> unify [] (Substitutions [], ("λ l1 . ( λ x . l1 )", "λ l2 . ( λ x . l2)" ))
 -- []
 
--- >>> unify [] (Substitutions [], ("( Cons :@ y ) :@ z", "( Cons :@ y ) :@ z"))
+-- >>> unify [] (Substitutions [], ("( Cons y ) z", "( Cons y ) z"))
 -- []
 
--- >>> unify [] (Substitutions [], ("( Cons :@ y ) :@ z", "( Cons :@ y ) :@ w"))
--- z and w are not unifiable
+-- >>> unify [] (Substitutions [], ("( Cons y ) z", "( Cons y ) w"))
+-- OTerm (Id "z") and OTerm (Id "w") are not unifiable
 
--- >>> unify [] (Substitutions [], ("X :@ y", "Cons :@ x"))
--- [("X" |-> λz1 . (Cons x))]
+-- >>> unify [] (Substitutions [], ("X y", "Cons x"))
+-- [("X" |-> AbsTerm (PatternVar (Id "z1")) (ScopedTerm (AppTerm (CTerm (ConstructorId "Cons")) (OTerm (Id "x")))))]
 
+-- >>> unify [] (Substitutions [], ("X y", "(Cons x) y"))
+-- [("X" |-> AbsTerm (PatternVar (Id "z1")) (ScopedTerm (AppTerm (AppTerm (CTerm (ConstructorId "Cons")) (OTerm (Id "x"))) (OTerm (Id "z1")))))]
+
+-- >>> unify [] (Substitutions [], ("(X y) x", "(Cons x) ((Cons z) x)"))
+-- [("X" |-> AbsTerm (PatternVar (Id "z1")) (ScopedTerm (AbsTerm (PatternVar (Id "z2")) (ScopedTerm (AppTerm (AppTerm (CTerm (ConstructorId "Cons")) (OTerm (Id "z2"))) (AppTerm (AppTerm (CTerm (ConstructorId "Cons")) (OTerm (Id "z"))) (OTerm (Id "z2"))))))))]
+
+-- >>> unify [] (Substitutions [], ("λ l1 . (λ l2 . ((X (Fst l1)) (Fst (Snd l2))))", "λ l1 . (λ l2 . (Snd ((Y (Fst l2)) (Fst l1))))"))
+-- [("Y" |-> AbsTerm (PatternVar (Id "z1")) (ScopedTerm (AbsTerm (PatternVar (Id "z2")) (ScopedTerm (AppTerm (WTerm (MetavarId "Y'")) (OTerm (Id "z2"))))))) ("X" |-> AbsTerm (PatternVar (Id "z1")) (ScopedTerm (AbsTerm (PatternVar (Id "z2")) (ScopedTerm (AppTerm (CTerm (ConstructorId "Snd")) (AppTerm (WTerm (MetavarId "Y'")) (OTerm (Id "z1"))))))))]
+
+-- >>> unify [] (Substitutions [], ("(X a) c", "((X a) b) c"))
+-- Different argument lists lengths in (4) rule
+
+-- >>> unify [] (Substitutions [], ("((X a) b1) c", "((X a) b2) c"))
+-- [("X" |-> AbsTerm (PatternVar (Id "z1")) (ScopedTerm (AbsTerm (PatternVar (Id "z2")) (ScopedTerm (AbsTerm (PatternVar (Id "z3")) (ScopedTerm (AppTerm (AppTerm (WTerm (MetavarId "X'")) (OTerm (Id "z1"))) (OTerm (Id "z3")))))))))]
+
+-- >>> unify [] (Substitutions [], ("((X a) b1) c", "((Y c) b2) a"))
+-- Global restriction fail at flexflex case
+
+-- >>> unify [] (Substitutions [], ("((X a) b1) c", "((Y (Cons c)) b2) a"))
+-- Global restriction fail at flexflex case
 
 unify :: [(Char, Raw.Id)] -> (Substitutions, (Raw.Term, Raw.Term)) -> Substitutions
 unify bvs (th, (s, t)) = case (devar th s, devar th t) of
-  (Raw.AbsTerm x s, Raw.AbsTerm x' t) ->
-    let renamed = if x == x' then t else rename x' x t
+  (Raw.AbsTerm (Raw.PatternVar x) (Raw.ScopedTerm sId), Raw.AbsTerm (Raw.PatternVar x') (Raw.ScopedTerm tId)) ->
+    let renamed = if x == x' then tId else rename x' x tId
         newBvs = ('B', x) : bvs
-     in unify newBvs (th, (s, renamed))
+     in unify newBvs (th, (sId, renamed))
   (s', t') -> cases bvs (th, (s', t'))
 
 cases :: [(Char, Raw.Id)] -> (Substitutions, (Raw.Term, Raw.Term)) -> Substitutions
@@ -55,18 +72,18 @@ cases bvs (th, (s, t)) = case (strip s, strip t) of
 
 caseRigidRigid :: [(Char, Raw.Id)] -> (Raw.Term, [Raw.Term], Raw.Term, [Raw.Term], Substitutions) -> Substitutions
 caseRigidRigid bvs (a, sn, b, tm, th) = case (a, b) of
-  (Raw.OTerm x, Raw.OTerm y) -> applicableCase bvs (x, y, sn, tm, th)
-  (Raw.CTerm (Raw.ConstructorId x), Raw.CTerm (Raw.ConstructorId y)) -> applicableCase bvs (Raw.Id x, Raw.Id y, sn, tm, th)
+  (Raw.OTerm x, Raw.OTerm y) -> applicableCase (x, y)
+  (Raw.CTerm (Raw.ConstructorId x), Raw.CTerm (Raw.ConstructorId y)) -> applicableCase (Raw.Id x, Raw.Id y)
   _ -> error (show a ++ " and " ++ show b ++ " are not unifiable")
   where
-    applicableCase :: [(Char, Raw.Id)] -> (Raw.Id, Raw.Id, [Raw.Term], [Raw.Term], Substitutions) -> Substitutions
-    applicableCase bvs (x, y, sn, tm, th) =
+    applicableCase :: (Raw.Id, Raw.Id) -> Substitutions
+    applicableCase (x, y) =
       if x == y && length sn == length tm
         then foldl (\th' (s, t) -> unify bvs (th', (s, t))) th (zip sn tm)
         else error "Different function heads or argument lists lengths in (2) rule"
 
 caseFlexRigid :: [(Char, Raw.Id)] -> (Raw.MetavarId, [Raw.Term], Raw.Term, Substitutions) -> Substitutions
-caseFlexRigid bvs ((Raw.MetavarId _F), tn, s, rho) -- s is rigid
+caseFlexRigid _ ((Raw.MetavarId _F), tn, s, rho) -- s is rigid
   | not (argumentRestriction tn) = error "Argument restriction fail at flexrigid case"
   | not (localRestriction tn) = error "Local restriction fail at flexrigid case"
   | otherwise = combineSubstitutions (combineSubstitutions rho pruningResult) newMetavarSubs
@@ -85,16 +102,16 @@ caseFlexFlex bvs (_F, sn, _G, tm, th)
   | otherwise = caseFlexFlexDiff bvs (_F, _G, sn, tm, th)
 
 caseFlexFlexSame :: [(Char, Raw.Id)] -> (Raw.MetavarId, [Raw.Term], [Raw.Term], Substitutions) -> Substitutions
-caseFlexFlexSame bvs ((Raw.MetavarId _F), sn, tn, th)
+caseFlexFlexSame _ ((Raw.MetavarId _F), sn, tn, th)
   | length sn /= length tn = error "Different argument lists lengths in (4) rule"
   | sn == tn = error "Same argument lists in (4) rule"
   | otherwise = combineSubstitutions th newMetavarSubs
   where
     vsm = mkvars sn
-    newMetavarSubs = Substitutions [(_F, hnf (vsm, _F ++ "'", eqsel vsm tn sn))]
+    newMetavarSubs = Substitutions [(_F, hnf (vsm, Raw.WTerm (newMetaVarId (Raw.MetavarId _F)), eqsel vsm tn sn))]
 
 caseFlexFlexDiff :: [(Char, Raw.Id)] -> (Raw.MetavarId, Raw.MetavarId, [Raw.Term], [Raw.Term], Substitutions) -> Substitutions
-caseFlexFlexDiff bvs (_F, _G, sn, tm, th)
+caseFlexFlexDiff _ (_F, _G, sn, tm, th)
   | not (globalRestriction sn tm) = error "Global restriction fail at flexflex case"
   | otherwise = combineSubstitutions (combineSubstitutions th pruningResultLeft) (combineSubstitutions pruningResultRight metavarSubs)
   where
@@ -105,4 +122,5 @@ caseFlexFlexDiff bvs (_F, _G, sn, tm, th)
     tmnew = strip (devar pruningResultLeft t)
     snnew = strip (devar pruningResultRight s)
     vsm = mkvars (snd tmnew)
-    metavarSubs = Substitutions [(newMetaVarId _G, hnf (vsm, newMetaVarId _F, permutate vsm (snd tmnew) (snd snnew)))]
+    Raw.MetavarId newMetavar = newMetaVarId _G
+    metavarSubs = Substitutions [(newMetavar, hnf (vsm, Raw.WTerm (newMetaVarId _F), permutate vsm (snd tmnew) (snd snnew)))]
