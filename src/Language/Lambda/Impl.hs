@@ -201,20 +201,7 @@ pattern MetaVar' metavar args typ = Node (AnnSig (L2 (MetavarSig metavar args)) 
 type Term = AST FoilPattern TermSig
 
 type MetaTerm metavar n t = TypedSOAS FoilPattern metavar TermSig n t
-type MetaTerm' metavar n t = TypedSOAS (TypedFoilPattern t) metavar TermSig n t
-
-data TypedFoilPattern t n l = TypedFoilPattern (FoilPattern n l) t
-
-deriveGenericK ''TypedFoilPattern
-
-instance CoSinkable (TypedFoilPattern t) where
-  coSinkabilityProof rename (TypedFoilPattern (FoilAPattern binder) t) cont =
-    coSinkabilityProof rename binder (\rename' binder' -> cont rename' (TypedFoilPattern (FoilAPattern binder') t))
-
-  withPattern f empty append scope (TypedFoilPattern (FoilAPattern binder) t) cont =
-    withPattern f empty append scope binder (\f' binder' -> cont f' (TypedFoilPattern (FoilAPattern binder') t))
-
-instance SinkableK (TypedFoilPattern t)
+type MetaTerm' metavar n t = TypedSOAS (AnnBinder t FoilPattern) metavar TermSig n t
 
 -- M[g, \z. z a]
 -- M[x, y] -> y x
@@ -489,7 +476,7 @@ annotate' metavarTypes varTypes (Lam typ binder body) = do
       varTypes' = Foil.addNameBinder name typ varTypes
   (body', returnType) <- annotate' metavarTypes varTypes' body
   let lamType = Raw.Fun typ returnType
-      annSig = AnnSig (L2 (LamSig typ (ScopedAST (TypedFoilPattern binder typ) body'))) lamType
+      annSig = AnnSig (L2 (LamSig typ (ScopedAST (AnnBinder binder typ) body'))) lamType
       term = Node annSig
   Just (term, lamType)
 annotate' metavarTypes varTypes (Metavar metavar args) = do
@@ -518,7 +505,7 @@ fromMetaTerm' = \case
   Node (AnnSig (R2 (MetaAppSig metavar args)) _typ) -> Metavar metavar (map fromMetaTerm' args)
   Node (AnnSig (L2 node) _) -> Node (bimap fromMetaScopedTerm fromMetaTerm' node)
  where
-  fromMetaScopedTerm (ScopedAST (TypedFoilPattern binder _) body) = ScopedAST binder (fromMetaTerm' body)
+  fromMetaScopedTerm (ScopedAST (AnnBinder binder _) body) = ScopedAST binder (fromMetaTerm' body)
 
 -- ** Conversion helpers
 

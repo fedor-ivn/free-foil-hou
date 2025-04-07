@@ -55,6 +55,21 @@ data AnnSig ann sig scopedTerm term
 
 deriveGenericK ''AnnSig
 
+data AnnBinder ann binder (n :: Foil.S) (l :: Foil.S)
+  = AnnBinder (binder n l) ann
+  deriving (GHC.Generic)
+
+deriveGenericK ''AnnBinder
+
+instance (Foil.CoSinkable binder) => Foil.CoSinkable (AnnBinder ann binder) where
+  coSinkabilityProof rename (AnnBinder binder ann) cont =
+    Foil.coSinkabilityProof rename binder (\rename' binder' -> cont rename' (AnnBinder binder' ann))
+
+  withPattern f empty append scope (AnnBinder binder t) cont =
+    Foil.withPattern f empty append scope binder (\f' binder' -> cont f' (AnnBinder binder' t))
+
+instance (Foil.SinkableK binder) => Foil.SinkableK (AnnBinder ann binder)
+
 class TypedSignature sig metavar t where
   mapSigWithTypes
     :: Foil.NameMap n t

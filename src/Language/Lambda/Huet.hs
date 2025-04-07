@@ -63,6 +63,7 @@ import Data.Kind (Type)
 import Data.List (intercalate)
 import Data.Maybe (maybeToList)
 import Data.SOAS (
+  AnnBinder (AnnBinder),
   AnnSig (AnnSig),
   TypedSOAS,
   TypedScopedSOAS,
@@ -77,7 +78,6 @@ import Language.Lambda.Impl (
   FoilPattern (FoilAPattern),
   MetaTerm,
   TermSig (..),
-  TypedFoilPattern (TypedFoilPattern),
   matchPattern,
   pattern App',
   pattern Lam',
@@ -246,10 +246,10 @@ isFlexible' Var{} = False
 isFlexible' MetaApp{} = True
 isFlexible' (Node' term _) = isFlexible term
 
-instance TypedUnifiablePattern Raw.Type (TypedFoilPattern Raw.Type) where
+instance TypedUnifiablePattern Raw.Type (AnnBinder Raw.Type FoilPattern) where
   typedUnifyPatterns
-    (TypedFoilPattern (FoilAPattern left) leftType)
-    (TypedFoilPattern (FoilAPattern right) rightType)
+    (AnnBinder (FoilAPattern left) leftType)
+    (AnnBinder (FoilAPattern right) rightType)
       | leftType == rightType = case unifyNameBinders left right of
           NotUnifiable -> NotUnifiable'
           RenameBothBinders unifiedBinder leftRenaming rightRenaming ->
@@ -262,7 +262,7 @@ instance TypedUnifiablePattern Raw.Type (TypedFoilPattern Raw.Type) where
             RenameBothBinders' unifiedBinder (addNameBinders unifiedBinder [leftType]) id id
   typedUnifyPatterns _ _ = NotUnifiable'
 
-instance HuetPreunifiable Raw.Type Raw.MetavarIdent (TypedFoilPattern Raw.Type) TermSig where
+instance HuetPreunifiable Raw.Type Raw.MetavarIdent (AnnBinder Raw.Type FoilPattern) TermSig where
   normalize scope node typ = case node of
     LamSig binderType (ScopedAST binder body)
       | Distinct <- assertDistinct binder ->
@@ -270,7 +270,7 @@ instance HuetPreunifiable Raw.Type Raw.MetavarIdent (TypedFoilPattern Raw.Type) 
      where
       scope' = extendScopePattern binder scope
     AppSig function argument -> case normalize' scope function of
-      Lam' (TypedFoilPattern binder _) _ body _ ->
+      Lam' (AnnBinder binder _) _ body _ ->
         normalize' scope (substitute scope subst body)
        where
         subst = matchPattern binder argument
@@ -278,13 +278,13 @@ instance HuetPreunifiable Raw.Type Raw.MetavarIdent (TypedFoilPattern Raw.Type) 
     MetavarSig{} -> Node' node typ
 
   imitate metas parameters parameterTypes forallTypes node = case node of
-    LamSig _ (ScopedAST (TypedFoilPattern (FoilAPattern binder) binderType) body) -> do
+    LamSig _ (ScopedAST (AnnBinder (FoilAPattern binder) binderType) body) -> do
       let bodyType = typeOf (addNameBinder binder binderType forallTypes) body
       withFresh (extendScopePattern parameters emptyScope) $ \binder' -> do
         let parameters' = push binder' parameters
         let parameterTypes' = addNameBinder binder' binderType parameterTypes
         let (metas', body') = fresh parameters' parameterTypes' bodyType metas
-        return (metas', LamSig binderType (ScopedAST (TypedFoilPattern (FoilAPattern binder') binderType) body'))
+        return (metas', LamSig binderType (ScopedAST (AnnBinder (FoilAPattern binder') binderType) body'))
     AppSig function argument -> do
       (metas', function') <- imitate' metas parameters parameterTypes forallTypes function
       let argumentType = typeOf forallTypes argument
@@ -308,7 +308,7 @@ instance HuetPreunifiable Raw.Type Raw.MetavarIdent (TypedFoilPattern Raw.Type) 
           let parameters' = push binder parameters
           let parameterTypes' = addNameBinder binder argumentType parameterTypes
           let (metas', body') = fresh parameters' parameterTypes' typ metas
-          let binder' = TypedFoilPattern (FoilAPattern binder) argumentType
+          let binder' = AnnBinder (FoilAPattern binder) argumentType
           return (metas', LamSig argumentType (ScopedAST binder' body'))
     AppSig function _ -> introduce' withMeta forallTypes function
     MetavarSig{} -> []
@@ -773,17 +773,17 @@ step constraint (Solution metas constraints substitutions) =
 --
 -- >>> metas = Metavariables (MetaTypes [(_F, MetaType [Raw.Fun t t, t] (Raw.Fun t t)), (_X, MetaType [Raw.Fun t t, t] t)]) (freshMetavariables someMetas)
 -- >>> constraint = withVar emptyScope $ \a aScope -> withVar aScope $ \b bScope -> Constraint (NameBinderListCons a (NameBinderListCons b NameBinderListEmpty)) (addNameBinder b t (addNameBinder a (Raw.Fun t t) emptyNameMap)) (App' (Var (sink (nameOf a))) (Var (nameOf b)) t) (App' (MetaApp _F [Var (sink (nameOf a)), Var (nameOf b)] (Raw.Fun t t)) (MetaApp _X [Var (sink (nameOf a)), Var (nameOf b)] t) t)
--- >>> solutionSubstitutions <$> solve @_ @_ @(TypedFoilPattern Raw.Type) [Problem metas [constraint]]
+-- >>> solutionSubstitutions <$> solve @_ @_ @(AnnBinder Raw.Type FoilPattern) [Problem metas [constraint]]
 -- [{ MetavarIdent "F"[x0, x1] ↦ λ x2 : t . x0 x1, MetavarIdent "X"[x0, x1] ↦ X [x0, x1] },{ MetavarIdent "F"[x0, x1] ↦ x0, MetavarIdent "X"[x0, x1] ↦ x1 },{ MetavarIdent "F"[x0, x1] ↦ λ x2 : t . x2, MetavarIdent "X"[x0, x1] ↦ x0 x1 },{ MetavarIdent "F"[x0, x1] ↦ λ x2 : t . x0 x2, MetavarIdent "X"[x0, x1] ↦ x1 }]
 --
 -- >>> metas = Metavariables (MetaTypes [(_F, MetaType [Raw.Fun t (Raw.Fun t t), t, t] (Raw.Fun t t)), (_X, MetaType [Raw.Fun t (Raw.Fun t t), t, t] t)]) (freshMetavariables someMetas)
 -- >>> constraint = withVar emptyScope $ \a aScope -> withVar aScope $ \b bScope -> withVar bScope $ \c cScope -> Constraint (NameBinderListCons a (NameBinderListCons b (NameBinderListCons c NameBinderListEmpty))) (addNameBinder c t (addNameBinder b t (addNameBinder a (Raw.Fun t (Raw.Fun t t)) emptyNameMap))) (App' (App' (Var (sink $ nameOf a)) (Var (sink $ nameOf b)) (Raw.Fun t t)) (Var (nameOf c)) t) (App' (MetaApp _F [Var $ sink $ nameOf a, Var $ sink $ nameOf b, Var $ nameOf c] (Raw.Fun t t)) (MetaApp _X [Var $ sink $ nameOf a, Var $ sink $ nameOf b, Var $ nameOf c] t) t)
--- >>> solutionSubstitutions <$> solve @_ @_ @(TypedFoilPattern Raw.Type) [Problem metas [constraint]]
+-- >>> solutionSubstitutions <$> solve @_ @_ @(AnnBinder Raw.Type FoilPattern) [Problem metas [constraint]]
 -- [{ MetavarIdent "F"[x0, x1, x2] ↦ x0 x1, MetavarIdent "X"[x0, x1, x2] ↦ x2 },{ MetavarIdent "F"[x0, x1, x2] ↦ λ x3 : t . x0 x1 x2, MetavarIdent "X"[x0, x1, x2] ↦ X [x0, x1, x2] },{ MetavarIdent "F"[x0, x1, x2] ↦ λ x3 : t . x0 x3 x2, MetavarIdent "X"[x0, x1, x2] ↦ x1 },{ MetavarIdent "F"[x0, x1, x2] ↦ λ x3 : t . x0 x1 x3, MetavarIdent "X"[x0, x1, x2] ↦ x2 },{ MetavarIdent "F"[x0, x1, x2] ↦ λ x3 : t . x3, MetavarIdent "X"[x0, x1, x2] ↦ x0 x1 x2 }]
 --
 -- >>> metas = Metavariables (MetaTypes [(_F, MetaType [Raw.Fun t (Raw.Fun t t), Raw.Fun t t, t] t), (_X, MetaType [Raw.Fun t t, t] (Raw.Fun t (Raw.Fun t t)))]) (freshMetavariables someMetas)
 -- >>> constraint = withVar emptyScope $ \a aScope -> withVar aScope $ \b bScope -> Constraint (NameBinderListCons a (NameBinderListCons b NameBinderListEmpty)) (addNameBinder b t (addNameBinder a (Raw.Fun t t) emptyNameMap)) (MetaApp _F [MetaApp _X [Var $ sink $ nameOf a, Var $ nameOf b] (Raw.Fun t (Raw.Fun t t)), Var $ sink $ nameOf a, Var $ nameOf b] t) (App' (Var $ sink $ nameOf a) (Var $ nameOf b) t)
--- >>> take 5 $ solutionSubstitutions <$> solve @_ @_ @(TypedFoilPattern Raw.Type) [Problem metas [constraint]]
+-- >>> take 5 $ solutionSubstitutions <$> solve @_ @_ @(AnnBinder Raw.Type FoilPattern) [Problem metas [constraint]]
 -- [{ MetavarIdent "F"[x0, x1, x2] ↦ x1 x2, MetavarIdent "X"[x0, x1] ↦ X [x0, x1] },{ MetavarIdent "F"[x0, x1, x2] ↦ x1 (x0 M1 [x0, x1, x2] M2 [x0, x1, x2]), MetavarIdent "X"[x0, x1] ↦ λ x2 : t . λ x3 : t . x1 },{ MetavarIdent "F"[x0, x1, x2] ↦ x0 M0 [x0, x1, x2] M1 [x0, x1, x2], MetavarIdent "X"[x0, x1] ↦ λ x2 : t . λ x3 : t . x0 x1 },{ MetavarIdent "F"[x0, x1, x2] ↦ x0 M0 [x0, x1, x2] x2, MetavarIdent "X"[x0, x1] ↦ λ x2 : t . x0 },{ MetavarIdent "F"[x0, x1, x2] ↦ x0 M0 [x0, x1, x2] (x1 x2), MetavarIdent "X"[x0, x1] ↦ λ x2 : t . λ x3 : t . x3 }]
 solve
   :: (HuetPreunifiable typ metavar binder sig)
