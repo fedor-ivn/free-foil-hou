@@ -98,6 +98,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (isJust, listToMaybe)
 import Data.SOAS (
+  AnnBinder (..),
   AnnSig (..),
   MetaAbs (..),
   MetaAppSig (..),
@@ -105,7 +106,6 @@ import Data.SOAS (
   MetaSubsts (..),
   TypedBinder (..),
   TypedSOAS,
-  TypedSignature (..),
   match,
   push,
   toNameMap,
@@ -171,22 +171,6 @@ instance ZipMatchK Raw.VarIdent where zipMatchWithK = zipMatchViaEq
 instance ZipMatchK Raw.MetavarIdent where zipMatchWithK = zipMatchViaEq
 
 instance ZipMatchK Raw.Type where zipMatchWithK = zipMatchViaEq
-
-instance TypedSignature TermSig Raw.MetavarIdent Raw.Type where
-  mapSigWithTypes varTypes _ f g sig t = case sig of
-    AppSig fun arg -> do
-      funType <- case fun of
-        Var x -> return (Foil.lookupName x varTypes)
-        Node (AnnSig _ type_) -> return type_
-      case funType of
-        Raw.Fun argType _returnType ->
-          return (AppSig (g fun funType) (g arg argType))
-        _ -> Nothing
-    LamSig binderType body
-      | Raw.Fun _ returnType <- t ->
-          let body' = f body (binderType, returnType)
-           in return (LamSig binderType body')
-    _ -> Nothing
 
 instance TypedBinder FoilPattern Raw.Type where
   addBinderTypes (FoilAPattern nameBinder) = Foil.addNameBinder nameBinder
@@ -273,7 +257,7 @@ nfMetaTerm scope = \case
          in Lam' binder binderType (nfMetaTerm extendedScope body) returnType
   App' f x typ ->
     case nfMetaTerm scope f of
-      Lam' binder _binderType body _returnType ->
+      Lam' (AnnBinder binder _) _binderType body _returnType ->
         let subst = matchPattern binder x
          in nfMetaTerm scope (substitute scope subst body)
       f' -> App' f' (nfMetaTerm scope x) typ
@@ -353,14 +337,14 @@ withMetaSubstVars
 
 type MetaSubst' =
   MetaSubst
-    FoilPattern
+    (AnnBinder Raw.Type FoilPattern)
     (AnnSig Raw.Type (Sum TermSig (MetaAppSig Raw.MetavarIdent)))
     Raw.MetavarIdent
     Raw.Type
 
 type MetaSubsts' =
   MetaSubsts
-    FoilPattern
+    (AnnBinder Raw.Type FoilPattern)
     (AnnSig Raw.Type (Sum TermSig (MetaAppSig Raw.MetavarIdent)))
     Raw.MetavarIdent
     Raw.Type
@@ -442,7 +426,7 @@ annotate metavarTypes varTypes (Lam typ binder body) = do
   let varTypes' = addBinderTypes binder typ varTypes
   (body', returnType) <- annotate metavarTypes varTypes' body
   let lamType = Raw.Fun typ returnType
-      annSig = AnnSig (L2 (LamSig typ (ScopedAST binder body'))) lamType
+      annSig = AnnSig (L2 (LamSig typ (ScopedAST (AnnBinder binder typ) body'))) lamType
       term = Node annSig
   Just (term, lamType)
 annotate metavarTypes varTypes (Metavar metavar args) = do
@@ -461,9 +445,10 @@ fromMetaTerm :: MetaTerm Raw.MetavarIdent n t -> Term n
 fromMetaTerm = \case
   Var name -> Var name
   Node (AnnSig (R2 (MetaAppSig metavar args)) _typ) -> Metavar metavar (map fromMetaTerm args)
-  Node (AnnSig (L2 node) _) -> Node (bimap fromMetaScopedTerm fromMetaTerm node)
+  Node (AnnSig (L2 node) _) -> Node (bimap fromScopedMetaTerm fromMetaTerm node)
  where
-  fromMetaScopedTerm (ScopedAST binder body) = ScopedAST binder (fromMetaTerm body)
+  fromScopedMetaTerm (ScopedAST (AnnBinder binder _) body) =
+    ScopedAST binder (fromMetaTerm body)
 
 -- ** Conversion helpers
 
@@ -648,14 +633,12 @@ matchMetaAbs
      , ZipMatchK sig
      , ZipMatchK ext
      , TypedBinder binder Raw.Type
-     , TypedSignature sig Raw.MetavarIdent Raw.Type
-     , TypedSignature ext Raw.MetavarIdent Raw.Type
      )
   => [Raw.Type]
   -> MetavarBinders
-  -> MetaAbs binder (AnnSig Raw.Type (Sum sig (MetaAppSig Raw.MetavarIdent))) Raw.Type
-  -> MetaAbs binder (AnnSig Raw.Type (Sum sig ext)) Raw.Type
-  -> [MetaSubsts binder (AnnSig Raw.Type (Sum sig ext)) Raw.MetavarIdent Raw.Type]
+  -> MetaAbs (AnnBinder Raw.Type binder) (AnnSig Raw.Type (Sum sig (MetaAppSig Raw.MetavarIdent))) Raw.Type
+  -> MetaAbs (AnnBinder Raw.Type binder) (AnnSig Raw.Type (Sum sig ext)) Raw.Type
+  -> [MetaSubsts (AnnBinder Raw.Type binder) (AnnSig Raw.Type (Sum sig ext)) Raw.MetavarIdent Raw.Type]
 matchMetaAbs
   metavarArgTypes
   metavarBinders
