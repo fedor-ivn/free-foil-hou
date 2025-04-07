@@ -1,0 +1,10 @@
+cradle:
+  stack:
+    - path: "./src"
+      component: "free-foil-hou:lib"
+
+    - path: "./app/Main.hs"
+      component: "free-foil-hou:exe:free-foil-hou-exe"
+
+    - path: "./test/hspec"
+      component: "free-foil-hou:test:spec"
