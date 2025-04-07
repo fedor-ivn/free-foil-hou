@@ -176,13 +176,13 @@ data MetaAbs binder sig t where
 
 -- | A metavariable substitution is a pair of a metavariable name and its body.
 newtype MetaSubst binder sig metavar t = MetaSubst
-  { getMetaSubst :: (metavar, MetaAbs binder sig t)
+  { metaSubst :: (metavar, MetaAbs binder sig t)
   }
 
 -- | A collection of metavariable substitutions (for simultaneous substitution
 -- | of multiple metavariables).
 newtype MetaSubsts binder sig metavar t = MetaSubsts
-  { getMetaSubsts :: [MetaSubst binder sig metavar t]
+  { metaSubsts :: [MetaSubst binder sig metavar t]
   }
 
 -- | Apply metavariable substitutions to a SOAS term.
@@ -205,7 +205,7 @@ applyMetaSubsts
 applyMetaSubsts scope substs = \case
   Var x -> Var x
   MetaApp metavar args ann ->
-    case lookup metavar (getMetaSubst <$> getMetaSubsts substs) of
+    case lookup metavar (metaSubst <$> metaSubsts substs) of
       Just (MetaAbs names body) ->
         let nameMap = toNameMap Foil.emptyNameMap names args'
             substs' = Foil.nameMapToSubstitution nameMap

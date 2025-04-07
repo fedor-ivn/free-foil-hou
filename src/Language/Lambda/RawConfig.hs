@@ -1,69 +1,64 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Language.Lambda.RawConfig (
-  -- * Raw config types
-  RawConfig (..),
-  RawProblem (..),
-  RawSolution (..),
+  decodeConfigFile,
+)
+where
 
-  -- * TOML parsing
-  configCodec,
-  problemCodec,
-  solutionCodec,
-  stringsCodec,
-
-  -- * Parsing functions
-  parseRawConfig,
-  parseRawProblem,
-  parseSolution,
-  formatTomlErrors,
-) where
-
-import Data.Text (Text)
+import qualified Data.Map as Map
+import Data.SOAS (MetaAbs (..), MetaSubst (..), MetaSubsts (..))
 import qualified Data.Text as TIO
-import GHC.Generics (Generic)
+import Language.Lambda.Config (
+  CanonicalConfig,
+  Config (..),
+  IsCanonicalConstraint (..),
+  IsCanonicalMetavarBinders (..),
+  IsCanonicalSubstitutions (..),
+  Problem (..),
+  Result,
+  Solution (..),
+  fromUnificationConstraint,
+  toCanonicalConfig,
+  toUnificationConstraint,
+ )
+import Language.Lambda.Impl (
+  MetavarBinders,
+  fromMetaTerm,
+  fromTerm,
+  toIdents,
+  toMetaSubst,
+ )
+import qualified Language.Lambda.Syntax.Abs as Raw
+import qualified Language.Lambda.Syntax.Layout as Raw
+import qualified Language.Lambda.Syntax.Par as Raw
+import qualified Language.Lambda.Syntax.Print as Raw
 import Toml (TomlCodec, (.=))
 import qualified Toml
 
-import Language.Lambda.Impl (MetavarBinders)
+newtype RawBinders = RawBinders [String]
+newtype RawSubstitutions = RawSubstitutions [String]
+newtype RawConstraint = RawConstraint String
 
--- Raw types (from TOML)
-data RawConfig = RawConfig
-  { rawConfigLanguage :: Text
-  , rawConfigFragment :: Text
-  , rawConfigProblems :: [RawProblem]
-  }
-  deriving (Show, Generic)
 
-data RawProblem = RawProblem
-  { rawProblemMetavars :: [String]
-  , rawProblemConstraints :: [String]
-  , rawProblemSolutions :: [RawSolution]
-  }
-  deriving (Show, Generic)
+type RawConfig = Config RawBinders RawConstraint RawSolution
 
-data RawSolution = RawSolution
-  { rawSolutionName :: Text
-  , rawSolutionMetavars :: Maybe [String] -- New field for solution-specific metavars
-  , rawSolutionSubstitutions :: [String]
-  }
-  deriving (Show, Generic)
+type RawProblem = Problem RawBinders RawConstraint RawSolution
+
+type RawSolution = Solution RawBinders RawSubstitutions
 
 -- TomlCodecs
 configCodec :: TomlCodec RawConfig
 configCodec =
-  RawConfig
-    <$> Toml.text "language" .= rawConfigLanguage
-    <*> Toml.text "fragment" .= rawConfigFragment
-    <*> Toml.list problemCodec "problems" .= rawConfigProblems
+  Config
+    <$> Toml.list problemCodec "problems" .= configProblems
 
 problemCodec :: TomlCodec RawProblem
 problemCodec =
-  RawProblem
-    <$> stringsCodec "metavars"
-    <*> stringsCodec "constraints"
-    <*> Toml.list solutionCodec "solutions" .= rawProblemSolutions
+  (Problem . RawBinders <$> stringsCodec "metavars")
+    <*> (map RawConstraint <$> stringsCodec "constraints")
+    <*> Toml.list solutionCodec "solutions" .= problemSolutions
 
 stringsCodec :: Toml.Key -> Toml.Codec object [String]
 stringsCodec field =
@@ -72,25 +67,70 @@ stringsCodec field =
 
 solutionCodec :: TomlCodec RawSolution
 solutionCodec =
-  RawSolution
-    <$> Toml.text "name" .= rawSolutionName
-    <*> Toml.dioptional (stringsCodec "metavars") .= rawSolutionMetavars -- Make it optional
-    <*> stringsCodec "substitutions" .= rawSolutionSubstitutions
+  Solution
+    <$> Toml.dioptional (Toml.text "name") .= solutionName
+    <*> (RawBinders <$> stringsCodec "metavars")
+      .= solutionMetavarBinders
+    <*> (RawSubstitutions <$> stringsCodec "substitutions")
+      .= solutionSubstitutions
 
--- Helper function for error formatting
-formatTomlErrors :: Toml.TomlDecodeError -> String
-formatTomlErrors errs =
-  unlines $
-    "Configuration errors:" : [(\err -> "  - " ++ show err) errs]
+decodeConfigFile :: FilePath -> IO (Result CanonicalConfig)
+decodeConfigFile =
+  let convert = either (Left . show) toCanonicalConfig
+   in fmap convert . Toml.decodeFileEither configCodec
 
--- | These functions need to be defined at the module that combines both
--- | raw config and processed config. Here we define their type signatures
--- | for reference.
-parseRawConfig :: RawConfig -> Either String config
-parseRawConfig = undefined
+instance IsCanonicalMetavarBinders RawBinders where
+  toCanonicalMetavarBinders :: RawBinders -> Result MetavarBinders
+  toCanonicalMetavarBinders (RawBinders rawMetavarBinders) = do
+    metavarBinders <- traverse parseMetavarBinder rawMetavarBinders
+    pure (Map.fromList metavarBinders)
+   where
+    parseMetavarBinder input =
+      let
+        tokens = Raw.resolveLayout False (Raw.myLexer input)
+        toMetavarBinder (Raw.AMetavarBinder metavar args returnType) =
+          (metavar, (args, returnType))
+       in
+        fmap toMetavarBinder (Raw.pMetavarBinder tokens)
+  fromCanonicalMetavarBinders metavarBinders =
+    let
+      toRawMetavarBinder (metavar, (args, returnType)) =
+        Raw.AMetavarBinder metavar args returnType
+      rawMetavarBinders = map toRawMetavarBinder (Map.toList metavarBinders)
+     in
+      pure $ RawBinders (fmap Raw.printTree rawMetavarBinders)
 
-parseRawProblem :: RawProblem -> Either String problem
-parseRawProblem = undefined
+instance IsCanonicalSubstitutions RawSubstitutions where
+  toCanonicalSubstitution metavarBinders (RawSubstitutions rawSubsts) = do
+    substs <- traverse parse' rawSubsts
+    pure (MetaSubsts substs)
+   where
+    parse' input = do
+      let tokens = Raw.resolveLayout False (Raw.myLexer input)
+      raw <- Raw.pMetaSubst tokens
+      case toMetaSubst metavarBinders raw of
+        Just subst -> pure subst
+        Nothing -> Left "type error"
 
-parseSolution :: MetavarBinders -> RawSolution -> Either String solution
-parseSolution = undefined
+  fromCanonicalSubstitution _ (MetaSubsts substs) = do
+    let rawSubsts = map (Raw.printTree . fromMetaSubst) substs
+    let rawSubstitutions = map Raw.printTree rawSubsts
+    pure $ RawSubstitutions rawSubstitutions
+   where
+    fromMetaSubst (MetaSubst (metavar, MetaAbs binderList term)) =
+      let term' = Raw.AScopedTerm $ fromTerm $ fromMetaTerm term
+          idents = toIdents binderList
+       in Raw.AMetaSubst metavar idents term'
+
+instance IsCanonicalConstraint RawConstraint where
+  toCanonicalConstraint metavarBinders (RawConstraint input) = do
+    let tokens = Raw.resolveLayout False (Raw.myLexer input)
+    raw <- Raw.pUnificationConstraint tokens
+    case toUnificationConstraint metavarBinders raw of
+      Just uc -> Right uc
+      Nothing -> Left "type error"
+  fromCanonicalConstraint _ =
+    Right
+      . RawConstraint
+      . Raw.printTree
+      . fromUnificationConstraint

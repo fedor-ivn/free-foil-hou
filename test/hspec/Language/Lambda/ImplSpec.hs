@@ -9,10 +9,11 @@ import Data.Either (isRight)
 import qualified Data.Text as Text
 import System.Exit (exitFailure)
 import Test.Hspec
-import qualified Toml
 
+import Data.Maybe (fromMaybe)
 import Data.SOAS (MetaSubsts (..))
 import Language.Lambda.Config (Config (..), Problem (..), Solution (..))
+import Language.Lambda.RawConfig (decodeConfigFile)
 import qualified Language.Lambda.Framework as Framework
 import qualified Language.Lambda.Impl as Impl
 
@@ -21,22 +22,19 @@ handleErr = either (\err -> print err >> exitFailure) pure
 
 spec :: Spec
 spec = do
-  Config{..} <- runIO $ do
-    configResult <- Toml.decodeFileEither Framework.configCodec "config.toml" >>= handleErr
-    handleErr (Framework.parseRawConfig configResult)
+  Config{..} <- runIO $ decodeConfigFile "config.toml" >>= handleErr
 
-  let title = Text.unpack (configLanguage <> " (fragment: " <> configFragment <> ")")
-  describe title $
+  describe "title" $
     forM_ (zip [1 ..] configProblems) $ \(i, Problem{..}) -> do
       describe ("problem #" <> show i) $ do
         forM_ problemSolutions $ \solution@Solution{..} -> do
-          it (Text.unpack solutionName) $ do
+          it (Text.unpack $ fromMaybe "" solutionName) $ do
             Framework.validateSolution problemConstraints solution `shouldSatisfy` isRight
 
   describe "moreGeneralThan (substitution comparison)" $ do
     -- Helper function to set up the test case
     let parseSubsts metavarBinders strs = do
-          substs <- traverse (Impl.parseMetaSubst metavarBinders) strs
+          substs <- traverse (Framework.parseMetaSubst metavarBinders) strs
           return (MetaSubsts substs)
         testMoreGeneralThan rawMetavarBinder rawLhsSubst rawRhsSubst expectedResult = do
           Right metavarBinders <- pure $ Framework.parseMetavarBinders rawMetavarBinder

@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Language.Lambda.Config (
   -- * Config types
@@ -11,6 +12,15 @@ module Language.Lambda.Config (
   UnificationConstraint (..),
   fromUnificationConstraint,
   toUnificationConstraint,
+  CanonicalProblem,
+  CanonicalSolution,
+  CanonicalConfig,
+  IsCanonicalConstraint (..),
+  IsCanonicalSubstitutions (..),
+  IsCanonicalMetavarBinders (..),
+  Result,
+  toCanonicalSolution,
+  toCanonicalConfig,
 )
 where
 
@@ -34,24 +44,36 @@ import Language.Lambda.Impl (
 import qualified Language.Lambda.Syntax.Abs as Raw
 import qualified Language.Lambda.Syntax.Print as Raw
 
-data Config = Config
-  { configLanguage :: Text
-  , configFragment :: Text
-  , configProblems :: [Problem]
+newtype Config binders constraint solution = Config
+  { configProblems :: [Problem binders constraint solution]
   }
   deriving (Show, Generic)
 
-data Problem = Problem
-  { problemMetavars :: MetavarBinders
-  , problemConstraints :: [UnificationConstraint]
-  , problemSolutions :: [Solution]
+type CanonicalConfig =
+  Config
+    MetavarBinders
+    UnificationConstraint
+    (Solution MetavarBinders MetaSubsts')
+
+data Problem binders constraint solution = Problem
+  { problemMetavarBinders :: binders
+  , problemConstraints :: [constraint]
+  , problemSolutions :: [solution]
   }
   deriving (Show, Generic)
 
-data Solution = Solution
-  { solutionName :: Text
-  , solutionMetavars :: MetavarBinders -- Store the parsed metavars
-  , solutionSubstitutions :: MetaSubsts'
+type CanonicalProblem =
+  Problem
+    MetavarBinders
+    UnificationConstraint
+    (Solution MetavarBinders MetaSubsts')
+
+type CanonicalSolution = Solution MetavarBinders MetaSubsts'
+
+data Solution binders substitutions = Solution
+  { solutionName :: Maybe Text
+  , solutionMetavarBinders :: binders
+  , solutionSubstitutions :: substitutions
   }
   deriving (Show, Generic)
 
@@ -63,6 +85,56 @@ data UnificationConstraint where
     -> MetaTerm Raw.MetavarIdent n Raw.Type
     -> MetaTerm Raw.MetavarIdent n Raw.Type
     -> UnificationConstraint
+
+type Result = Either String
+
+class IsCanonicalConstraint c where
+  toCanonicalConstraint :: MetavarBinders -> c -> Result UnificationConstraint
+  fromCanonicalConstraint :: MetavarBinders -> UnificationConstraint -> Result c
+
+class IsCanonicalSubstitutions s where
+  toCanonicalSubstitution :: MetavarBinders -> s -> Result MetaSubsts'
+  fromCanonicalSubstitution :: MetavarBinders -> MetaSubsts' -> Result s
+
+class IsCanonicalMetavarBinders b where
+  toCanonicalMetavarBinders :: b -> Result MetavarBinders
+  fromCanonicalMetavarBinders :: MetavarBinders -> Result b
+
+toCanonicalSolution
+  :: forall b s
+   . (IsCanonicalMetavarBinders b, IsCanonicalSubstitutions s)
+  => MetavarBinders
+  -> Solution b s
+  -> Result CanonicalSolution
+toCanonicalSolution globalBinders (Solution name localBinders substs) = do
+  canonicalLocalBinders <- toCanonicalMetavarBinders localBinders
+  let binders = globalBinders <> canonicalLocalBinders
+  canonicalSubsts <- toCanonicalSubstitution binders substs
+  return $ Solution name canonicalLocalBinders canonicalSubsts
+
+toCanonicalProblem
+  :: forall b c s
+   . ( IsCanonicalMetavarBinders b
+     , IsCanonicalConstraint c
+     , IsCanonicalSubstitutions s
+     )
+  => Problem b c (Solution b s)
+  -> Result CanonicalProblem
+toCanonicalProblem (Problem binders constraints solutions) = do
+  canonicalBinders <- toCanonicalMetavarBinders binders
+  canonicalConstraints <- mapM (toCanonicalConstraint canonicalBinders) constraints
+  canonicalSolutions <- mapM (toCanonicalSolution canonicalBinders) solutions
+  return $ Problem canonicalBinders canonicalConstraints canonicalSolutions
+
+toCanonicalConfig
+  :: ( IsCanonicalMetavarBinders b
+     , IsCanonicalConstraint c
+     , IsCanonicalSubstitutions s
+     )
+  => Config b c (Solution b s)
+  -> Either String CanonicalConfig
+toCanonicalConfig (Config problems) =
+  Config <$> mapM toCanonicalProblem problems
 
 instance Show UnificationConstraint where
   show :: UnificationConstraint -> String

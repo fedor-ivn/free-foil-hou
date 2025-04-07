@@ -71,10 +71,7 @@ module Language.Lambda.Impl (
   toTermClosed,
   getTermFromScopedTerm,
   getPatternBinder,
-
-  -- * Parsing
-  parseMetavarBinder,
-  parseMetaSubst,
+  toIdents,
 
   -- * Pattern synonyms
   pattern App',
@@ -517,7 +514,7 @@ instance Show MetaSubst' where
 
 instance Show MetaSubsts' where
   show :: MetaSubsts' -> String
-  show = show . getMetaSubsts
+  show = show . metaSubsts
 
 instance IsString MetavarBinder where
   fromString :: String -> MetavarBinder
@@ -530,14 +527,6 @@ unsafeParseTerm input =
     Right term -> toTermClosed term
  where
   tokens = Raw.resolveLayout False (Raw.myLexer input)
-
-parseMetaSubst :: MetavarBinders -> String -> Either String MetaSubst'
-parseMetaSubst metavarBinders input = do
-  let tokens = Raw.resolveLayout False (Raw.myLexer input)
-  raw <- Raw.pMetaSubst tokens
-  case toMetaSubst metavarBinders raw of
-    Just subst -> pure subst
-    Nothing -> trace "here" $ Left "type error"
 
 parseMetavarBinder :: String -> Either String MetavarBinder
 parseMetavarBinder input = fmap toMetavarBinder (Raw.pMetavarBinder tokens)
@@ -627,27 +616,27 @@ nf scope = \case
 -- >>> moreGeneralThan metavarBinders lhsSubsts rhsSubsts
 -- <interactive>:1:2-68: Non-exhaustive patterns in Right lhsSubst
 moreGeneralThan :: MetavarBinders -> MetaSubsts' -> MetaSubsts' -> Bool
-moreGeneralThan metavarBinders lhs rhs =
+moreGeneralThan metavarBinders left right =
   flip
     all
-    lhsSubsts
+    leftSubsts
     $ \(metavar, lhsAbs) ->
       let maybeSubsts = do
-            rhsAbs <- lookup metavar rhsSubsts
+            rhsAbs <- lookup metavar rightSubsts
             (argTypes, _) <- Map.lookup metavar metavarBinders
             let substs = matchMetaAbs argTypes metavarBinders lhsAbs rhsAbs
             listToMaybe substs
        in isJust maybeSubsts
  where
-  lhsSubsts = map getMetaSubst $ getMetaSubsts lhs
-  rhsSubsts = map getMetaSubst $ getMetaSubsts rhs
+  leftSubsts = map metaSubst $ metaSubsts left
+  rightSubsts = map metaSubst $ metaSubsts right
 
 -- >>> rawMetavarBinders = ["M : [t] t -> t", "H1 : [t] t -> t", "H2 : [t] t -> t"]
 -- >>> Right metavarBinders = parseMetavarBinders rawMetavarBinders
 -- >>> Right lhs = parseMetaSubst metavarBinders "M[x] ↦ H1[x]"
 -- >>> Right rhs = parseMetaSubst metavarBinders "M[x] ↦ H2[x]"
--- >>> (_, lhsAbs) = getMetaSubst lhs
--- >>> (_, rhsAbs) = getMetaSubst rhs
+-- >>> (_, lhsAbs) = metaSubst lhs
+-- >>> (_, rhsAbs) = metaSubst rhs
 -- >>> Just (_, type_) = Map.lookup "M" metavarBinders
 -- >>> matchMetaAbs metavarBinders type_ lhsAbs rhsAbs
 -- [[H1 [x0] ↦ H2 [x0]]]

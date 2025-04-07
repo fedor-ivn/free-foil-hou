@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -8,17 +9,12 @@
 -- | Framework for testing and validating pattern matching and unification.
 module Language.Lambda.Framework (
   -- * Types
-  RawConfig (..),
-  RawProblem (..),
-  RawSolution (..),
-  ValidationError (..),
 
   -- * Parsing
   parseMetavarBinders,
   matchUnificationConstraint,
   isSolvedUnificationConstraint,
-  parseRawProblem,
-  parseRawConfig,
+  parseMetaSubst,
 
   -- * Validation
   validateProblem,
@@ -27,38 +23,40 @@ module Language.Lambda.Framework (
   isSolved,
 
   -- * TOML configuration
-  configCodec,
-  problemCodec,
-  solutionCodec,
-  stringsCodec,
   parseConfigAndValidate,
   printInvalidSolutionsWithConstraint,
-  formatTomlErrors,
+
+  -- * Instances
+  IsCanonicalMetavarBinders (..),
+  IsCanonicalConstraint (..),
+  IsCanonicalSubstitutions (..),
 
   -- * Main entry point
   main,
-  IsCanonicalConstraint (..),
 ) where
 
 import Control.Monad (forM_)
 import Data.Either (partitionEithers)
 import qualified Data.Map as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust, listToMaybe)
 import Data.SOAS
-import Data.Text (Text)
 import qualified Data.Text as TIO
 import Debug.Trace (trace)
-import GHC.Generics (Generic)
-import Toml (TomlCodec, (.=))
-import qualified Toml
 
 import qualified Control.Monad.Foil.Internal as Foil
 import Control.Monad.Free.Foil (alphaEquiv)
 import Language.Lambda.Config (
+  CanonicalProblem,
+  CanonicalSolution,
   Config (..),
+  IsCanonicalConstraint (..),
+  IsCanonicalMetavarBinders (..),
+  IsCanonicalSubstitutions (..),
   Problem (..),
+  Result,
   Solution (..),
   UnificationConstraint (..),
+  toCanonicalSolution,
   toUnificationConstraint,
  )
 import Language.Lambda.Impl (
@@ -70,19 +68,124 @@ import Language.Lambda.Impl (
   nfMetaTerm,
   toMetaSubst,
  )
+import Language.Lambda.RawConfig (decodeConfigFile)
 import qualified Language.Lambda.Syntax.Abs as Raw
 import qualified Language.Lambda.Syntax.Layout as Raw
 import qualified Language.Lambda.Syntax.Par as Raw
 
 -- ** Test framework implementation
 
-class IsCanonicalConstraint a where
-  toCanonicalConstraint :: a -> Maybe UnificationConstraint
-  fromCanonicalConstraint :: UnificationConstraint -> Maybe a
+-- | Solve a unification problem and compare the results to reference solutions
+--   using a user-implemented algorithm. The function takes a problem definition
+--   and a solving function, and returns a list of comparisons between the
+--   solutions found by the algorithm and the reference solutions provided in
+--   the problem definition.
+solveAndCompareToReferenceSolutionsWith
+  :: ( IsCanonicalConstraint c
+     , IsCanonicalSubstitutions s
+     , IsCanonicalMetavarBinders b
+     )
+  => CanonicalProblem
+  -- ^ The problem definition with constraints to solve
+  -> (b -> [c] -> Result [Solution b s])
+  -- ^ User's algorithm function
+  -> Result [(CanonicalSolution, SolutionComparison)]
+solveAndCompareToReferenceSolutionsWith problem solve = do
+  solutions <- solveWith solve problem
+  mapM findBestComparison solutions
+ where
+  originalBinders = problemMetavarBinders problem
+  referenceSolutions = problemSolutions problem
+  compare' = flip (compareSolutions originalBinders)
+  findBestComparison solution = do
+    let comparisons = map (compare' solution) referenceSolutions
+        foo = Left "No reference solutions"
+    bestComparison <- foldr (fmap . max) foo comparisons
+    Right (solution, bestComparison)
 
-class IsCanonicalSubstitution a where
-  toCanonicalSubstitution :: a -> Maybe MetaSubst'
-  fromCanonicalSubstitution :: MetaSubst' -> Maybe a
+solveWith
+  :: forall b c s
+   . ( IsCanonicalConstraint c
+     , IsCanonicalSubstitutions s
+     , IsCanonicalMetavarBinders b
+     )
+  => (b -> [c] -> Result [Solution b s])
+  -- ^ User's algorithm function
+  -> CanonicalProblem
+  -- ^ The problem definition with constraints to solve
+  -> Result [CanonicalSolution]
+  -- ^ Results for each constraint
+solveWith solve Problem{..} = do
+  binders' <-
+    fromCanonicalMetavarBinders problemMetavarBinders
+  constraint' <-
+    traverse (fromCanonicalConstraint problemMetavarBinders) problemConstraints
+  solutions <- solve binders' constraint'
+  traverse (toCanonicalSolution problemMetavarBinders) solutions
+
+data SolutionComparison
+  = Incomparable
+  | RightMoreGeneral
+  | LeftMoreGeneral
+  | Equivalent
+  deriving (Show, Eq, Ord)
+
+-- >>> Right originalBinders = Language.Lambda.Framework.parseMetavarBinders ["M : [t] t -> t -> t"]
+-- >>> Right lhsBinders = parseMetavarBinders ["N : [t] t -> t"]
+-- >>> Right lhsSubst = parseMetaSubst (originalBinders <> lhsBinders) "M[x] ↦ λy:t.N[x]"
+-- >>> Right rhsSubst = parseMetaSubst originalBinders "M[x] ↦ λy:t.λz:t.x"
+-- >>> lhsSubsts = MetaSubsts [lhsSubst]
+-- >>> rhsSubsts = MetaSubsts [rhsSubst]
+-- >>> compareSolutions originalBinders (Solution Nothing lhsBinders lhsSubsts) (Solution Nothing Map.empty rhsSubsts)
+-- LeftMoreGeneral
+-- >>> Right originalBinders = parseMetavarBinders ["M : [t] t -> t -> t"]
+-- >>> Right lhsBinders = parseMetavarBinders ["N : [t] t -> t"]
+-- >>> Right rhsBinders = parseMetavarBinders ["A : [t] t -> t"]
+-- >>> Right lhsSubst = parseMetaSubst (originalBinders <> lhsBinders) "M[x] ↦ λy:t.N[x]"
+-- >>> Right rhsSubst = parseMetaSubst (originalBinders <> rhsBinders) "M[x] ↦ λy:t.A[x]"
+-- >>> lhsSubsts = MetaSubsts [lhsSubst]
+-- >>> rhsSubsts = MetaSubsts [rhsSubst]
+-- >>> compareSolutions originalBinders (Solution Nothing lhsBinders lhsSubsts) (Solution Nothing rhsBinders rhsSubsts)
+-- Equivalent
+compareSolutions
+  :: MetavarBinders
+  -> CanonicalSolution
+  -> CanonicalSolution
+  -> SolutionComparison
+compareSolutions originalBinders left right =
+  let leftIsMoreGeneral =
+        isMoreGeneralSubstitution originalBinders left right
+      rightIsMoreGeneral =
+        isMoreGeneralSubstitution originalBinders right left
+   in case (leftIsMoreGeneral, rightIsMoreGeneral) of
+        (True, True) -> Equivalent
+        (True, False) -> LeftMoreGeneral
+        (False, True) -> RightMoreGeneral
+        (False, False) -> Incomparable
+
+isMoreGeneralSubstitution
+  :: MetavarBinders
+  -> CanonicalSolution
+  -> CanonicalSolution
+  -> Bool
+isMoreGeneralSubstitution originalBinders left right =
+  flip
+    all
+    (Map.toList originalBinders)
+    $ \(metavar, (argTypes, _)) ->
+      let maybeSubsts = do
+            leftAbs <- lookup metavar leftSubsts
+            rightAbs <- lookup metavar rightSubsts
+            let substs = matchMetaAbs argTypes allBinders leftAbs rightAbs
+            listToMaybe substs
+       in isJust maybeSubsts
+ where
+  allBinders =
+    originalBinders
+      <> solutionMetavarBinders left
+      <> solutionMetavarBinders right
+  leftSubsts = map metaSubst $ metaSubsts $ solutionSubstitutions left
+  rightSubsts = map metaSubst $ metaSubsts $ solutionSubstitutions right
 
 -- ** Parsing functions
 parseMetavarBinder :: String -> Either String MetavarBinder
@@ -197,95 +300,15 @@ isSolved (UnificationConstraint binders _binderTypes lhs rhs) =
   let scope = nameBinderListToScope binders
    in alphaEquiv scope lhs rhs
 
--- Data types
-data RawConfig = RawConfig
-  { rawConfigLanguage :: Text
-  , rawConfigFragment :: Text
-  , rawConfigProblems :: [RawProblem]
-  }
-  deriving (Show, Generic)
-
-data RawProblem = RawProblem
-  { rawProblemMetavars :: [String]
-  , rawProblemConstraints :: [String]
-  , rawProblemSolutions :: [RawSolution]
-  }
-  deriving (Show, Generic)
-
-data RawSolution = RawSolution
-  { rawSolutionName :: Text
-  , rawSolutionMetavars :: Maybe [String] -- New field for solution-specific metavars
-  , rawSolutionSubstitutions :: [String]
-  }
-  deriving (Show, Generic)
-
--- TomlCodecs
-configCodec :: TomlCodec RawConfig
-configCodec =
-  RawConfig
-    <$> Toml.text "language" .= rawConfigLanguage
-    <*> Toml.text "fragment" .= rawConfigFragment
-    <*> Toml.list problemCodec "problems" .= rawConfigProblems
-
-problemCodec :: TomlCodec RawProblem
-problemCodec =
-  RawProblem
-    <$> stringsCodec "metavars"
-    <*> stringsCodec "constraints"
-    <*> Toml.list solutionCodec "solutions" .= rawProblemSolutions
-
-stringsCodec :: Toml.Key -> Toml.Codec object [String]
-stringsCodec field =
-  map TIO.unpack
-    <$> Toml.arrayOf Toml._Text field .= error "no encode needed"
-
-solutionCodec :: TomlCodec RawSolution
-solutionCodec =
-  RawSolution
-    <$> Toml.text "name" .= rawSolutionName
-    <*> Toml.dioptional (stringsCodec "metavars") .= rawSolutionMetavars -- Make it optional
-    <*> stringsCodec "substitutions" .= rawSolutionSubstitutions
-
-validateProblem :: Problem -> Either String ([(Solution, [UnificationConstraint])], [Solution])
+validateProblem :: CanonicalProblem -> Either String ([(CanonicalSolution, [UnificationConstraint])], [CanonicalSolution])
 validateProblem (Problem{..}) = do
   let results = map (validateSolution problemConstraints) problemSolutions
   pure (partitionEithers results)
 
-parseRawProblem :: RawProblem -> Either String Problem
-parseRawProblem RawProblem{..} = do
-  metavarBindersList <- traverse parseMetavarBinder rawProblemMetavars
-  let metavarBinders = Map.fromList metavarBindersList
-  constraints <- traverse (parseUnificationConstraint metavarBinders) rawProblemConstraints
-  solutions <- traverse (parseSolution metavarBinders) rawProblemSolutions
-  pure (Problem metavarBinders constraints solutions)
- where
-  parseSolution problemMetavarBinders (RawSolution{..}) = do
-    -- Parse any solution-specific metavariables
-    let metavars = fromMaybe [] rawSolutionMetavars
-    solutionMetavarBindersList <- traverse parseMetavarBinder metavars
-    let solutionMetavarBinders = Map.fromList solutionMetavarBindersList
-
-    -- Merge problem metavariables with solution metavariables
-    -- Solution metavars take precedence if there are duplicates
-    let mergedMetavarBinders = Map.union solutionMetavarBinders problemMetavarBinders
-
-    -- Parse substitutions using the merged metavariable context
-    parsedSubsts <-
-      traverse
-        (parseMetaSubst mergedMetavarBinders)
-        rawSolutionSubstitutions
-
-    pure (Solution rawSolutionName solutionMetavarBinders (MetaSubsts parsedSubsts))
-
-parseRawConfig :: RawConfig -> Either String Config
-parseRawConfig RawConfig{..} = do
-  problems <- traverse parseRawProblem rawConfigProblems
-  pure (Config rawConfigLanguage rawConfigFragment problems)
-
 validateSolution
   :: [UnificationConstraint]
-  -> Solution
-  -> Either (Solution, [UnificationConstraint]) Solution
+  -> CanonicalSolution
+  -> Either (CanonicalSolution, [UnificationConstraint]) CanonicalSolution
 validateSolution constraints solution@Solution{..} =
   -- Merge problem metavars with solution-specific metavars
   let solvedConstraints =
@@ -294,36 +317,28 @@ validateSolution constraints solution@Solution{..} =
         then Right solution
         else Left (solution, solvedConstraints)
 
-printInvalidSolutionsWithConstraint :: (Foldable t, Show a) => (Solution, t a) -> IO ()
+printInvalidSolutionsWithConstraint :: (Foldable t, Show a) => (CanonicalSolution, t a) -> IO ()
 printInvalidSolutionsWithConstraint (solution, constraints) = do
   putStrLn $ replicate 25 '-' <> "\n"
-  putStrLn $ "Solution: " <> TIO.unpack (solutionName solution)
+  putStrLn $ "Solution: " <> TIO.unpack (fromMaybe "<no name>" $ solutionName solution)
   putStrLn ""
   putStrLn "Substitutions:"
-  mapM_ (putStrLn . ("- " ++) . show) (getMetaSubsts (solutionSubstitutions solution))
+  mapM_ (putStrLn . ("- " ++) . show) (metaSubsts (solutionSubstitutions solution))
   putStrLn ""
   putStrLn "Constraints with applied substitutions:"
   mapM_ (putStrLn . ("- " ++) . show) constraints
   putStrLn ""
   putStrLn $ replicate 25 '-' <> "\n"
 
--- Main function to parse and print the configuration
-data ValidationError
-  = ConfigError Toml.TomlDecodeError
-  | ProblemError String RawProblem
-  deriving (Show)
-
 parseConfigAndValidate :: IO ()
 parseConfigAndValidate = do
-  configResult <- Toml.decodeFileEither configCodec "config.toml"
+  configResult <- decodeConfigFile "config.toml"
   case configResult of
     Left errs -> do
       putStrLn "\n=== Configuration Errors ==="
-      putStr $ formatTomlErrors errs
-    Right cfg -> case parseRawConfig cfg of
-      Left err -> putStrLn err
-      Right Config{..} ->
-        mapM_ processValidation configProblems
+      putStr errs
+    Right cfg ->
+      mapM_ processValidation (configProblems cfg)
  where
   processValidation problem =
     case validateProblem problem of
@@ -334,7 +349,7 @@ parseConfigAndValidate = do
 
   printValidSolutions valid = do
     putStrLn "\n=== Validated solutions ==="
-    mapM_ (putStrLn . ("✓ " ++) . show . solutionName) valid
+    mapM_ (putStrLn . ("✓ " ++) . TIO.unpack . fromMaybe "<no name>" . solutionName) valid
 
   printInvalidSolutions invalid = do
     putStrLn "\n=== Invalid solutions ==="
@@ -344,18 +359,12 @@ parseConfigAndValidate = do
 
   printError err = putStrLn $ "\n=== Error ===" ++ "\n" ++ show err
 
--- Add helper for error formatting
-formatTomlErrors :: [Toml.TomlDecodeError] -> String
-formatTomlErrors errs =
-  unlines $
-    "Configuration errors:" : map (\err -> "  - " ++ show err) errs
-
 -- | Main function for testing and debugging the framework
 main :: IO ()
--- main = parseConfigAndValidate
+main = parseConfigAndValidate
 
 -- main = mainDebug
-main = mainMatchDebug
+-- main = mainMatchDebug
 
 mainMatchDebug :: IO ()
 mainMatchDebug = either print print result
@@ -367,8 +376,8 @@ mainMatchDebug = either print print result
     (argTypes, _) <- maybe (Left "not found") Right res
     lhs <- parseMetaSubst metavarBinders "M[x] ↦ H1[x]"
     rhs <- parseMetaSubst metavarBinders "M[x] ↦ H2[x]"
-    let (_, lhsAbs) = getMetaSubst lhs
-        (_, rhsAbs) = getMetaSubst rhs
+    let (_, lhsAbs) = metaSubst lhs
+        (_, rhsAbs) = metaSubst rhs
     pure $ matchMetaAbs argTypes metavarBinders lhsAbs rhsAbs
 
 -- mainDebug :: IO ()
