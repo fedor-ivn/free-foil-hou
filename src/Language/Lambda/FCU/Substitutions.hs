@@ -14,7 +14,7 @@ newtype Substitutions
 
 ppSubstitutions :: Substitutions -> String
 ppSubstitutions (Substitutions subs) =
-  "[" ++ unwords ["(" ++ show x ++ " |-> " ++ show y ++ ")" | (x, y) <- subs] ++ "]"
+  "[" ++ unwords ["(" ++ show x ++ " |-> " ++ showRaw y ++ ")" | (x, y) <- subs] ++ "]"
 
 instance Show Substitutions where
   show :: Substitutions -> String

@@ -6,6 +6,7 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -27,10 +28,9 @@ import Data.String (IsString (..))
 import GHC.Generics qualified as GHC
 import Generics.Kind.TH (deriveGenericK)
 import Language.Lambda.FCU.FCUSyntax.Abs qualified as Raw
+import Language.Lambda.FCU.FCUSyntax.Lex qualified as Raw
+import Language.Lambda.FCU.FCUSyntax.Par qualified as Raw
 import Language.Lambda.FCU.FCUSyntax.Print qualified as Raw
-import qualified Language.Lambda.FCU.FCUSyntax.Layout as Raw
-import qualified Language.Lambda.FCU.FCUSyntax.Lex    as Raw
-import qualified Language.Lambda.FCU.FCUSyntax.Par    as Raw
 import System.Exit (exitFailure)
 
 -- * Generated code
@@ -79,53 +79,52 @@ deriveGenericK ''TermSig
 
 -- -- * User-defined code
 
--- -- | Generic annotated scope-safe \(\lambda\Pi\)-terms with patterns.
--- type Term = AST FoilPattern TermSig
+-- | Generic annotated scope-safe \(\lambda\Pi\)-terms with patterns.
+type Term = AST FoilPattern TermSig
 
--- -- | Scode-safe \(\lambda\Pi\)-terms annotated with source code position.
--- -- type Term = Term Raw.BNFC'Position
+-- | Scode-safe \(\lambda\Pi\)-terms annotated with source code position.
+-- type Term = Term Raw.BNFC'Position
 
--- -- | Scope-safe patterns annotated with source code position.
--- -- type FoilPattern = FoilPattern Raw.BNFC'Position
+-- | Scope-safe patterns annotated with source code position.
+-- type FoilPattern = FoilPattern Raw.BNFC'Position
 
--- -- ** Conversion helpers
+-- ** Conversion helpers
 
--- -- | Convert 'Raw.Term' into a scope-safe term.
--- -- This is a special case of 'convertToAST'.
--- toTerm :: (Foil.Distinct n) => Foil.Scope n -> Map Raw.Id (Foil.Name n) -> Raw.Term -> Term n
--- toTerm = convertToAST convertToTermSig toFoilPattern getTermFromScopedTerm
+-- | Convert 'Raw.Term' into a scope-safe term.
+-- This is a special case of 'convertToAST'.
+toTerm :: (Foil.Distinct n) => Foil.Scope n -> Map Raw.Id (Foil.Name n) -> Raw.Term -> Term n
+toTerm = convertToAST convertToTermSig toFoilPattern getTermFromScopedTerm
 
--- -- | Convert 'Raw.Term' into a closed scope-safe term.
--- -- This is a special case of 'toTerm'.
--- toTermClosed :: Raw.Term -> Term Foil.VoidS
--- toTermClosed = toTerm Foil.emptyScope Map.empty
+-- | Convert 'Raw.Term' into a closed scope-safe term.
+-- This is a special case of 'toTerm'.
+toTermClosed :: Raw.Term -> Term Foil.VoidS
+toTermClosed = toTerm Foil.emptyScope Map.empty
 
--- -- | Convert a scope-safe representation back into 'Raw.Term'.
--- -- This is a special case of 'convertFromAST'.
--- --
--- -- 'Raw.Id' names are generated based on the raw identifiers in the underlying foil representation.
--- --
--- -- This function does not recover location information for variables, patterns, or scoped terms.
--- fromTerm :: Term n -> Raw.Term
--- fromTerm =
---   convertFromAST
---     convertFromTermSig
---     (Raw.OTerm)
---     (fromFoilPattern mkId)
---     (Raw.ScopedTerm)
---     mkId
---   where
---     mkId n = Raw.Id ("x" ++ show n)
+-- | Convert a scope-safe representation back into 'Raw.Term'.
+-- This is a special case of 'convertFromAST'.
+--
+-- 'Raw.Id' names are generated based on the raw identifiers in the underlying foil representation.
+--
+-- This function does not recover location information for variables, patterns, or scoped terms.
+fromTerm :: Term n -> Raw.Term
+fromTerm =
+  convertFromAST
+    convertFromTermSig
+    Raw.OTerm
+    fromFoilPattern
+    Raw.ScopedTerm
+    mkId
+  where
+    mkId n = Raw.Id ("x" ++ show n)
 
--- -- | Parse scope-safe terms via raw representation.
--- --
--- -- >>> fromString "λx.λy.λx.x" :: Term Foil.VoidS
--- -- λ x0 . λ x1 . λ x2 . x2
--- instance IsString (AST FoilPattern TermSig Foil.VoidS) where
---   fromString input = case Raw.pTerm (Raw.tokens input) of
---     Left err -> error ("could not parse λΠ-term: " <> input <> "\n  " <> err)
---     Right term -> toTermClosed term
+-- | Parse scope-safe terms via raw representation.
+-- >>> fromString "λx.λy.λx.x" :: Term Foil.VoidS
+-- λ x0 . λ x1 . λ x2 . x2
+instance IsString (AST FoilPattern TermSig Foil.VoidS) where
+  fromString input = case Raw.pTerm (Raw.tokens input) of
+    Left err -> error ("could not parse λΠ-term: " <> input <> "\n  " <> err)
+    Right term -> toTermClosed term
 
 -- -- | Pretty-print scope-safe terms via raw representation.
--- instance Show (AST FoilPattern TermSig Foil.VoidS) where
---   show = Raw.printTree . fromTerm
+instance Show (AST FoilPattern TermSig Foil.VoidS) where
+  show = Raw.printTree . fromTerm
