@@ -13,7 +13,7 @@ strip (Raw.AppTerm t1 t2) =
    in (h, rest ++ [t2])
 strip t = (t, [])
 
---- >>> strip ("X y z")
+-- (WTerm (MetavarId "X"),[AppTerm (OTerm (Id "y")) (OTerm (Id "z"))])
 -- (WTerm (MetavarId "X"),[AppTerm (OTerm (Id "y")) (OTerm (Id "z"))])
 
 --- >>> strip ("Cons x ( y ( λ z . z ) )")

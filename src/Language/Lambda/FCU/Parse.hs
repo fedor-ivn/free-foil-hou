@@ -11,12 +11,6 @@ import Language.Lambda.FCU.FCUSyntax.Lex qualified as Raw
 import Language.Lambda.FCU.FCUSyntax.Par qualified as Raw
 import Language.Lambda.FCU.FCUSyntax.Print qualified as Raw
 
--- | Parses a term from a string
-parseTerm :: String -> Either String Term
-parseTerm input = case Raw.pTerm . Raw.myLexer $ input of
-  Raw.Bad err -> Left $ "Parse error: " ++ err
-  Raw.Ok term -> Right $ convertTerm term
-
 -- | Converts the raw parsed term to the Haskell representation
 convertTerm :: Raw.Term -> Term
 convertTerm term = case term of
@@ -25,6 +19,12 @@ convertTerm term = case term of
   Raw.CTerm (Raw.ConstructorId x) -> Constructor x
   Raw.AppTerm t1 t2 -> convertTerm t1 :@ convertTerm t2
   Raw.AbsTerm (Raw.PatternVar (Raw.Id x)) (Raw.ScopedTerm t) -> x :.: convertTerm t
+
+-- \| Parses a term from a string
+parseTerm :: String -> Either String Term
+parseTerm input = case Raw.pTerm . Raw.myLexer $ input of
+  Raw.Bad err -> Left $ "Parse error: " ++ err
+  Raw.Ok term -> Right $ convertTerm term
 
 -- >>> parseTerm "( f a ) ( λ x . λ y . y )"
 -- Right (f a) (λx . (λy . (y)))

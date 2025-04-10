@@ -31,22 +31,22 @@ import Language.Lambda.FCU.Terms (newMetaVarId, permutate, showRaw)
 -- OTerm (Id "z") and OTerm (Id "w") are not unifiable
 
 -- >>> unify [] (Substitutions [], ("X y", "Cons x"))
--- [("X" |-> AbsTerm (PatternVar (Id "z1")) (ScopedTerm (AppTerm (CTerm (ConstructorId "Cons")) (OTerm (Id "x")))))]
+-- [("X" |-> λz1 . (Cons x))]
 
 -- >>> unify [] (Substitutions [], ("X y", "(Cons x) y"))
--- [("X" |-> AbsTerm (PatternVar (Id "z1")) (ScopedTerm (AppTerm (AppTerm (CTerm (ConstructorId "Cons")) (OTerm (Id "x"))) (OTerm (Id "z1")))))]
+-- [("X" |-> λz1 . ((Cons x) z1))]
 
 -- >>> unify [] (Substitutions [], ("(X y) x", "(Cons x) ((Cons z) x)"))
--- [("X" |-> AbsTerm (PatternVar (Id "z1")) (ScopedTerm (AbsTerm (PatternVar (Id "z2")) (ScopedTerm (AppTerm (AppTerm (CTerm (ConstructorId "Cons")) (OTerm (Id "z2"))) (AppTerm (AppTerm (CTerm (ConstructorId "Cons")) (OTerm (Id "z"))) (OTerm (Id "z2"))))))))]
+-- [("X" |-> λz1 . λz2 . ((Cons z2) ((Cons z) z2)))]
 
 -- >>> unify [] (Substitutions [], ("λ l1 . (λ l2 . ((X (Fst l1)) (Fst (Snd l2))))", "λ l1 . (λ l2 . (Snd ((Y (Fst l2)) (Fst l1))))"))
--- [("Y" |-> AbsTerm (PatternVar (Id "z1")) (ScopedTerm (AbsTerm (PatternVar (Id "z2")) (ScopedTerm (AppTerm (WTerm (MetavarId "Y'")) (OTerm (Id "z2"))))))) ("X" |-> AbsTerm (PatternVar (Id "z1")) (ScopedTerm (AbsTerm (PatternVar (Id "z2")) (ScopedTerm (AppTerm (CTerm (ConstructorId "Snd")) (AppTerm (WTerm (MetavarId "Y'")) (OTerm (Id "z1"))))))))]
+-- [("Y" |-> λz1 . λz2 . (Y' z2)) ("X" |-> λz1 . λz2 . (Snd (Y' z1)))]
 
 -- >>> unify [] (Substitutions [], ("(X a) c", "((X a) b) c"))
 -- Different argument lists lengths in (4) rule
 
 -- >>> unify [] (Substitutions [], ("((X a) b1) c", "((X a) b2) c"))
--- [("X" |-> AbsTerm (PatternVar (Id "z1")) (ScopedTerm (AbsTerm (PatternVar (Id "z2")) (ScopedTerm (AbsTerm (PatternVar (Id "z3")) (ScopedTerm (AppTerm (AppTerm (WTerm (MetavarId "X'")) (OTerm (Id "z1"))) (OTerm (Id "z3")))))))))]
+-- [("X" |-> λz1 . λz2 . λz3 . ((X' z1) z3))]
 
 -- >>> unify [] (Substitutions [], ("((X a) b1) c", "((Y c) b2) a"))
 -- Global restriction fail at flexflex case
@@ -83,7 +83,7 @@ caseRigidRigid bvs (a, sn, b, tm, th) = case (a, b) of
         else error "Different function heads or argument lists lengths in (2) rule"
 
 caseFlexRigid :: [(Char, Raw.Id)] -> (Raw.MetavarId, [Raw.Term], Raw.Term, Substitutions) -> Substitutions
-caseFlexRigid _ ((Raw.MetavarId _F), tn, s, rho) -- s is rigid
+caseFlexRigid _ (Raw.MetavarId _F, tn, s, rho) -- s is rigid
   | not (argumentRestriction tn) = error "Argument restriction fail at flexrigid case"
   | not (localRestriction tn) = error "Local restriction fail at flexrigid case"
   | otherwise = combineSubstitutions (combineSubstitutions rho pruningResult) newMetavarSubs
@@ -102,7 +102,7 @@ caseFlexFlex bvs (_F, sn, _G, tm, th)
   | otherwise = caseFlexFlexDiff bvs (_F, _G, sn, tm, th)
 
 caseFlexFlexSame :: [(Char, Raw.Id)] -> (Raw.MetavarId, [Raw.Term], [Raw.Term], Substitutions) -> Substitutions
-caseFlexFlexSame _ ((Raw.MetavarId _F), sn, tn, th)
+caseFlexFlexSame _ (Raw.MetavarId _F, sn, tn, th)
   | length sn /= length tn = error "Different argument lists lengths in (4) rule"
   | sn == tn = error "Same argument lists in (4) rule"
   | otherwise = combineSubstitutions th newMetavarSubs
