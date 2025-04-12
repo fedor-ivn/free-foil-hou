@@ -650,7 +650,7 @@ matchMetaAbs
           Foil.Distinct ->
             let scope = Foil.extendScopePattern lhsBinderList Foil.emptyScope
                 argTypes = toNameMap Foil.emptyNameMap lhsBinderList metavarArgTypes
-             in trace "dbg" $ match scope metavarBinders argTypes lhsTerm rhsTerm
+             in match scope metavarBinders argTypes lhsTerm rhsTerm
       Foil.RenameLeftNameBinder _ rename ->
         case Foil.assertDistinct rhsBinderList of
           Foil.Distinct ->

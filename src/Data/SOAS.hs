@@ -294,7 +294,7 @@ match
   -> TypedSOAS binder metavar sig n t
   -- ^ The left-hand side (with metavariables that we solve for).
   -> AST (AnnBinder t binder) (AnnSig t (Sum sig ext)) n
-  -- ^ The right hand side (rigid). todo: should we annotate ext as well?
+  -- ^ The right hand side (rigid)
   -> [MetaSubsts (AnnBinder t binder) (AnnSig t (Sum sig ext)) metavar t]
 match scope metavarTypes varTypes lhs rhs =
   trace "matching non-scoped lhs and rhs" $

@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE RankNTypes #-}
@@ -9,7 +10,7 @@ module Language.Lambda.Config (
   Config (..),
   Problem (..),
   Solution (..),
-  UnificationConstraint (..),
+  CanonicalConstraint (..),
   fromUnificationConstraint,
   toUnificationConstraint,
   CanonicalProblem,
@@ -52,7 +53,7 @@ newtype Config binders constraint solution = Config
 type CanonicalConfig =
   Config
     MetavarBinders
-    UnificationConstraint
+    CanonicalConstraint
     (Solution MetavarBinders MetaSubsts')
 
 data Problem binders constraint solution = Problem
@@ -65,7 +66,7 @@ data Problem binders constraint solution = Problem
 type CanonicalProblem =
   Problem
     MetavarBinders
-    UnificationConstraint
+    CanonicalConstraint
     (Solution MetavarBinders MetaSubsts')
 
 type CanonicalSolution = Solution MetavarBinders MetaSubsts'
@@ -77,20 +78,20 @@ data Solution binders substitutions = Solution
   }
   deriving (Show, Generic)
 
-data UnificationConstraint where
-  UnificationConstraint
+data CanonicalConstraint where
+  CanonicalConstraint
     :: (Distinct n)
     => NameBinderList Foil.VoidS n
     -> Foil.NameMap n Raw.Type
     -> MetaTerm Raw.MetavarIdent n Raw.Type
     -> MetaTerm Raw.MetavarIdent n Raw.Type
-    -> UnificationConstraint
+    -> CanonicalConstraint
 
 type Result = Either String
 
 class IsCanonicalConstraint c where
-  toCanonicalConstraint :: MetavarBinders -> c -> Result UnificationConstraint
-  fromCanonicalConstraint :: MetavarBinders -> UnificationConstraint -> Result c
+  toCanonicalConstraint :: MetavarBinders -> c -> Result CanonicalConstraint
+  fromCanonicalConstraint :: MetavarBinders -> CanonicalConstraint -> Result c
 
 class IsCanonicalSubstitutions s where
   toCanonicalSubstitution :: MetavarBinders -> s -> Result MetaSubsts'
@@ -99,6 +100,27 @@ class IsCanonicalSubstitutions s where
 class IsCanonicalMetavarBinders b where
   toCanonicalMetavarBinders :: b -> Result MetavarBinders
   fromCanonicalMetavarBinders :: MetavarBinders -> Result b
+
+instance IsCanonicalConstraint CanonicalConstraint where
+  toCanonicalConstraint :: MetavarBinders -> CanonicalConstraint -> Result CanonicalConstraint
+  toCanonicalConstraint _ = Right
+
+  fromCanonicalConstraint :: MetavarBinders -> CanonicalConstraint -> Result CanonicalConstraint
+  fromCanonicalConstraint _ = Right
+
+instance IsCanonicalSubstitutions MetaSubsts' where
+  toCanonicalSubstitution :: MetavarBinders -> MetaSubsts' -> Result MetaSubsts'
+  toCanonicalSubstitution _ = Right
+
+  fromCanonicalSubstitution :: MetavarBinders -> MetaSubsts' -> Result MetaSubsts'
+  fromCanonicalSubstitution _ = Right
+
+instance IsCanonicalMetavarBinders MetavarBinders where
+  toCanonicalMetavarBinders :: MetavarBinders -> Result MetavarBinders
+  toCanonicalMetavarBinders = Right
+
+  fromCanonicalMetavarBinders :: MetavarBinders -> Result MetavarBinders
+  fromCanonicalMetavarBinders = Right
 
 toCanonicalSolution
   :: forall b s
@@ -136,12 +158,12 @@ toCanonicalConfig
 toCanonicalConfig (Config problems) =
   Config <$> mapM toCanonicalProblem problems
 
-instance Show UnificationConstraint where
-  show :: UnificationConstraint -> String
+instance Show CanonicalConstraint where
+  show :: CanonicalConstraint -> String
   show = Raw.printTree . fromUnificationConstraint
 
-fromUnificationConstraint :: UnificationConstraint -> Raw.UnificationConstraint
-fromUnificationConstraint (UnificationConstraint binders binderTypes lhs rhs) =
+fromUnificationConstraint :: CanonicalConstraint -> Raw.UnificationConstraint
+fromUnificationConstraint (CanonicalConstraint binders binderTypes lhs rhs) =
   let fromMetaTerm' = Raw.AScopedTerm . fromTerm . fromMetaTerm
    in Raw.AUnificationConstraint
         (toBinders binders binderTypes)
@@ -151,7 +173,7 @@ fromUnificationConstraint (UnificationConstraint binders binderTypes lhs rhs) =
 toUnificationConstraint
   :: MetavarBinders
   -> Raw.UnificationConstraint
-  -> Maybe UnificationConstraint
+  -> Maybe CanonicalConstraint
 toUnificationConstraint metavarBinders (Raw.AUnificationConstraint vars lhs rhs) =
   withMetaSubstVars
     Foil.emptyScope
@@ -169,6 +191,6 @@ toUnificationConstraint metavarBinders (Raw.AUnificationConstraint vars lhs rhs)
        in do
             (lhs', _) <- annotate' lhs
             (rhs', _) <- annotate' rhs
-            pure (UnificationConstraint binderList binderTypes lhs' rhs')
+            pure (CanonicalConstraint binderList binderTypes lhs' rhs')
  where
   binders = map (\(Raw.AVarBinder ident typ) -> (ident, typ)) vars

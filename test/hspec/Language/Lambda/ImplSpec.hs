@@ -13,23 +13,38 @@ import Test.Hspec
 import Data.Maybe (fromMaybe)
 import Data.SOAS (MetaSubsts (..))
 import Language.Lambda.Config (Config (..), Problem (..), Solution (..))
-import Language.Lambda.RawConfig (decodeConfigFile)
+import Language.Lambda.Framework (
+  SolutionComparison (..),
+  solveByMatchingAndCompareToReferenceSolutionsWith,
+ )
 import qualified Language.Lambda.Framework as Framework
 import qualified Language.Lambda.Impl as Impl
+import Language.Lambda.RawConfig (decodeConfigFile)
 
 handleErr :: (Show e) => Either e a -> IO a
 handleErr = either (\err -> print err >> exitFailure) pure
 
+foo :: SpecWith ()
+foo = describe "matching tests" $ do
+  Config{..} <- runIO $ decodeConfigFile "problems/matching.toml" >>= handleErr
+  forM_ (zip [1 ..] configProblems) $ \(i, problem) -> do
+    describe ("problem #" <> show i) $ do
+      result <- runIO $ handleErr (solveByMatchingAndCompareToReferenceSolutionsWith problem)
+      forM_ (zip [1 ..] result) $ \(j, (_solution, comparison)) -> do
+        it ("solution #" <> show j <> " should be equivalent to a reference solution") $
+          comparison `shouldBe` Equivalent
+
 spec :: Spec
 spec = do
-  Config{..} <- runIO $ decodeConfigFile "config.toml" >>= handleErr
-
-  describe "title" $
+  describe "title" $ do
+    Config{..} <- runIO $ decodeConfigFile "config.toml" >>= handleErr
     forM_ (zip [1 ..] configProblems) $ \(i, Problem{..}) -> do
       describe ("problem #" <> show i) $ do
         forM_ problemSolutions $ \solution@Solution{..} -> do
           it (Text.unpack $ fromMaybe "" solutionName) $ do
             Framework.validateSolution problemConstraints solution `shouldSatisfy` isRight
+
+  foo
 
   describe "moreGeneralThan (substitution comparison)" $ do
     -- Helper function to set up the test case

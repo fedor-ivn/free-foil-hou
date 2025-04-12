@@ -30,9 +30,12 @@ module Language.Lambda.Framework (
   IsCanonicalMetavarBinders (..),
   IsCanonicalConstraint (..),
   IsCanonicalSubstitutions (..),
+  SolutionComparison (..),
+  solveAndCompareToReferenceSolutionsWith,
 
   -- * Main entry point
   main,
+  solveByMatchingAndCompareToReferenceSolutionsWith,
 ) where
 
 import Control.Monad (forM_)
@@ -46,6 +49,7 @@ import Debug.Trace (trace)
 import qualified Control.Monad.Foil.Internal as Foil
 import Control.Monad.Free.Foil (alphaEquiv)
 import Language.Lambda.Config (
+  CanonicalConstraint (..),
   CanonicalProblem,
   CanonicalSolution,
   Config (..),
@@ -55,7 +59,6 @@ import Language.Lambda.Config (
   Problem (..),
   Result,
   Solution (..),
-  UnificationConstraint (..),
   toCanonicalSolution,
   toUnificationConstraint,
  )
@@ -99,9 +102,25 @@ solveAndCompareToReferenceSolutionsWith problem solve = do
   compare' = flip (compareSolutions originalBinders)
   findBestComparison solution = do
     let comparisons = map (compare' solution) referenceSolutions
-        foo = Left "No reference solutions"
-    bestComparison <- foldr (fmap . max) foo comparisons
-    Right (solution, bestComparison)
+    case comparisons of
+      [] -> Left "No reference solutions"
+      (x : xs) -> Right (solution, foldl max x xs)
+
+-- >>> foldr (fmap . max) (Left "No reference solutions") [Right 1, Right 2]
+-- Left "No reference solutions"
+
+solveByMatchingAndCompareToReferenceSolutionsWith
+  :: CanonicalProblem -> Result [(CanonicalSolution, SolutionComparison)]
+solveByMatchingAndCompareToReferenceSolutionsWith problem =
+  solveAndCompareToReferenceSolutionsWith problem solve
+ where
+  solve :: MetavarBinders -> [CanonicalConstraint] -> Result [CanonicalSolution]
+  solve metavarBinders [CanonicalConstraint binders binderTypes lhs rhs] =
+    let scope = Foil.extendScopePattern binders Foil.emptyScope
+        substs = match scope metavarBinders binderTypes lhs rhs
+        solutions = map (Solution Nothing metavarBinders) substs
+     in Right solutions
+  solve _ _ = Left "Invalid number of constraints"
 
 solveWith
   :: forall b c s
@@ -209,7 +228,7 @@ parseMetaSubst metavarBinders input = do
     Just subst -> pure subst
     Nothing -> trace "here" $ Left "type error"
 
-parseUnificationConstraint :: MetavarBinders -> String -> Either String UnificationConstraint
+parseUnificationConstraint :: MetavarBinders -> String -> Either String CanonicalConstraint
 parseUnificationConstraint metavarBinders input = do
   let tokens = Raw.resolveLayout False (Raw.myLexer input)
   raw <- Raw.pUnificationConstraint tokens
@@ -228,7 +247,7 @@ matchUnificationConstraint
   rawMetavarBinders
   rawUnificationConstraint = do
     metavarBindersMap <- parseMetavarBinders rawMetavarBinders
-    (UnificationConstraint binders binderTypes lhs rhs) <-
+    (CanonicalConstraint binders binderTypes lhs rhs) <-
       parseUnificationConstraint
         metavarBindersMap
         rawUnificationConstraint
@@ -239,14 +258,14 @@ matchUnificationConstraint
 -- | Apply substitutions to both sides of a unification constraint
 solveUnificationConstraint
   :: MetaSubsts'
-  -> UnificationConstraint
-  -> UnificationConstraint
+  -> CanonicalConstraint
+  -> CanonicalConstraint
 solveUnificationConstraint
   substs
-  (UnificationConstraint binders binderTypes lhs rhs) =
+  (CanonicalConstraint binders binderTypes lhs rhs) =
     let scope = nameBinderListToScope binders
         solve = nfMetaTerm scope . applyMetaSubsts scope substs
-     in UnificationConstraint
+     in CanonicalConstraint
           binders
           binderTypes
           (solve lhs)
@@ -281,7 +300,7 @@ isSolvedUnificationConstraint
 isSolvedUnificationConstraint rawMetavarBinders rawUnificationConstraint rawMetaSubsts = do
   metavarBinders <- traverse parseMetavarBinder rawMetavarBinders
   let metavarBindersMap = Map.fromList metavarBinders
-  (UnificationConstraint binders _ lhs rhs) <-
+  (CanonicalConstraint binders _ lhs rhs) <-
     trace "parsed unification constraint" $
       parseUnificationConstraint metavarBindersMap rawUnificationConstraint
   metaSubsts <- traverse (parseMetaSubst metavarBindersMap) rawMetaSubsts
@@ -295,20 +314,20 @@ isSolvedUnificationConstraint rawMetavarBinders rawUnificationConstraint rawMeta
       (trace (show (solve rhs)) (solve rhs))
 
 -- | Check if a constraint is solved (left-hand side equals right-hand side)
-isSolved :: UnificationConstraint -> Bool
-isSolved (UnificationConstraint binders _binderTypes lhs rhs) =
+isSolved :: CanonicalConstraint -> Bool
+isSolved (CanonicalConstraint binders _binderTypes lhs rhs) =
   let scope = nameBinderListToScope binders
    in alphaEquiv scope lhs rhs
 
-validateProblem :: CanonicalProblem -> Either String ([(CanonicalSolution, [UnificationConstraint])], [CanonicalSolution])
+validateProblem :: CanonicalProblem -> Either String ([(CanonicalSolution, [CanonicalConstraint])], [CanonicalSolution])
 validateProblem (Problem{..}) = do
   let results = map (validateSolution problemConstraints) problemSolutions
   pure (partitionEithers results)
 
 validateSolution
-  :: [UnificationConstraint]
+  :: [CanonicalConstraint]
   -> CanonicalSolution
-  -> Either (CanonicalSolution, [UnificationConstraint]) CanonicalSolution
+  -> Either (CanonicalSolution, [CanonicalConstraint]) CanonicalSolution
 validateSolution constraints solution@Solution{..} =
   -- Merge problem metavars with solution-specific metavars
   let solvedConstraints =
@@ -361,10 +380,26 @@ parseConfigAndValidate = do
 
 -- | Main function for testing and debugging the framework
 main :: IO ()
-main = parseConfigAndValidate
+main = mainFoo
 
+-- main = parseConfigAndValidate
 -- main = mainDebug
 -- main = mainMatchDebug
+
+mainFoo :: IO ()
+mainFoo = do
+  config <- decodeConfigFile "problems/matching.toml"
+  case config of
+    Left err -> print err
+    Right cfg -> do
+      forM_ (zip [1 ..] (configProblems cfg)) $ \(i, problem) -> do
+        putStrLn $ "Problem #" ++ show i
+        case solveByMatchingAndCompareToReferenceSolutionsWith problem of
+          Left err -> print err
+          Right result ->
+            forM_ result $ \(solution, comparison) -> do
+              putStrLn $ "Solution: " ++ show solution
+              putStrLn $ "Comparison: " ++ show comparison
 
 mainMatchDebug :: IO ()
 mainMatchDebug = either print print result
@@ -471,5 +506,4 @@ mainMatchDebug = either print print result
 -- >>> constraint     = "∀ a: t -> t. F[a, X[a]] = a Y[]"
 -- >>> subst          = ["F[a, x] ↦ a H[a, x]"]
 -- >>> isSolvedUnificationConstraint metavarBinders constraint subst
--- Right []
 -- Left "type error"
