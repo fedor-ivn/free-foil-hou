@@ -4,9 +4,8 @@
 
 module Language.Lambda.FCU.Substitutions where
 
-import Language.Lambda.FCU.FCUImplSW.Substitutions (devarOne)
 import Language.Lambda.FCU.FCUSyntax.Abs qualified as Raw
-import Language.Lambda.FCU.Terms
+import Language.Lambda.FCU.Terms ( showRaw )
 
 newtype Substitutions
   = Substitutions [(String, Raw.Term)]
