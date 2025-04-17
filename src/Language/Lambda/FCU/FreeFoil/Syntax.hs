@@ -1,14 +1,17 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
@@ -17,11 +20,29 @@
 module Language.Lambda.FCU.FreeFoil.Syntax where
 
 import Control.Monad.Foil qualified as Foil
+import Control.Monad.Foil.Internal as FoilInternal
 import Control.Monad.Foil.TH
+  ( deriveCoSinkable,
+    deriveUnifiablePattern,
+    mkFoilPattern,
+    mkFromFoilPattern,
+    mkToFoilPattern,
+  )
 import Control.Monad.Free.Foil
-import Control.Monad.Free.Foil.Generic
+  ( AST (..),
+    ScopedAST (ScopedAST),
+    convertFromAST,
+    convertToAST,
+    substitute,
+  )
+import Control.Monad.Free.Foil.Generic ()
 import Control.Monad.Free.Foil.TH
-import Data.Bifunctor.TH
+  ( mkConvertFromFreeFoil,
+    mkConvertToFreeFoil,
+    mkPatternSynonyms,
+    mkSignature,
+  )
+import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor, deriveBitraversable)
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.String (IsString (..))
@@ -31,7 +52,7 @@ import Language.Lambda.FCU.FCUSyntax.Abs qualified as Raw
 import Language.Lambda.FCU.FCUSyntax.Lex qualified as Raw
 import Language.Lambda.FCU.FCUSyntax.Par qualified as Raw
 import Language.Lambda.FCU.FCUSyntax.Print qualified as Raw
-import System.Exit (exitFailure)
+import Language.Lambda.FCU.Terms (showRaw)
 
 -- * Generated code
 
@@ -125,6 +146,99 @@ instance IsString (AST FoilPattern TermSig Foil.VoidS) where
     Left err -> error ("could not parse λΠ-term: " <> input <> "\n  " <> err)
     Right term -> toTermClosed term
 
--- -- | Pretty-print scope-safe terms via raw representation.
+-- | Pretty-print scope-safe terms via raw representation.
 instance Show (AST FoilPattern TermSig Foil.VoidS) where
   show = Raw.printTree . fromTerm
+
+-- * Unification test
+
+type Substitutions = Map String (Term Foil.VoidS) -- Placeholder
+
+applySubst :: (Distinct n) => Foil.Scope n -> Substitutions -> Term n -> Term n
+applySubst scope subs term = term -- TODO, maybe applyMetavarSubst
+
+unify ::
+  (Distinct n) =>
+  Foil.Scope n -> -- (bvs)
+  Substitutions ->
+  (Term n, Term n) ->
+  Maybe Substitutions
+unify scope th (s, t) =
+  let s' = applySubst scope th s
+      t' = applySubst scope th t
+   in cases scope th (s', t')
+
+cases ::
+  forall n. -- Use ScopedTypeVariables
+  (Distinct n) =>
+  Foil.Scope n ->
+  Substitutions ->
+  (Term n, Term n) ->
+  Maybe Substitutions
+cases scope th (s', t') =
+  case (s', t') of
+    -- Case: Identical terms
+    _ | s' == t' -> Just th
+    -- Case: Vars
+    (Var v1, Var v2)
+      | v1 == v2 -> Just th
+      | otherwise -> Nothing
+    -- Case: Lambda Abstractions
+    (AbsTerm _ _, AbsTerm _ _) -> unifyAbsCase scope th (s', t')
+    -- Case: Applications
+    (AppTerm head1 body1, AppTerm head2 body2) -> caseRigidRigid scope th (head1, body1) (head2, body2)
+    -- Case: FlexRigid
+    (Node (WTermSig metaId1), term2) -> caseFlexRigid scope th (s', t')
+    (term1, Node (WTermSig metaId2)) -> caseFlexRigid scope th (t', s')
+    -- Fail case - none of the rules apply
+    _ -> Nothing
+
+unifyAbsCase ::
+  (Distinct n) =>
+  Foil.Scope n ->
+  Substitutions ->
+  (Term n, Term n) ->
+  Maybe Substitutions
+unifyAbsCase scope th (AbsTerm binder1 body1, AbsTerm binder2 body2) =
+  case (binder1, binder2) of
+    (FoilPatternVar nameBinder1, FoilPatternVar namebinder2) ->
+      case Foil.assertDistinct nameBinder1 of
+        Foil.Distinct ->
+          let scope' = Foil.extendScopePattern binder1 scope
+           in unify scope' th (body1, body2)
+unifyAbsCase _ _ _ = Nothing
+
+caseRigidRigid ::
+  (Distinct n) =>
+  Foil.Scope n ->
+  Substitutions ->
+  (Term n, Term n) ->
+  (Term n, Term n) ->
+  Maybe Substitutions
+caseRigidRigid scope th (head1, body1) (head2, body2) = do
+  th' <- unify scope th (head1, head2)
+  unify scope th' (body1, body2)
+
+caseFlexRigid ::
+  (Distinct n) =>
+  Foil.Scope n ->
+  Substitutions ->
+  (Term n, Term n) ->
+  Maybe Substitutions
+caseFlexRigid scope th (s', t') = Nothing
+
+caseFlexFlexSame ::
+  (Distinct n) =>
+  Foil.Scope n ->
+  Substitutions ->
+  (Term n, Term n) ->
+  Maybe Substitutions
+caseFlexFlexSame scope th (s', t') = Nothing
+
+caseFlexFlexDiff ::
+  (Distinct n) =>
+  Foil.Scope n ->
+  Substitutions ->
+  (Term n, Term n) ->
+  Maybe Substitutions
+caseFlexFlexDiff scope th (s', t') = Nothing

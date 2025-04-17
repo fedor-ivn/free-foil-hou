@@ -13,7 +13,7 @@ import Language.Lambda.FCU.Restrictions
   )
 import Language.Lambda.FCU.Strip (strip, unstrip)
 import Language.Lambda.FCU.Substitutions (Substitutions (Substitutions), combineSubstitutions, devar, mkvars, rename)
-import Language.Lambda.FCU.Terms (newMetaVarId, permutate, showRaw)
+import Language.Lambda.FCU.Terms (newMetaVarId, permutate)
 
 -- >>> unify [] (Substitutions [], ("x", "x"))
 -- []

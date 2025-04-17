@@ -7,7 +7,6 @@ where
 
 import Language.Lambda.FCU.FCUImplSW.Discharge (discharge)
 import Language.Lambda.FCU.FCUImplSW.Prune (abst, eqsel, hnf, prune)
-import Language.Lambda.FCU.FCUImplSW.RTerms (RTerm (..), toRTerm)
 import Language.Lambda.FCU.FCUImplSW.Restrictions (argumentRestriction, globalRestriction, localRestriction)
 import Language.Lambda.FCU.FCUImplSW.Strip (strip, unstrip)
 import Language.Lambda.FCU.FCUImplSW.Substitutions (devar, mkvars, rename)

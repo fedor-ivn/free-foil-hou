@@ -1,10 +1,9 @@
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 module Language.Lambda.FCU.Restrictions where
 
 import Language.Lambda.FCU.FCUSyntax.Abs qualified as Raw
-import Language.Lambda.FCU.Terms
+import Language.Lambda.FCU.Terms ()
 
 isRTerm :: Raw.Term -> Bool
 isRTerm (Raw.OTerm _) = True
@@ -33,9 +32,9 @@ localRestriction :: [Raw.Term] -> Bool
 localRestriction tn =
   and
     [ not (isSubset t1 t2) && not (isSubset t2 t1)
-    | (t1, i1) <- zip tn [0 ..],
-      (t2, i2) <- zip tn [0 ..],
-      i1 < i2
+      | (t1, i1) <- zip tn ([0 ..] :: [Int]),
+        (t2, i2) <- zip tn ([0 ..] :: [Int]),
+        i1 < i2
     ]
   where
     isSubset :: Raw.Term -> Raw.Term -> Bool
@@ -43,7 +42,7 @@ localRestriction tn =
 
     checkSubterm :: Raw.Term -> Raw.Term -> Bool
     checkSubterm sub (Raw.AppTerm t1 t2) = checkSubterm sub t1 || checkSubterm sub t2
-    checkSubterm sub (Raw.AbsTerm x (Raw.ScopedTerm t)) = checkSubterm sub t
+    checkSubterm sub (Raw.AbsTerm _ (Raw.ScopedTerm t)) = checkSubterm sub t
     checkSubterm sub t = sub == t
 
 -- >>> globalRestriction ["Cons a b c"] ["Cons a b c"]
@@ -62,14 +61,14 @@ globalRestriction :: [Raw.Term] -> [Raw.Term] -> Bool
 globalRestriction sn tm =
   and
     [ not (isStrictSubset t1 t2) && not (isStrictSubset t2 t1)
-    | t1 <- sn,
-      t2 <- tm
+      | t1 <- sn,
+        t2 <- tm
     ]
   where
     isStrictSubset :: Raw.Term -> Raw.Term -> Bool
-    isStrictSubset t1 t2 = checkSubterm t1 t2
+    isStrictSubset = checkSubterm
 
     checkSubterm :: Raw.Term -> Raw.Term -> Bool
     checkSubterm sub (Raw.AppTerm t1 t2) = checkSubterm sub t1 || checkSubterm sub t2
-    checkSubterm sub (Raw.AbsTerm x (Raw.ScopedTerm t)) = checkSubterm sub t
+    checkSubterm sub (Raw.AbsTerm _ (Raw.ScopedTerm t)) = checkSubterm sub t
     checkSubterm sub t = sub == t

@@ -1,10 +1,9 @@
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE OverloadedStrings #-}
+
 
 module Language.Lambda.FCU.Strip where
 
 import Language.Lambda.FCU.FCUSyntax.Abs qualified as Raw
-import Language.Lambda.FCU.Terms
 
 -- | Strip a term into a head and a list of arguments.
 strip :: Raw.Term -> (Raw.Term, [Raw.Term])
@@ -21,9 +20,9 @@ strip t = (t, [])
 
 -- | Combine a head term with arguments to reconstruct the original term
 unstrip :: (Raw.Term, [Raw.Term]) -> Raw.Term
-unstrip (head, args) = case args of
-  [] -> head
-  _ -> Raw.AppTerm head (foldl1 Raw.AppTerm args)
+unstrip (hd, args) = case args of
+  [] -> hd
+  _ -> Raw.AppTerm hd (foldl1 Raw.AppTerm args)
 
 -- >>> unstrip ("X", ["y", "z"])
 -- AppTerm (WTerm (MetavarId "X")) (AppTerm (OTerm (Id "y")) (OTerm (Id "z")))

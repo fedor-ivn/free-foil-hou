@@ -2,14 +2,10 @@
 
 module Language.Lambda.FCU.Parse where
 
-import Control.Applicative qualified as Raw
 import Language.Lambda.FCU.FCUImplSW.Terms (Term (..))
 import Language.Lambda.FCU.FCUSyntax.Abs qualified as Raw
 import Language.Lambda.FCU.FCUSyntax.ErrM qualified as Raw
-import Language.Lambda.FCU.FCUSyntax.Layout qualified as Raw
-import Language.Lambda.FCU.FCUSyntax.Lex qualified as Raw
 import Language.Lambda.FCU.FCUSyntax.Par qualified as Raw
-import Language.Lambda.FCU.FCUSyntax.Print qualified as Raw
 
 -- | Converts the raw parsed term to the Haskell representation
 convertTerm :: Raw.Term -> Term
