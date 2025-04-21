@@ -17,8 +17,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wno-overlapping-patterns #-}
-{-# OPTIONS_GHC -fno-warn-orphans #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 module Language.Lambda.FCU.FreeFoil.Syntax where
 
@@ -174,10 +174,12 @@ instance Show (AST FoilPattern TermSig Foil.VoidS) where
 
 -- * Unification test
 
--- Your generalized term representation
+-- | Generalized term representation
 type Sig typ metavar binder sig n =
   sig (TypedScopedSOAS binder metavar sig n typ) (TypedSOAS binder metavar sig n typ)
 
+
+-- | Substitutions representations
 data Substitution typ metavar binder sig where
   Substitution ::
     metavar ->
@@ -187,7 +189,7 @@ data Substitution typ metavar binder sig where
 
 newtype Substitutions typ metavar binder sig = Substitutions [Substitution typ metavar binder sig]
 
--- | Generalized FCU typeclass for unification with arbitrary term representations
+-- | Generalized FCU typeclass
 class
   ( Eq typ,
     Eq metavar,
@@ -241,13 +243,12 @@ class
 
 devar' ::
   (FCUUnifiable typ metavar binder sig, Distinct n) =>
-  Scope n -> 
-  Sig typ metavar binder sig n -> 
-  typ -> 
+  Scope n ->
+  Sig typ metavar binder sig n ->
+  typ ->
   TypedSOAS binder metavar sig n typ
 devar' scope node typ = case node of
   _ -> error "Not implemented"
-
 
 betaReduce' ::
   (FCUUnifiable typ metavar binder sig, Distinct n) =>
@@ -298,43 +299,3 @@ instance (SinkableK FoilPattern, ZipMatchK TermSig) => FCUUnifiable () Raw.Metav
   applySubstitution = applySubstitution'
   applySubstitutions = applySubstitutions'
   devar = devar'
-
--- unify :: (FCUUnifiable typ metavar binder sig, Distinct n)
---       => [(Char, Name n)]  -- Or use a more general representation for bound variables
---       -> Substitution typ metavar binder sig
---       -> (Sig typ metavar binder sig n, Sig typ metavar binder sig n)
---       -> Maybe (Substitution typ metavar binder sig)
--- unify bvs subst (s, t) =
---   let s' = normalize subst s
---       t' = normalize subst t
---   in case (s', t') of
---     -- Lambda case
---     (Node (AbsTermSig _ (ScopedAST leftBinder leftBody)) _,
---      Node (AbsTermSig _ (ScopedAST rightBinder rightBody)) _) ->
---       case typedUnifyPatterns leftBinder rightBinder of
---         NotUnifiable -> Nothing
---         RenameBothBinders unifiedBinder unifiedTypes leftRen rightRen
---           | Distinct <- assertDistinct unifiedBinder ->
---               -- Handle renaming and continue with body unification
---               let leftBody' = liftRM scope' (fromNameBinderRenaming leftRen) leftBody
---                   rightBody' = liftRM scope' (fromNameBinderRenaming rightRen) rightBody
---                   scope' = extendScopePattern unifiedBinder emptyScope
---               in unify (extendBvs unifiedBinder bvs) subst (leftBody', rightBody')
-
---     -- General case
---     _ -> handleCases bvs subst (s', t')
-
--- cases ::
---   (FCUUnifiable typ metavar binder sig) =>
---   NameBinderList VoidS n ->
---   NameMap n typ ->
---   Substitution typ metavar binder sig ->
---   TypedSOAS binder metavar sig n typ ->
---   TypedSOAS binder metavar sig n typ ->
---   Maybe (Substitution typ metavar binder sig)
--- cases binders types subst s t =
---   case (isFlexible s, isFlexible t) of
---     (True, True) -> caseFlexFlex binders types subst s t
---     (True, False) -> caseFlexRigid binders types subst s t
---     (False, True) -> caseFlexRigid binders types subst t s
---     (False, False) -> caseRigidRigid binders types subst s t
