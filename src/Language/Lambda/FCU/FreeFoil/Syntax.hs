@@ -8,6 +8,7 @@
 {-# LANGUAGE ImportQualifiedPost #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
@@ -15,12 +16,14 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# OPTIONS_GHC -Wno-overlapping-patterns #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
 
 module Language.Lambda.FCU.FreeFoil.Syntax where
 
 import Control.Monad.Foil qualified as Foil
-import Control.Monad.Foil.Internal as FoilInternal
+import Control.Monad.Foil.Internal as FoilInternal hiding (Substitution)
 import Control.Monad.Foil.TH
   ( deriveCoSinkable,
     deriveUnifiablePattern,
@@ -35,17 +38,21 @@ import Control.Monad.Free.Foil
     convertToAST,
     substitute,
   )
-import Control.Monad.Free.Foil.Generic ()
 import Control.Monad.Free.Foil.TH
   ( mkConvertFromFreeFoil,
     mkConvertToFreeFoil,
     mkPatternSynonyms,
     mkSignature,
   )
+import Data.Biapplicative (Bifunctor)
+import Data.Bifunctor.Sum (Sum (..))
 import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor, deriveBitraversable)
+import Data.Bitraversable
 import Data.Map (Map)
 import Data.Map qualified as Map
+import Data.SOAS hiding (SOAS)
 import Data.String (IsString (..))
+import Data.ZipMatchK
 import GHC.Generics qualified as GHC
 import Generics.Kind.TH (deriveGenericK)
 import Language.Lambda.FCU.FCUSyntax.Abs qualified as Raw
@@ -85,6 +92,21 @@ deriveUnifiablePattern ''Raw.Id ''Raw.Pattern
 deriving instance GHC.Generic (TermSig scope term)
 
 deriveGenericK ''TermSig
+
+data AnnBinder ann binder (n :: Foil.S) (l :: Foil.S)
+  = AnnBinder (binder n l) ann
+  deriving (GHC.Generic)
+
+deriveGenericK ''AnnBinder
+
+instance (Foil.CoSinkable binder) => Foil.CoSinkable (AnnBinder ann binder) where
+  coSinkabilityProof rename (AnnBinder binder ann) cont =
+    Foil.coSinkabilityProof rename binder (\rename' binder' -> cont rename' (AnnBinder binder' ann))
+
+  withPattern f empty append scope (AnnBinder binder t) cont =
+    Foil.withPattern f empty append scope binder (\f' binder' -> cont f' (AnnBinder binder' t))
+
+instance (Foil.SinkableK binder) => Foil.SinkableK (AnnBinder ann binder)
 
 -- -- | Match 'Raw.Ident' via 'Eq'.
 -- instance ZipMatchK Raw.Ident where zipMatchWithK = zipMatchViaEq
@@ -132,7 +154,7 @@ fromTerm =
   convertFromAST
     convertFromTermSig
     Raw.OTerm
-    fromFoilPattern
+    (fromFoilPattern mkId)
     Raw.ScopedTerm
     mkId
   where
@@ -152,93 +174,167 @@ instance Show (AST FoilPattern TermSig Foil.VoidS) where
 
 -- * Unification test
 
-type Substitutions = Map String (Term Foil.VoidS) -- Placeholder
+-- Your generalized term representation
+type Sig typ metavar binder sig n =
+  sig (TypedScopedSOAS binder metavar sig n typ) (TypedSOAS binder metavar sig n typ)
 
-applySubst :: (Distinct n) => Foil.Scope n -> Substitutions -> Term n -> Term n
-applySubst scope subs term = term -- TODO, maybe applyMetavarSubst
+data Substitution typ metavar binder sig where
+  Substitution ::
+    metavar ->
+    NameBinderList VoidS n ->
+    TypedSOAS binder metavar sig n typ ->
+    Substitution typ metavar binder sig
 
-unify ::
+newtype Substitutions typ metavar binder sig = Substitutions [Substitution typ metavar binder sig]
+
+-- | Generalized FCU typeclass for unification with arbitrary term representations
+class
+  ( Eq typ,
+    Eq metavar,
+    CoSinkable binder,
+    SinkableK binder,
+    Bitraversable sig,
+    ZipMatchK sig
+  ) =>
+  FCUUnifiable typ metavar binder sig
+  where
+  -- | Check if a term is flexible
+  isFlexible :: Sig typ metavar binder sig n -> Bool
+
+  -- | Apply a single substitution to a term
+  applySubstitution ::
+    (Distinct n) =>
+    Substitution typ metavar binder sig ->
+    Scope n ->
+    TypedSOAS binder metavar sig n typ ->
+    TypedSOAS binder metavar sig n typ
+
+  -- | Apply multiple substitutions to a term
+  applySubstitutions ::
+    (Distinct n) =>
+    Substitutions typ metavar binder sig ->
+    Scope n ->
+    TypedSOAS binder metavar sig n typ ->
+    TypedSOAS binder metavar sig n typ
+
+  -- | Perform a single beta reduction step
+  betaReduceOnce ::
+    (Distinct n) =>
+    Scope n ->
+    TypedSOAS binder metavar sig n typ ->
+    Maybe (TypedSOAS binder metavar sig n typ)
+
+  -- | Full beta reduction to normal form
+  betaReduce ::
+    (Distinct n) =>
+    Scope n ->
+    TypedSOAS binder metavar sig n typ ->
+    TypedSOAS binder metavar sig n typ
+
+  -- | Combined substitution application and beta reduction
+  devar ::
+    (FCUUnifiable typ metavar binder sig, Distinct n) =>
+    Scope n ->
+    Sig typ metavar binder sig n ->
+    typ ->
+    TypedSOAS binder metavar sig n typ
+
+devar' ::
+  (FCUUnifiable typ metavar binder sig, Distinct n) =>
+  Scope n -> 
+  Sig typ metavar binder sig n -> 
+  typ -> 
+  TypedSOAS binder metavar sig n typ
+devar' scope node typ = case node of
+  _ -> error "Not implemented"
+
+
+betaReduce' ::
+  (FCUUnifiable typ metavar binder sig, Distinct n) =>
+  Scope n ->
+  TypedSOAS binder metavar sig n typ ->
+  TypedSOAS binder metavar sig n typ
+betaReduce' scope term = case betaReduceOnce scope term of
+  Nothing -> term
+  Just reduced -> betaReduce' scope reduced
+
+betaReduceOnce' ::
   (Distinct n) =>
-  Foil.Scope n -> -- (bvs)
-  Substitutions ->
-  (Term n, Term n) ->
-  Maybe Substitutions
-unify scope th (s, t) =
-  let s' = applySubst scope th s
-      t' = applySubst scope th t
-   in cases scope th (s', t')
+  Scope n ->
+  TypedSOAS binder metavar sig n typ ->
+  Maybe (TypedSOAS binder metavar sig n typ)
+betaReduceOnce' scope term = case term of
+  Var {} -> Nothing
+  MetaApp {} -> Nothing
+  _ -> error "Not implemented"
 
-cases ::
-  forall n. -- Use ScopedTypeVariables
-  (Distinct n) =>
-  Foil.Scope n ->
-  Substitutions ->
-  (Term n, Term n) ->
-  Maybe Substitutions
-cases scope th (s', t') =
-  case (s', t') of
-    -- Case: Identical terms
-    _ | s' == t' -> Just th
-    -- Case: Vars
-    (Var v1, Var v2)
-      | v1 == v2 -> Just th
-      | otherwise -> Nothing
-    -- Case: Lambda Abstractions
-    (AbsTerm _ _, AbsTerm _ _) -> unifyAbsCase scope th (s', t')
-    -- Case: Applications
-    (AppTerm head1 body1, AppTerm head2 body2) -> caseRigidRigid scope th (head1, body1) (head2, body2)
-    -- Case: FlexRigid
-    (Node (WTermSig metaId1), term2) -> caseFlexRigid scope th (s', t')
-    (term1, Node (WTermSig metaId2)) -> caseFlexRigid scope th (t', s')
-    -- Fail case - none of the rules apply
-    _ -> Nothing
+applySubstitution' ::
+  (Eq metavar, CoSinkable binder, SinkableK binder, Bifunctor sig, Distinct n) =>
+  Substitution typ metavar binder sig ->
+  Scope n ->
+  TypedSOAS binder metavar sig n typ ->
+  TypedSOAS binder metavar sig n typ
+applySubstitution' substitution scope node = case node of
+  Var {} -> node
+  _ -> error "Not implemented"
 
-unifyAbsCase ::
-  (Distinct n) =>
-  Foil.Scope n ->
-  Substitutions ->
-  (Term n, Term n) ->
-  Maybe Substitutions
-unifyAbsCase scope th (AbsTerm binder1 body1, AbsTerm binder2 body2) =
-  case (binder1, binder2) of
-    (FoilPatternVar nameBinder1, FoilPatternVar namebinder2) ->
-      case Foil.assertDistinct nameBinder1 of
-        Foil.Distinct ->
-          let scope' = Foil.extendScopePattern binder1 scope
-           in unify scope' th (body1, body2)
-unifyAbsCase _ _ _ = Nothing
+applySubstitutions' ::
+  (Eq metavar, CoSinkable binder, SinkableK binder, Bifunctor sig, Distinct n) =>
+  Substitutions typ metavar binder sig ->
+  Scope n ->
+  TypedSOAS binder metavar sig n typ ->
+  TypedSOAS binder metavar sig n typ
+applySubstitutions' (Substitutions []) _ term = term
+applySubstitutions' (Substitutions (subst : substs)) scope term =
+  applySubstitutions' (Substitutions substs) scope (applySubstitution' subst scope term)
 
-caseRigidRigid ::
-  (Distinct n) =>
-  Foil.Scope n ->
-  Substitutions ->
-  (Term n, Term n) ->
-  (Term n, Term n) ->
-  Maybe Substitutions
-caseRigidRigid scope th (head1, body1) (head2, body2) = do
-  th' <- unify scope th (head1, head2)
-  unify scope th' (body1, body2)
+instance (SinkableK FoilPattern, ZipMatchK TermSig) => FCUUnifiable () Raw.MetavarId (AnnBinder () FoilPattern) TermSig where
+  isFlexible node = case node of
+    WTermSig {} -> True
+    _ -> False
 
-caseFlexRigid ::
-  (Distinct n) =>
-  Foil.Scope n ->
-  Substitutions ->
-  (Term n, Term n) ->
-  Maybe Substitutions
-caseFlexRigid scope th (s', t') = Nothing
+  betaReduceOnce = betaReduceOnce'
+  betaReduce = betaReduce'
+  applySubstitution = applySubstitution'
+  applySubstitutions = applySubstitutions'
+  devar = devar'
 
-caseFlexFlexSame ::
-  (Distinct n) =>
-  Foil.Scope n ->
-  Substitutions ->
-  (Term n, Term n) ->
-  Maybe Substitutions
-caseFlexFlexSame scope th (s', t') = Nothing
+-- unify :: (FCUUnifiable typ metavar binder sig, Distinct n)
+--       => [(Char, Name n)]  -- Or use a more general representation for bound variables
+--       -> Substitution typ metavar binder sig
+--       -> (Sig typ metavar binder sig n, Sig typ metavar binder sig n)
+--       -> Maybe (Substitution typ metavar binder sig)
+-- unify bvs subst (s, t) =
+--   let s' = normalize subst s
+--       t' = normalize subst t
+--   in case (s', t') of
+--     -- Lambda case
+--     (Node (AbsTermSig _ (ScopedAST leftBinder leftBody)) _,
+--      Node (AbsTermSig _ (ScopedAST rightBinder rightBody)) _) ->
+--       case typedUnifyPatterns leftBinder rightBinder of
+--         NotUnifiable -> Nothing
+--         RenameBothBinders unifiedBinder unifiedTypes leftRen rightRen
+--           | Distinct <- assertDistinct unifiedBinder ->
+--               -- Handle renaming and continue with body unification
+--               let leftBody' = liftRM scope' (fromNameBinderRenaming leftRen) leftBody
+--                   rightBody' = liftRM scope' (fromNameBinderRenaming rightRen) rightBody
+--                   scope' = extendScopePattern unifiedBinder emptyScope
+--               in unify (extendBvs unifiedBinder bvs) subst (leftBody', rightBody')
 
-caseFlexFlexDiff ::
-  (Distinct n) =>
-  Foil.Scope n ->
-  Substitutions ->
-  (Term n, Term n) ->
-  Maybe Substitutions
-caseFlexFlexDiff scope th (s', t') = Nothing
+--     -- General case
+--     _ -> handleCases bvs subst (s', t')
+
+-- cases ::
+--   (FCUUnifiable typ metavar binder sig) =>
+--   NameBinderList VoidS n ->
+--   NameMap n typ ->
+--   Substitution typ metavar binder sig ->
+--   TypedSOAS binder metavar sig n typ ->
+--   TypedSOAS binder metavar sig n typ ->
+--   Maybe (Substitution typ metavar binder sig)
+-- cases binders types subst s t =
+--   case (isFlexible s, isFlexible t) of
+--     (True, True) -> caseFlexFlex binders types subst s t
+--     (True, False) -> caseFlexRigid binders types subst s t
+--     (False, True) -> caseFlexRigid binders types subst t s
+--     (False, False) -> caseRigidRigid binders types subst s t
