@@ -3,3 +3,4 @@
 *.bak
 .direnv
 .vscode
+dist-newstyle
