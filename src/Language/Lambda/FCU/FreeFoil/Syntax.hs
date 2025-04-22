@@ -24,6 +24,7 @@ module Language.Lambda.FCU.FreeFoil.Syntax where
 
 import Control.Monad.Foil qualified as Foil
 import Control.Monad.Foil.Internal as FoilInternal hiding (Substitution)
+import Control.Monad.Foil.Relative (liftRM)
 import Control.Monad.Foil.TH
   ( deriveCoSinkable,
     deriveUnifiablePattern,
@@ -44,7 +45,8 @@ import Control.Monad.Free.Foil.TH
     mkPatternSynonyms,
     mkSignature,
   )
-import Data.Biapplicative (Bifunctor)
+import Data.Biapplicative (Bifunctor (bimap))
+import Data.Bifoldable (bifoldr)
 import Data.Bifunctor.Sum (Sum (..))
 import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor, deriveBitraversable)
 import Data.Bitraversable
@@ -174,10 +176,33 @@ instance Show (AST FoilPattern TermSig Foil.VoidS) where
 
 -- * Unification test
 
+pattern Lam' ::
+  binder n l ->
+  AST binder (AnnSig typ (Sum TermSig q)) l ->
+  typ ->
+  AST binder (AnnSig typ (Sum TermSig q)) n
+pattern Lam' binder body returnType =
+  Node (AnnSig (L2 (AbsTermSig (ScopedAST binder body))) returnType)
+
+pattern App' ::
+  AST binder (AnnSig typ (Sum TermSig q)) n ->
+  AST binder (AnnSig typ (Sum TermSig q)) n ->
+  typ ->
+  AST binder (AnnSig typ (Sum TermSig q)) n
+pattern App' f x typ = Node (AnnSig (L2 (AppTermSig f x)) typ)
+
 -- | Generalized term representation
 type Sig typ metavar binder sig n =
   sig (TypedScopedSOAS binder metavar sig n typ) (TypedSOAS binder metavar sig n typ)
 
+data Constraint typ metavar binder sig where
+  Constraint ::
+    (Foil.Distinct n) =>
+    NameBinderList VoidS n ->
+    NameMap n typ ->
+    TypedSOAS binder metavar sig n typ ->
+    TypedSOAS binder metavar sig n typ ->
+    Constraint typ metavar binder sig
 
 -- | Substitutions representations
 data Substitution typ metavar binder sig where
@@ -235,20 +260,26 @@ class
 
   -- | Combined substitution application and beta reduction
   devar ::
-    (FCUUnifiable typ metavar binder sig, Distinct n) =>
-    Scope n ->
-    Sig typ metavar binder sig n ->
-    typ ->
+    (Eq metavar, CoSinkable binder, SinkableK binder, Bifunctor sig, Foil.Distinct n) =>
+    Substitutions typ metavar binder sig ->
+    Foil.Scope n ->
+    TypedSOAS binder metavar sig n typ ->
     TypedSOAS binder metavar sig n typ
 
+  -- | Strip a term to separate the head and arguments
+  strip ::
+    TypedSOAS binder metavar sig n typ ->
+    (TypedSOAS binder metavar sig n typ, [TypedSOAS binder metavar sig n typ])
+
+-- | Remove variable for unification analysis
 devar' ::
-  (FCUUnifiable typ metavar binder sig, Distinct n) =>
-  Scope n ->
-  Sig typ metavar binder sig n ->
-  typ ->
+  (Eq metavar, CoSinkable binder, SinkableK binder, Bifunctor sig, Foil.Distinct n) =>
+  Substitutions typ metavar binder sig ->
+  Foil.Scope n ->
+  TypedSOAS binder metavar sig n typ ->
   TypedSOAS binder metavar sig n typ
-devar' scope node typ = case node of
-  _ -> error "Not implemented"
+devar' (Substitutions substs) scope term =
+  foldr (`applySubstitution'` scope) term substs
 
 betaReduce' ::
   (FCUUnifiable typ metavar binder sig, Distinct n) =>
@@ -269,15 +300,41 @@ betaReduceOnce' scope term = case term of
   MetaApp {} -> Nothing
   _ -> error "Not implemented"
 
+toNameMap ::
+  NameMap m a ->
+  NameBinderList m l ->
+  [a] ->
+  NameMap l a
+toNameMap nameMap NameBinderListEmpty [] = nameMap
+toNameMap nameMap (NameBinderListCons binder rest) (x : xs) =
+  toNameMap (addNameBinder binder x nameMap) rest xs
+toNameMap _ _ _ = error "mismatched name list and argument list"
+
+-- | Apply a substitution to a term
 applySubstitution' ::
-  (Eq metavar, CoSinkable binder, SinkableK binder, Bifunctor sig, Distinct n) =>
+  (Eq metavar, CoSinkable binder, SinkableK binder, Bifunctor sig, Foil.Distinct n) =>
   Substitution typ metavar binder sig ->
-  Scope n ->
+  Foil.Scope n ->
   TypedSOAS binder metavar sig n typ ->
   TypedSOAS binder metavar sig n typ
 applySubstitution' substitution scope node = case node of
   Var {} -> node
-  _ -> error "Not implemented"
+  MetaApp meta arguments _
+    | Substitution expectedMeta parameters body <- substitution,
+      meta == expectedMeta ->
+        let nameMap = toNameMap emptyNameMap parameters arguments
+            substs' = nameMapToSubstitution nameMap
+         in substitute scope substs' body
+  MetaApp meta parameters typ ->
+    MetaApp meta (applySubstitution' substitution scope <$> parameters) typ
+  Node term -> Node (bimap goScoped go term)
+    where
+      go = applySubstitution' substitution scope
+      goScoped (ScopedAST binder term)
+        | Distinct <- assertDistinct binder =
+            ScopedAST binder (applySubstitution' substitution scope' term)
+        where
+          scope' = extendScopePattern binder scope
 
 applySubstitutions' ::
   (Eq metavar, CoSinkable binder, SinkableK binder, Bifunctor sig, Distinct n) =>
@@ -299,3 +356,96 @@ instance (SinkableK FoilPattern, ZipMatchK TermSig) => FCUUnifiable () Raw.Metav
   applySubstitution = applySubstitution'
   applySubstitutions = applySubstitutions'
   devar = devar'
+
+data Stream a = Stream a (Stream a) deriving (Eq, GHC.Generic)
+
+-- | Type of a metavariable with its parameter types and return type
+data MetaType typ = MetaType [typ] typ deriving (Eq, GHC.Generic)
+
+data Metavariables typ metavar = Metavariables
+  { metavariableTypes :: [(metavar, MetaType typ)],
+    freshMetavarStream :: Stream metavar
+  }
+
+data Problem typ metavar binder sig = Problem
+  { problemMetavariables :: Metavariables typ metavar,
+    problemConstraints :: [Constraint typ metavar binder sig]
+  }
+
+data Solution typ metavar binder sig = Solution
+  { solutionMetavariables :: Metavariables typ metavar,
+    solutionConstraints :: [Constraint typ metavar binder sig],
+    solutionSubstitutions :: Substitutions typ metavar binder sig
+  }
+
+strip' :: TypedSOAS binder Raw.MetavarId TermSig n typ -> (TypedSOAS binder Raw.MetavarId TermSig n typ, [TypedSOAS binder Raw.MetavarId TermSig n typ])
+strip' term = case term of
+  Node (AnnSig (L2 (AppTermSig f x)) _) ->
+    let (head, args) = strip' f
+     in (head, args ++ [x])
+  Node (AnnSig (R2 (MetaAppSig metavar args)) typ) -> (Node (AnnSig (L2 (WTermSig metavar)) typ), args)
+  _ -> (term, [])
+
+unify ::
+  (Eq Raw.MetavarId, CoSinkable binder, SinkableK binder, Distinct n, UnifiablePattern binder) =>
+  Scope n ->
+  (Substitutions typ Raw.MetavarId binder TermSig, (TypedSOAS binder Raw.MetavarId TermSig n typ, TypedSOAS binder Raw.MetavarId TermSig n typ)) ->
+  Substitutions typ Raw.MetavarId binder TermSig
+unify scope (th, (s, t)) = case (devar' th scope s, devar' th scope t) of
+  (Lam' binder1 body1 _, Lam' binder2 body2 _) -> case Foil.unifyPatterns binder1 binder2 of
+    Foil.NotUnifiable -> error "Not unifiable"
+    Foil.RenameLeftNameBinder _ rename ->
+      case Foil.assertDistinct binder2 of
+        Foil.Distinct ->
+          let scope' = Foil.extendScopePattern binder2 scope
+              lhsTerm' = liftRM scope' (Foil.fromNameBinderRenaming rename) body1
+           in unify scope' (th, (lhsTerm', body2))
+    Foil.RenameRightNameBinder _ rename ->
+      case Foil.assertDistinct binder1 of
+        Foil.Distinct ->
+          let scope' = Foil.extendScopePattern binder1 scope
+              rhsTerm' = liftRM scope' (Foil.fromNameBinderRenaming rename) body2
+           in unify scope' (th, (body1, rhsTerm'))
+    _ -> error "Not unifiable"
+  (s', t') -> cases scope (th, (s', t'))
+
+cases ::
+  (Eq Raw.MetavarId, CoSinkable binder, SinkableK binder, Distinct n, UnifiablePattern binder) =>
+  Scope n ->
+  (Substitutions typ Raw.MetavarId binder TermSig, (TypedSOAS binder Raw.MetavarId TermSig n typ, TypedSOAS binder Raw.MetavarId TermSig n typ)) ->
+  Substitutions typ Raw.MetavarId binder TermSig
+cases scope (th, (s, t)) = case (strip' s, strip' t) of
+  ((MetaApp metavar1 _ _, sn), (App' {}, tm)) -> caseFlexRigid scope (th, (s, sn, t))
+  ((Var a, []), (Var b, [])) -> if a == b then th else error "Not unifiable"
+  ((a, sn), (b, tm)) -> caseRigidRigid scope (th, (a, sn, b, tm))
+
+caseRigidRigid ::
+  (Eq Raw.MetavarId, CoSinkable binder, SinkableK binder, Distinct n, UnifiablePattern binder) =>
+  Scope n ->
+  (Substitutions typ Raw.MetavarId binder TermSig, (TypedSOAS binder Raw.MetavarId TermSig n typ, [TypedSOAS binder Raw.MetavarId TermSig n typ], TypedSOAS binder Raw.MetavarId TermSig n typ, [TypedSOAS binder Raw.MetavarId TermSig n typ])) ->
+  Substitutions typ Raw.MetavarId binder TermSig
+caseRigidRigid scope (th, (a, sn, b, tm)) = case (a, b) of
+  (Var x, Var y) -> applicableCase (x, y)
+  _ -> error "Not unifiable in (2) rule"
+  where
+    applicableCase (x, y) =
+      if x == y && length sn == length tm
+        then foldl (\th' (s, t) -> unify scope (th', (s, t))) th (zip sn tm)
+        else error "Not unifiable in (2) rule"
+
+caseFlexRigid :: 
+  (Eq Raw.MetavarId, CoSinkable binder, SinkableK binder, Distinct n, UnifiablePattern binder) =>
+  Scope n ->
+  (Substitutions typ Raw.MetavarId binder TermSig, (TypedSOAS binder Raw.MetavarId TermSig n typ, [TypedSOAS binder Raw.MetavarId TermSig n typ], TypedSOAS binder Raw.MetavarId TermSig n typ)) ->
+  Substitutions typ Raw.MetavarId binder TermSig
+caseFlexRigid scope (th, (MetaApp meta1 args1 _, sn, t))
+  | not (argumentRestriction sn) = error "Argument restriction fail at flexrigid case"
+
+
+argumentRestriction :: [TypedSOAS binder Raw.MetavarId TermSig n typ] -> Bool
+argumentRestriction tn = and [isRTerm t | t <- tn]
+  where
+    isRTerm :: TypedSOAS binder Raw.MetavarId TermSig n typ -> Bool
+    isRTerm Var {} = True
+    isRTerm (App' _ x _) = isRTerm x
+    isRTerm _ = False
