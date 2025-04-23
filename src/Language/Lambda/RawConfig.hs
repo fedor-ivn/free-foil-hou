@@ -41,7 +41,6 @@ newtype RawBinders = RawBinders [String]
 newtype RawSubstitutions = RawSubstitutions [String]
 newtype RawConstraint = RawConstraint String
 
-
 type RawConfig = Config RawBinders RawConstraint RawSolution
 
 type RawProblem = Problem RawBinders RawConstraint RawSolution

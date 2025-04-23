@@ -511,14 +511,13 @@ matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes args ex
          )
        ]
   project Foil.NameBinderListEmpty [] = []
-  project (Foil.NameBinderListCons x xs) (arg : args') =
-    case Foil.assertDistinct x of
-      Foil.Distinct ->
-        case (Foil.assertExt xs, Foil.assertDistinct xs) of
-          (Foil.Ext, Foil.Distinct) ->
-            let substs = match scope metavarTypes varTypes arg rhs
-                term = Var (Foil.sink (Foil.nameOf x))
-             in map (term,) substs ++ project xs args'
+  project (Foil.NameBinderListCons x xs) (arg : args')
+    | Foil.Distinct <- Foil.assertDistinct x
+    , Foil.Ext <- Foil.assertExt xs
+    , Foil.Distinct <- Foil.assertDistinct xs =
+        let substs = match scope metavarTypes varTypes arg rhs
+            term = Var (Foil.sink (Foil.nameOf x))
+         in map (term,) substs ++ project xs args'
   project _ _ = error "mismatched name list and argument list"
 
 -- | Same as 'matchMetavar' but for scoped term.
@@ -628,31 +627,3 @@ concatNameBinderLists :: Foil.NameBinderList i l -> Foil.NameBinderList n i -> F
 concatNameBinderLists lst Foil.NameBinderListEmpty = lst
 concatNameBinderLists lst (Foil.NameBinderListCons x xs) =
   Foil.NameBinderListCons x (concatNameBinderLists lst xs)
-
--- swapSum
---   :: Sum sig1 sig2 scope term
---   -> Sum sig2 sig1 scope term
--- swapSum (L2 x) = R2 x
--- swapSum (R2 y) = L2 y
-
--- swapAnnSum
---   :: AnnSig t (Sum sig1 sig2) scope term
---   -> AnnSig t (Sum sig2 sig1) scope term
--- swapAnnSum (AnnSig sig t) = AnnSig (swapSum sig) t
-
--- transAST
---   :: (Bifunctor sig)
---   => (forall a b. sig a b -> sig' a b)
---   -> AST binder sig n
---   -> AST binder sig' n
--- transAST _phi (Var x) = Var x
--- transAST phi (Node node) =
---   Node (phi (bimap (transScopedAST phi) (transAST phi) node))
-
--- transScopedAST
---   :: (Bifunctor sig)
---   => (forall a b. sig a b -> sig' a b)
---   -> ScopedAST binder sig n
---   -> ScopedAST binder sig' n
--- transScopedAST phi (ScopedAST binder body) =
---   ScopedAST binder (transAST phi body)

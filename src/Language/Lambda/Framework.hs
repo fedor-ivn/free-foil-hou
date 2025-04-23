@@ -104,7 +104,7 @@ solveAndCompareToReferenceSolutionsWith problem solve = do
     let comparisons = map (compare' solution) referenceSolutions
     case comparisons of
       [] -> Left "No reference solutions"
-      (x : xs) -> Right (solution, foldl max x xs)
+      (x : xs) -> Right (solution, foldr max x xs)
 
 -- >>> foldr (fmap . max) (Left "No reference solutions") [Right 1, Right 2]
 -- Left "No reference solutions"
@@ -272,24 +272,9 @@ solveUnificationConstraint
           (solve rhs)
 
 nameBinderListToScope
-  :: (Foil.Distinct n)
-  => Foil.NameBinderList Foil.VoidS n
+  :: Foil.NameBinderList Foil.VoidS n
   -> Foil.Scope n
-nameBinderListToScope = extendScopeWithNameBinderList Foil.emptyScope
-
-extendScopeWithNameBinderList
-  :: ( Foil.Distinct n
-     , Foil.Distinct l
-     )
-  => Foil.Scope n
-  -> Foil.NameBinderList n l
-  -> Foil.Scope l
-extendScopeWithNameBinderList scope Foil.NameBinderListEmpty = scope
-extendScopeWithNameBinderList scope (Foil.NameBinderListCons x xs) =
-  case Foil.assertDistinct x of
-    Foil.Distinct -> do
-      let scope' = Foil.extendScope x scope
-       in extendScopeWithNameBinderList scope' xs
+nameBinderListToScope = flip Foil.extendScopePattern Foil.emptyScope
 
 -- | Check if a unification constraint is solved by specific substitutions
 isSolvedUnificationConstraint
