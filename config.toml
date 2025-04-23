@@ -14,6 +14,7 @@ constraints = [
 
 [[problems.solutions]]
 name = "most general"
+metavars = []
 substitutions = [
     "Y[a] ↦ a",
     "X[b, c] ↦ b c",
@@ -21,28 +22,28 @@ substitutions = [
 
 [[problems.solutions]]
 name = "with redundant substitution"
+metavars = []
 substitutions = [
     "Y[x] ↦ x",
     "X[f, x] ↦ f x",
     "M[x, y] ↦ y x"
 ]
 
-[[problems]]
-metavars = [
-    "F: [t -> t, t] t",
-    "X: [t -> t] t",
-    "Y: [] t",
-]
-constraints = [
-    "∀ a: t -> t. F[a, X[a]] = a Y[]",
-]
+# [[problems]]
+# metavars = [
+#     "X: [t -> t, t, t] t",
+#     "Y: [t, t, t] t",
+# ]
+# constraints = [
+#     "∀ a: t -> t, b: t, c: t. X[a, b, a c] = Y[b, c, a b]",
+# ]
 
-[[problems.solutions]]
-metavars = [
-    "H: [t -> t, t] t",
-]
-name = "most general solution with new metavariable"
-substitutions = [
-    "H[a, x] ↦ Y[]",
-    "F[a, x] ↦ a H[a, x]"
-]
+# [[problems.solutions]]
+# metavars = [
+#     "M: [t -> t, t, t] t",
+# ]
+# name = "most general solution with new metavariable"
+# substitutions = [
+#     "X[x, y, z] ↦ M[y, x y]", # "X[x, y, z] ↦ y",
+#     "Y[x, y, z] ↦ M[x, z]",   # "X[x, y, z] ↦ x y",
+# ]

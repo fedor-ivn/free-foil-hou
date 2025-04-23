@@ -16,7 +16,25 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Data.SOAS where
+module Data.SOAS (
+  AnnSig (..),
+  AnnBinder (..),
+  TypedBinder (..),
+  MetaAppSig (..),
+  TypedSOAS,
+  TypedScopedSOAS,
+  SOAS,
+  ScopedSOAS,
+  MetaSubst (..),
+  MetaSubsts (..),
+  pattern MetaApp,
+  MetaAbs (..),
+  match,
+  push,
+  toNameMap,
+  applyMetaSubsts,
+)
+where
 
 import Control.Monad (guard)
 import qualified Control.Monad.Foil as Foil
@@ -30,7 +48,7 @@ import Data.Bifunctor.TH
 import Data.Bitraversable (Bitraversable (bitraverse))
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (mapMaybe, maybeToList)
+import Data.Maybe (mapMaybe)
 import Data.ZipMatchK
 import Debug.Trace (trace)
 import qualified GHC.Generics as GHC
@@ -55,28 +73,31 @@ data AnnSig ann sig scopedTerm term
 
 deriveGenericK ''AnnSig
 
-class TypedSignature sig metavar t where
-  mapSigWithTypes
-    :: Foil.NameMap n t
-    -- ^ Типы переменных в текущем контексте
-    -> Map metavar ([t], t)
-    -- ^ Типы метапеременных
-    -> (ScopedAST binder (AnnSig t sig') n -> (t, t) -> scopedTerm)
-    -- ^ что делать с информацией о типах в подвыражениях со связанными переменными
-    -> (AST binder (AnnSig t sig') n -> t -> term)
-    -- ^ что делать с информацией о типах в простых подвыражениях
-    -> sig
-        (ScopedAST binder (AnnSig t sig') n)
-        (AST binder (AnnSig t sig') n)
-    -- ^ исходный узел (синтаксическая конструкция)
-    -> t
-    -- ^ (ожидаемый) тип узла
-    -> Maybe (sig scopedTerm term)
-    -- ^ результат
+data AnnBinder ann binder (n :: Foil.S) (l :: Foil.S)
+  = AnnBinder (binder n l) ann
+  deriving (GHC.Generic, Eq)
 
--- debugSig
---   :: AST binder (AnnSig t sig) n
---   -> String
+deriveGenericK ''AnnBinder
+
+instance (Foil.CoSinkable binder) => Foil.CoSinkable (AnnBinder ann binder) where
+  coSinkabilityProof rename (AnnBinder binder ann) cont =
+    Foil.coSinkabilityProof rename binder (\rename' binder' -> cont rename' (AnnBinder binder' ann))
+
+  withPattern f empty append scope (AnnBinder binder t) cont =
+    Foil.withPattern f empty append scope binder (\f' binder' -> cont f' (AnnBinder binder' t))
+
+instance (Foil.SinkableK binder) => Foil.SinkableK (AnnBinder ann binder)
+
+instance
+  (Foil.UnifiableInPattern (binder n l), Eq ann)
+  => Foil.UnifiableInPattern ((AnnBinder ann binder) n l)
+  where
+  unifyInPattern (AnnBinder binder t) (AnnBinder binder' t') =
+    t == t' && Foil.unifyInPattern binder binder'
+
+instance
+  (Foil.UnifiablePattern binder)
+  => Foil.UnifiablePattern (AnnBinder t binder)
 
 class TypedBinder binder t where
   addBinderTypes
@@ -85,38 +106,10 @@ class TypedBinder binder t where
     -> Foil.NameMap n t
     -> Foil.NameMap l t
 
-  mapBinderWithTypes
-    :: (Foil.NameBinder n l -> t -> a)
-    -> t
-    -> binder n l
-    -> [a]
-
-instance (Ord metavar, Eq typ) => TypedSignature (MetaAppSig metavar) metavar typ where
-  mapSigWithTypes _ metavarTypes _ g (MetaAppSig metavar args) expectedType = do
-    (argTypes, returnType) <- Map.lookup metavar metavarTypes
-    guard (returnType == expectedType)
-    guard (length args == length argTypes)
-    let args' = zipWith g args argTypes
-    return (MetaAppSig metavar args')
-
-instance (TypedSignature sig mv typ) => TypedSignature (AnnSig t sig) mv typ where
-  mapSigWithTypes varTypes metavarTypes f g (AnnSig sig t) expectedType = do
-    sig' <- mapSigWithTypes varTypes metavarTypes f g sig expectedType
-    return (AnnSig sig' t)
-
-instance
-  (TypedSignature sig1 mv typ, TypedSignature sig2 mv typ)
-  => TypedSignature (Sum sig1 sig2) mv typ
-  where
-  mapSigWithTypes varTypes metavarTypes f g (L2 sig) expectedType =
-    L2 <$> mapSigWithTypes varTypes metavarTypes f g sig expectedType
-  mapSigWithTypes varTypes metavarTypes f g (R2 sig) expectedType =
-    R2 <$> mapSigWithTypes varTypes metavarTypes f g sig expectedType
-
 type TypedSOAS binder metavar sig n t =
-  AST binder (AnnSig t (Sum sig (MetaAppSig metavar))) n
+  AST (AnnBinder t binder) (AnnSig t (Sum sig (MetaAppSig metavar))) n
 type TypedScopedSOAS binder metavar sig n t =
-  ScopedAST binder (AnnSig t (Sum sig (MetaAppSig metavar))) n
+  ScopedAST (AnnBinder t binder) (AnnSig t (Sum sig (MetaAppSig metavar))) n
 
 -- | A second-order abstract syntax (SOAS) is generated from a signature
 -- by adding parametrised metavariables.
@@ -162,21 +155,19 @@ data MetaAbs binder sig t where
   MetaAbs
     :: Foil.NameBinderList Foil.VoidS n
     -- ^ A list of binders corresponding to metavariable arguments.
-    -> Foil.NameMap n t
-    -- ^ Types of parameters.
     -> AST binder sig n
     -- ^ Term to substitute the metavariable with.
     -> MetaAbs binder sig t
 
 -- | A metavariable substitution is a pair of a metavariable name and its body.
 newtype MetaSubst binder sig metavar t = MetaSubst
-  { getMetaSubst :: (metavar, MetaAbs binder sig t)
+  { metaSubst :: (metavar, MetaAbs binder sig t)
   }
 
 -- | A collection of metavariable substitutions (for simultaneous substitution
 -- | of multiple metavariables).
 newtype MetaSubsts binder sig metavar t = MetaSubsts
-  { getMetaSubsts :: [MetaSubst binder sig metavar t]
+  { metaSubsts :: [MetaSubst binder sig metavar t]
   }
 
 -- | Apply metavariable substitutions to a SOAS term.
@@ -191,7 +182,7 @@ applyMetaSubsts
      )
   => Foil.Scope n
   -- ^ Scope of terms.
-  -> MetaSubsts binder (AnnSig t (Sum sig (MetaAppSig metavar'))) metavar t
+  -> MetaSubsts (AnnBinder t binder) (AnnSig t (Sum sig (MetaAppSig metavar'))) metavar t
   -- ^ Metavariable substitutions.
   -> TypedSOAS binder metavar sig n t
   -- ^ The original SOAS term.
@@ -199,8 +190,8 @@ applyMetaSubsts
 applyMetaSubsts scope substs = \case
   Var x -> Var x
   MetaApp metavar args ann ->
-    case lookup metavar (getMetaSubst <$> getMetaSubsts substs) of
-      Just (MetaAbs names _types body) ->
+    case lookup metavar (metaSubst <$> metaSubsts substs) of
+      Just (MetaAbs names body) ->
         let nameMap = toNameMap Foil.emptyNameMap names args'
             substs' = Foil.nameMapToSubstitution nameMap
             body' = substitute scope substs' body
@@ -219,15 +210,15 @@ applyMetaSubsts scope substs = \case
           Foil.Distinct ->
             ScopedAST binder (applyMetaSubsts scope' substs body)
 
-  toNameMap
-    :: Foil.NameMap m a
-    -> Foil.NameBinderList m l
-    -> [a]
-    -> Foil.NameMap l a
-  toNameMap nameMap Foil.NameBinderListEmpty [] = nameMap
-  toNameMap nameMap (Foil.NameBinderListCons binder rest) (x : xs) =
-    toNameMap (Foil.addNameBinder binder x nameMap) rest xs
-  toNameMap _ _ _ = error "mismatched name list and argument list"
+toNameMap
+  :: Foil.NameMap m a
+  -> Foil.NameBinderList m l
+  -> [a]
+  -> Foil.NameMap l a
+toNameMap nameMap Foil.NameBinderListEmpty [] = nameMap
+toNameMap nameMap (Foil.NameBinderListCons binder rest) (x : xs) =
+  toNameMap (Foil.addNameBinder binder x nameMap) rest xs
+toNameMap _ _ _ = error "mismatched name list and argument list"
 
 -- | Combine (compose) metavariable substitutions.
 --
@@ -236,13 +227,13 @@ combineMetaSubsts
   :: ( Eq metavar
      , Bitraversable sig
      , ZipMatchK (Sum sig ext)
-     , Foil.UnifiablePattern binder
      , Foil.SinkableK binder
      , Bitraversable ext
      , ZipMatchK t
+     , Foil.UnifiablePattern binder
      )
-  => [MetaSubsts binder (AnnSig t (Sum sig ext)) metavar t]
-  -> [MetaSubsts binder (AnnSig t (Sum sig ext)) metavar t]
+  => [MetaSubsts (AnnBinder t binder) (AnnSig t (Sum sig ext)) metavar t]
+  -> [MetaSubsts (AnnBinder t binder) (AnnSig t (Sum sig ext)) metavar t]
 combineMetaSubsts [] = []
 combineMetaSubsts (subst : substs) = foldr (mapMaybe . combine) [subst] substs
  where
@@ -251,8 +242,8 @@ combineMetaSubsts (subst : substs) = foldr (mapMaybe . combine) [subst] substs
     | otherwise = trace "no conflicts" return (MetaSubsts (xs ++ ys))
    where
     conflicts = or $ do
-      MetaSubst (m, MetaAbs binders _types body) <- xs
-      MetaSubst (m', MetaAbs binders' _types' body') <- ys
+      MetaSubst (m, MetaAbs binders body) <- xs
+      MetaSubst (m', MetaAbs binders' body') <- ys
       guard (m == m')
       pure $
         case Foil.unifyPatterns binders binders' of
@@ -293,8 +284,6 @@ match
      , Eq t
      , Ord metavar
      , TypedBinder binder t
-     , TypedSignature sig metavar t
-     , TypedSignature ext metavar t
      , ZipMatchK (Sum sig (MetaAppSig metavar))
      , ZipMatchK t
      )
@@ -302,42 +291,42 @@ match
   -- ^ The current scope.
   -> Map metavar ([t], t) -- big theta
   -> Foil.NameMap n t -- big gamma
-  -> (TypedSOAS binder metavar sig n t, t)
+  -> TypedSOAS binder metavar sig n t
   -- ^ The left-hand side (with metavariables that we solve for).
-  -> (AST binder (AnnSig t (Sum sig ext)) n, t)
-  -- ^ The right hand side (rigid). todo: should we annotate ext as well?
-  -> [MetaSubsts binder (AnnSig t (Sum sig ext)) metavar t]
-match scope metavarTypes varTypes (lhs, lhsReturnType) (rhs, rhsReturnType) =
+  -> AST (AnnBinder t binder) (AnnSig t (Sum sig ext)) n
+  -- ^ The right hand side (rigid)
+  -> [MetaSubsts (AnnBinder t binder) (AnnSig t (Sum sig ext)) metavar t]
+match scope metavarTypes varTypes lhs rhs =
   trace "matching non-scoped lhs and rhs" $
     case (lhs, rhs) of
       (Var x, Var y) | x == y -> trace "matched same vars" return (MetaSubsts [])
-      (Node (AnnSig (R2 (MetaAppSig metavar args)) _metavarType), _) ->
+      (Node (AnnSig (R2 (MetaAppSig metavar args)) metavarType), _) ->
         case trace "looking up metavar" Map.lookup metavar metavarTypes of
-          Just (argTypes, leftType) | leftType == rhsReturnType ->
+          -- todo: should we check here for type?
+          Just (argTypes, _) ->
             withFreshNameBinderList
               argTypes
               Foil.emptyScope
-              Foil.emptyNameMap
               Foil.NameBinderListEmpty
-              $ \scope' metavarTypes' binderList ->
-                let argsWithTypes = zip args argTypes
-                 in trace
-                      "matching metavar"
-                      map
-                      ( \(term, MetaSubsts substs) ->
-                          let metaAbs = MetaAbs binderList metavarTypes' term
-                              subst = MetaSubst (metavar, metaAbs)
-                           in MetaSubsts (subst : substs)
-                      )
-                      ( matchMetavar
-                          scope'
-                          metavarTypes
-                          binderList
-                          scope
-                          varTypes
-                          argsWithTypes
-                          (rhs, leftType)
-                      )
+              $ \scope' binderList ->
+                trace
+                  "matching metavar"
+                  map
+                  ( \(term, MetaSubsts substs) ->
+                      let metaAbs = MetaAbs binderList term
+                          subst = MetaSubst (metavar, metaAbs)
+                       in MetaSubsts (subst : substs)
+                  )
+                  ( matchMetavar
+                      scope'
+                      metavarTypes
+                      binderList
+                      scope
+                      varTypes
+                      args
+                      metavarType
+                      rhs
+                  )
           _ -> []
       -- AppSig t1 t2 -- left term
       -- AppSig a1 a2 -- right term
@@ -346,60 +335,25 @@ match scope metavarTypes varTypes (lhs, lhsReturnType) (rhs, rhsReturnType) =
       -- [AppSig s1 s3, AppSig s1 s4, AppSig s2 s3, AppSig s2 s4] -- bitraverse _ (match ...) node
       -- [s1 + s3, s1 + s4, s2 + s3, s2 + s4] -- map (combineMetaSubsts' . biList) ...
       -- [[s13], [], [], [s24]]
-      ( Node (AnnSig (L2 lhsNode) _)
-        , Node (AnnSig (L2 rhsNode) _)
+      ( Node (AnnSig (L2 lhsNode) lhsReturnType)
+        , Node (AnnSig (L2 rhsNode) rhsReturnType)
         ) ->
-          do
-            leftNodeWithTypes <-
-              maybeToList $
-                mapSigWithTypes varTypes metavarTypes (,) (,) lhsNode lhsReturnType
-            rightNodeWithTypes <-
-              maybeToList $
-                mapSigWithTypes varTypes metavarTypes (,) (,) rhsNode rhsReturnType
-            case zipMatch2 leftNodeWithTypes rightNodeWithTypes of
-              Just node
-                | lhsReturnType == rhsReturnType ->
-                    let
-                      traversed =
-                        bitraverse
-                          (uncurry (matchScoped scope metavarTypes varTypes))
-                          (uncurry (match scope metavarTypes varTypes))
-                          node
-                     in
-                      trace "terms matched, combine substitutions" $
-                        concatMap (combineMetaSubsts . biList) traversed
-              _ -> trace "term structs doesn't match" []
+          case zipMatch2 lhsNode rhsNode of
+            Just node
+              | lhsReturnType == rhsReturnType ->
+                  let
+                    traversed =
+                      bitraverse
+                        (uncurry (matchScoped scope metavarTypes varTypes))
+                        (uncurry (match scope metavarTypes varTypes))
+                        node
+                   in
+                    trace "terms matched, combine substitutions" $
+                      concatMap (combineMetaSubsts . biList) traversed
+            _ -> trace "term structs doesn't match" []
       (Node (AnnSig (L2 _) _), Node (AnnSig (R2 _) _)) -> []
       (_, Var _) -> trace "vars didn't match: (_, Var _)" []
       (Var _, _) -> trace "vars didn't match: (Var _, _)" []
-
-swapSum
-  :: Sum sig1 sig2 scope term
-  -> Sum sig2 sig1 scope term
-swapSum (L2 x) = R2 x
-swapSum (R2 y) = L2 y
-
-swapAnnSum
-  :: AnnSig t (Sum sig1 sig2) scope term
-  -> AnnSig t (Sum sig2 sig1) scope term
-swapAnnSum (AnnSig sig t) = AnnSig (swapSum sig) t
-
-transAST
-  :: (Bifunctor sig)
-  => (forall a b. sig a b -> sig' a b)
-  -> AST binder sig n
-  -> AST binder sig' n
-transAST _phi (Var x) = Var x
-transAST phi (Node node) =
-  Node (phi (bimap (transScopedAST phi) (transAST phi) node))
-
-transScopedAST
-  :: (Bifunctor sig)
-  => (forall a b. sig a b -> sig' a b)
-  -> ScopedAST binder sig n
-  -> ScopedAST binder sig' n
-transScopedAST phi (ScopedAST binder body) =
-  ScopedAST binder (transAST phi body)
 
 -- | Same as 'match' but for scoped terms.
 matchScoped
@@ -416,46 +370,44 @@ matchScoped
      , Eq t
      , Ord metavar
      , TypedBinder binder t
-     , TypedSignature sig metavar t
-     , TypedSignature ext metavar t
      , ZipMatchK (Sum sig (MetaAppSig metavar))
      , ZipMatchK t
      )
   => Foil.Scope n
   -> Map metavar ([t], t)
   -> Foil.NameMap n t
-  -> (TypedScopedSOAS binder metavar sig n t, (t, t))
-  -> (ScopedAST binder (AnnSig t (Sum sig ext)) n, (t, t))
-  -> [MetaSubsts binder (AnnSig t (Sum sig ext)) metavar t]
+  -> TypedScopedSOAS binder metavar sig n t
+  -> ScopedAST (AnnBinder t binder) (AnnSig t (Sum sig ext)) n
+  -> [MetaSubsts (AnnBinder t binder) (AnnSig t (Sum sig ext)) metavar t]
 matchScoped
   scope
   metavarTypes
   varTypes
-  (ScopedAST binder lhs, (binderTypeLhs, lhsReturnType))
-  (ScopedAST binder' rhs, (binderTypeRhs, rhsReturnType)) =
+  (ScopedAST (AnnBinder binder ann) lhs)
+  (ScopedAST (AnnBinder binder' ann') rhs) =
     case trace "matching scoped terms" Foil.unifyPatterns binder binder' of
       -- \x.t1 = \x.t2
       Foil.SameNameBinders _ ->
         case trace "same name binders" Foil.assertDistinct binder of
           Foil.Distinct ->
             let scope' = Foil.extendScopePattern binder scope
-                varTypes' = addBinderTypes binder binderTypeLhs varTypes
-             in match scope' metavarTypes varTypes' (lhs, lhsReturnType) (rhs, rhsReturnType)
+                varTypes' = addBinderTypes binder ann varTypes
+             in match scope' metavarTypes varTypes' lhs rhs
       -- \x.t1 = \y.t2
       Foil.RenameLeftNameBinder _ rename ->
         case trace "rename left binder" Foil.assertDistinct binder' of
           Foil.Distinct ->
             let scope' = Foil.extendScopePattern binder' scope
-                varTypes' = addBinderTypes binder' binderTypeRhs varTypes
+                varTypes' = addBinderTypes binder' ann' varTypes
                 lhs' = Foil.liftRM scope' (Foil.fromNameBinderRenaming rename) lhs
-             in match scope' metavarTypes varTypes' (lhs', lhsReturnType) (rhs, rhsReturnType)
+             in match scope' metavarTypes varTypes' lhs' rhs
       Foil.RenameRightNameBinder _ rename ->
         case trace "rename right binder" Foil.assertDistinct binder of
           Foil.Distinct ->
             let scope' = Foil.extendScopePattern binder scope
-                varTypes' = addBinderTypes binder binderTypeLhs varTypes
+                varTypes' = addBinderTypes binder ann varTypes
                 rhs' = Foil.liftRM scope' (Foil.fromNameBinderRenaming rename) rhs
-             in match scope' metavarTypes varTypes' (lhs, lhsReturnType) (rhs', rhsReturnType)
+             in match scope' metavarTypes varTypes' lhs rhs'
       Foil.RenameBothBinders{} -> error "not implemented"
       -- Foil.RenameBothBinders binders rename1 rename2 ->
       -- case trace "rename both binders" Foil.assertDistinct binders of
@@ -483,7 +435,6 @@ matchMetavar
   :: forall metavar n m binder sig ext t
    . ( Foil.Distinct n
      , Foil.Distinct m
-     , Foil.UnifiablePattern binder
      , Foil.SinkableK binder
      , Bitraversable sig
      , Bitraversable ext
@@ -494,11 +445,10 @@ matchMetavar
      , ZipMatchK (AnnSig t sig)
      , Eq t
      , Ord metavar
-     , TypedSignature sig metavar t
-     , TypedSignature ext metavar t
      , TypedBinder binder t
      , ZipMatchK t
      , ZipMatchK (Sum sig (MetaAppSig metavar))
+     , Foil.UnifiablePattern binder
      )
   => Foil.Scope m
   -- ^ Scope for the body of the metavariable substitution (at root of LHS).
@@ -510,26 +460,42 @@ matchMetavar
   -- ^ Current scope.
   -> Foil.NameMap n t
   -- ^ Types of variables in the current scope.
-  -> [(TypedSOAS binder metavar sig n t, t)]
+  -> [TypedSOAS binder metavar sig n t]
   -- ^ A list of arguments of the parametrised metavariable on the left-hand side.
-  -> (AST binder (AnnSig t (Sum sig ext)) n, t)
+  -> t
+  -- ^ The expected type of the right-hand side.
+  -> AST (AnnBinder t binder) (AnnSig t (Sum sig ext)) n
   -- ^ The right-hand side term (rigid).
-  -> [ ( AST binder (AnnSig t (Sum sig ext)) m
-       , MetaSubsts binder (AnnSig t (Sum sig ext)) metavar t
+  -> [ ( AST (AnnBinder t binder) (AnnSig t (Sum sig ext)) m
+       , MetaSubsts (AnnBinder t binder) (AnnSig t (Sum sig ext)) metavar t
        )
      ]
-matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWithTypes (rhs, expectedType) =
-  let projections = project metavarNameBinders argsWithTypes
+matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes args expectedType rhs =
+  let projections = project metavarNameBinders args
       imitations = trace "imitate on: " $ case rhs of
         Var _ -> []
         Node sig -> do
-          let maybeSig = mapSigWithTypes varTypes metavarTypes (,) (,) sig expectedType
-          sigWithTypes <- maybeToList maybeSig
           traversedSig <-
             bitraverse
-              (matchMetavarScoped metavarScope metavarTypes metavarNameBinders scope varTypes argsWithTypes)
-              (matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWithTypes)
-              sigWithTypes
+              ( matchMetavarScoped
+                  metavarScope
+                  metavarTypes
+                  metavarNameBinders
+                  scope
+                  varTypes
+                  args
+                  expectedType
+              )
+              ( matchMetavar
+                  metavarScope
+                  metavarTypes
+                  metavarNameBinders
+                  scope
+                  varTypes
+                  args
+                  expectedType
+              )
+              sig
           let term = Node (bimap fst fst traversedSig)
           substs <- combineMetaSubsts (biList (bimap snd snd (trace "end imitate on: " traversedSig)))
           return (term, substs)
@@ -539,20 +505,19 @@ matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes argsWit
   project
     :: (Foil.Distinct i)
     => Foil.NameBinderList i m
-    -> [(TypedSOAS binder metavar sig n t, t)]
-    -> [ ( AST binder (AnnSig t (Sum sig ext)) m
-         , MetaSubsts binder (AnnSig t (Sum sig ext)) metavar t
+    -> [TypedSOAS binder metavar sig n t]
+    -> [ ( AST (AnnBinder t binder) (AnnSig t (Sum sig ext)) m
+         , MetaSubsts (AnnBinder t binder) (AnnSig t (Sum sig ext)) metavar t
          )
        ]
   project Foil.NameBinderListEmpty [] = []
-  project (Foil.NameBinderListCons x xs) (argWithType : argsWithTypes') =
-    case Foil.assertDistinct x of
-      Foil.Distinct ->
-        case (Foil.assertExt xs, Foil.assertDistinct xs) of
-          (Foil.Ext, Foil.Distinct) ->
-            let substs = match scope metavarTypes varTypes argWithType (rhs, expectedType)
-                term = Var (Foil.sink (Foil.nameOf x))
-             in map (term,) substs ++ project xs argsWithTypes'
+  project (Foil.NameBinderListCons x xs) (arg : args')
+    | Foil.Distinct <- Foil.assertDistinct x
+    , Foil.Ext <- Foil.assertExt xs
+    , Foil.Distinct <- Foil.assertDistinct xs =
+        let substs = match scope metavarTypes varTypes arg rhs
+            term = Var (Foil.sink (Foil.nameOf x))
+         in map (term,) substs ++ project xs args'
   project _ _ = error "mismatched name list and argument list"
 
 -- | Same as 'matchMetavar' but for scoped term.
@@ -571,8 +536,6 @@ matchMetavarScoped
      , ZipMatchK (AnnSig t sig)
      , Eq t
      , Ord metavar
-     , TypedSignature sig metavar t
-     , TypedSignature ext metavar t
      , TypedBinder binder t
      , ZipMatchK t
      , ZipMatchK (Sum sig (MetaAppSig metavar))
@@ -583,10 +546,14 @@ matchMetavarScoped
   -> Foil.Scope n
   -> Foil.NameMap n t
   -- ^ Types of variables in the current scope.
-  -> [(TypedSOAS binder metavar sig n t, t)]
-  -> (ScopedAST binder (AnnSig t (Sum sig ext)) n, (t, t))
-  -> [ ( ScopedAST binder (AnnSig t (Sum sig ext)) m
-       , MetaSubsts binder (AnnSig t (Sum sig ext)) metavar t
+  -> [TypedSOAS binder metavar sig n t]
+  -- ^ A list of arguments of the parametrised metavariable on the left-hand
+  -- side.
+  -> t
+  -- ^ The expected type of the right-hand side.
+  -> ScopedAST (AnnBinder t binder) (AnnSig t (Sum sig ext)) n
+  -> [ ( ScopedAST (AnnBinder t binder) (AnnSig t (Sum sig ext)) m
+       , MetaSubsts (AnnBinder t binder) (AnnSig t (Sum sig ext)) metavar t
        )
      ]
 matchMetavarScoped
@@ -595,8 +562,9 @@ matchMetavarScoped
   metavarNameBinders
   scope
   varTypes
-  argsWithTypes
-  (ScopedAST binder rhs, (binderType, bodyType)) =
+  args
+  expectedType
+  (ScopedAST (AnnBinder binder binderType) rhs) =
     trace "matching metavar scoped" $
       case (Foil.assertExt binder, Foil.assertDistinct binder) of
         (Foil.Ext, Foil.Distinct) ->
@@ -609,8 +577,8 @@ matchMetavarScoped
                   metavarNameBinders' =
                     concatNameBinderLists freshNameBinders metavarNameBinders
                   scope' = Foil.extendScopePattern binder scope
-                  names = mapBinderWithTypes (,) binderType binder
-                  argsWithTypes' = map (first Foil.sink) argsWithTypes ++ map (first (Var . Foil.nameOf)) names
+                  names = Foil.namesOfPattern binder
+                  args' = map Foil.sink args ++ map Var names
                   varTypes' = addBinderTypes binder binderType varTypes
                   result =
                     matchMetavar
@@ -619,33 +587,31 @@ matchMetavarScoped
                       metavarNameBinders'
                       scope'
                       varTypes'
-                      argsWithTypes'
-                      (rhs, bodyType)
-               in map (first (ScopedAST metavarBinder)) result
+                      args'
+                      expectedType
+                      rhs
+               in map (first (ScopedAST (AnnBinder metavarBinder binderType))) result
 
 -- | Generate fresh name binders for a list of things.
 -- This is useful to generate proper name binders of metavariable parameters.
 withFreshNameBinderList
   :: (Foil.Distinct n)
-  => [t]
+  => [a]
   -> Foil.Scope n
-  -> Foil.NameMap n t
   -> Foil.NameBinderList i n
   -> ( forall l
         . (Foil.Distinct l)
        => Foil.Scope l
-       -> Foil.NameMap l t
        -> Foil.NameBinderList i l
        -> r
      )
   -> r
-withFreshNameBinderList [] scope typesNameMap binders cont = cont scope typesNameMap binders
-withFreshNameBinderList (typ : types) scope typesNameMap binders cont =
+withFreshNameBinderList [] scope binders cont = cont scope binders
+withFreshNameBinderList (_ : types) scope binders cont =
   Foil.withFresh scope $ \binder ->
     let scope' = Foil.extendScope binder scope
         binders' = push binder binders
-        typesNameMap' = Foil.addNameBinder binder typ typesNameMap
-     in withFreshNameBinderList types scope' typesNameMap' binders' cont
+     in withFreshNameBinderList types scope' binders' cont
 
 -- | /O(n)/. Push a name binder into the end of a name binder list.
 --

@@ -1,6 +1,6 @@
 module Main (main) where
 
-import qualified Language.Lambda.Impl as Impl
+import qualified Language.Lambda.Framework as Framework
 
 main :: IO ()
-main = Impl.main
+main = Framework.main
