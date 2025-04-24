@@ -47,7 +47,7 @@ import Control.Monad.Free.Foil.TH
     mkSignature,
   )
 import Data.Biapplicative (Bifunctor (bimap))
-import Data.Bifoldable (bifoldr)
+import Data.Bifoldable (bifoldr, biany)
 import Data.Bifunctor.Sum (Sum (..))
 import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor, deriveBitraversable)
 import Data.Bitraversable
@@ -56,6 +56,7 @@ import Data.Map qualified as Map
 import Data.SOAS hiding (SOAS)
 import Data.String (IsString (..))
 import Data.ZipMatchK
+import Data.ZipMatchK.Bifunctor ()
 import GHC.Generics qualified as GHC
 import Generics.Kind.TH (deriveGenericK)
 import Language.Lambda.FCU.FCUSyntax.Abs qualified as Raw
@@ -95,6 +96,9 @@ deriveUnifiablePattern ''Raw.Id ''Raw.Pattern
 deriving instance GHC.Generic (TermSig scope term)
 
 deriveGenericK ''TermSig
+instance ZipMatchK Raw.MetavarId where zipMatchWithK = zipMatchViaEq
+instance ZipMatchK Raw.ConstructorId where zipMatchWithK = zipMatchViaEq
+instance ZipMatchK TermSig
 
 data AnnBinder ann binder (n :: Foil.S) (l :: Foil.S)
   = AnnBinder (binder n l) ann
@@ -557,36 +561,37 @@ argumentRestriction tn = and [isRTerm t | t <- tn]
     isRTerm (App' _ x _) = isRTerm x
     isRTerm _ = False
 
+-- | Check local restriction:
+-- for all occurrences Xtn in S where X ∈Q∃and for each ti and tj such that 0 <i,j ≤n and i̸= j, ti ̸⊑tj.
 localRestriction ::
-  (Eq Raw.MetavarId, CoSinkable binder, SinkableK binder, Distinct n, UnifiablePattern binder, ZipMatchK typ) =>
+  (Bitraversable sig, ZipMatchK sig, Distinct n, UnifiablePattern binder, SinkableK binder) =>
   Scope n ->
-  [TypedSOAS binder Raw.MetavarId TermSig n typ] ->
+  [AST binder sig n] ->
   Bool
-localRestriction scope tn =
+localRestriction scope args =
   and
-    [ not (isSubset scope t1 t2) && not (isSubset scope t2 t1)
-      | (t1, i1) <- zip tn ([0 ..] :: [Int]),
-        (t2, i2) <- zip tn ([0 ..] :: [Int]),
+    [ not (isSubTerm scope t1 t2) && not (isSubTerm scope t2 t1)
+      | (t1, i1) <- zip args ([0 ..] :: [Int]),
+        (t2, i2) <- zip args ([0 ..] :: [Int]),
         i1 < i2
     ]
-  where
-    isSubset ::
-      Foil.Scope m ->
-      TypedSOAS binder Raw.MetavarId TermSig m typ ->
-      TypedSOAS binder Raw.MetavarId TermSig m typ ->
-      Bool
-    isSubset scope t1 t2 = alphaEquiv scope t1 t2 || checkSubterm scope t1 t2
 
-    checkSubterm ::
-      (Distinct m) =>
-      Foil.Scope m ->
-      TypedSOAS binder Raw.MetavarId TermSig m typ ->
-      TypedSOAS binder Raw.MetavarId TermSig m typ ->
-      Bool
-    checkSubterm scope sub term = case term of
-      App' f x _ -> checkSubterm scope sub f || checkSubterm scope sub x
-      Lam' binder body _ -> checkSubterm scope sub body
-      _ -> alphaEquiv scope sub term
+isSubTerm
+  :: (Bitraversable sig, ZipMatchK sig, Distinct n, UnifiablePattern binder, SinkableK binder)
+  => Foil.Scope n -> AST binder sig n -> AST binder sig n -> Bool
+isSubTerm scope l r | alphaEquiv scope l r = True
+isSubTerm _ _ Var{} = False
+isSubTerm scope l (Node node) =
+  biany (isSubTermScoped scope l) (isSubTerm scope l) node
+
+isSubTermScoped
+  :: (Bitraversable sig, ZipMatchK sig, Distinct n, UnifiablePattern binder, SinkableK binder)
+  => Foil.Scope n -> AST binder sig n -> ScopedAST binder sig n -> Bool
+isSubTermScoped scope l (ScopedAST binder r) =
+  case (Foil.assertDistinct binder, Foil.assertExt binder) of
+    (Foil.Distinct, Foil.Ext) ->
+      let scope' = Foil.extendScopePattern binder scope
+      in isSubTerm scope' (Foil.sink l) r
 
 globalRestriction :: Scope n -> [TypedSOAS binder Raw.MetavarId TermSig n typ] -> [TypedSOAS binder Raw.MetavarId TermSig n typ] -> Bool
 globalRestriction scope sn tn = True -- placeholder
