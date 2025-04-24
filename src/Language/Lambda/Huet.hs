@@ -96,7 +96,7 @@ lam'
   -> MetaTerm metavar n Raw.Type
 lam' binderType scope returnType makeBody = withFresh scope $ \x ->
   let body = makeBody (nameOf x) (extendScope x scope)
-   in Lam' (FoilAPattern x) binderType body (Raw.Fun binderType returnType)
+   in Lam' (AnnBinder (FoilAPattern x) binderType) binderType body (Raw.Fun binderType returnType)
 
 class (CoSinkable pattern_) => TypedUnifiablePattern typ pattern_ where
   typedUnifyPatterns :: (Distinct n) => pattern_ n l -> pattern_ n r -> UnifyNameBinders' typ pattern_ n l r
@@ -109,7 +109,7 @@ class
   , Eq metavar
   , CoSinkable binder
   , SinkableK binder
-  , TypedUnifiablePattern typ binder
+  , TypedUnifiablePattern typ (AnnBinder typ binder)
   , Bitraversable sig
   , ZipMatchK sig
   ) =>
@@ -262,7 +262,7 @@ instance TypedUnifiablePattern Raw.Type (AnnBinder Raw.Type FoilPattern) where
             RenameBothBinders' unifiedBinder (addNameBinders unifiedBinder [leftType]) id id
   typedUnifyPatterns _ _ = NotUnifiable'
 
-instance HuetPreunifiable Raw.Type Raw.MetavarIdent (AnnBinder Raw.Type FoilPattern) TermSig where
+instance HuetPreunifiable Raw.Type Raw.MetavarIdent FoilPattern TermSig where
   normalize scope node typ = case node of
     LamSig binderType (ScopedAST binder body)
       | Distinct <- assertDistinct binder ->
@@ -473,7 +473,7 @@ makeSubstitutions :: Metavariables typ metavar -> Substitutions typ metavar bind
 makeSubstitutions metas = Substitutions (uncurry go <$> getMetaTypes (metavariables metas))
  where
   go name (MetaType arguments returnType) =
-    withFreshNameBinderList arguments emptyScope emptyNameMap NameBinderListEmpty $ \_ _ binder ->
+    withFreshNameBinderList arguments emptyScope NameBinderListEmpty emptyNameMap $ \_ binder _ ->
       let body = MetaApp name (Var <$> namesOfPattern binder) returnType
        in Substitution name binder body
 
@@ -651,8 +651,8 @@ imitationRule metas (Constraint _ forallTypes left right) = case (left, right) o
  where
   go meta rhs = do
     MetaType parameterTypes _ <- lookupMetaType meta (metavariables metas)
-    withFreshNameBinderList parameterTypes emptyScope emptyNameMap NameBinderListEmpty $
-      \_ parameterTypes' parameters -> do
+    withFreshNameBinderList parameterTypes emptyScope NameBinderListEmpty emptyNameMap $
+      \_ parameters parameterTypes' -> do
         (metas', imitation) <- imitate' metas parameters parameterTypes' forallTypes rhs
         return (metas', Substitution meta parameters imitation)
 
@@ -706,8 +706,8 @@ projectionRule metas (Constraint _ _ left right) = case (left, right) of
  where
   go meta = do
     MetaType parameterTypes rhsType <- maybeToList (lookupMetaType meta (metavariables metas))
-    withFreshNameBinderList parameterTypes emptyScope emptyNameMap NameBinderListEmpty $
-      \_ parameterTypes' parameters -> do
+    withFreshNameBinderList parameterTypes emptyScope NameBinderListEmpty emptyNameMap $
+      \_ parameters parameterTypes' -> do
         parameter <- namesOfPattern parameters
         (metas', projection) <- project' metas parameters parameterTypes' rhsType (Var parameter)
         return (metas', Substitution meta parameters projection)
@@ -739,8 +739,8 @@ introductionRule metas (Constraint _ forallTypes left right) = go left <> go rig
   withMeta meta cont = case lookupMetaType meta (metavariables metas) of
     Nothing -> []
     Just (MetaType parameterTypes returnType) ->
-      withFreshNameBinderList parameterTypes emptyScope emptyNameMap NameBinderListEmpty $
-        \_ parameterTypes parameters -> do
+      withFreshNameBinderList parameterTypes emptyScope NameBinderListEmpty emptyNameMap $
+        \_ parameters parameterTypes -> do
           (metas', term) <- cont metas parameters parameterTypes
           return (metas', Substitution meta parameters (Node' term returnType))
 

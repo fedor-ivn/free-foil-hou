@@ -21,6 +21,7 @@ module Data.SOAS (
   AnnBinder (..),
   TypedBinder (..),
   MetaAppSig (..),
+  pattern Node',
   TypedSOAS,
   TypedScopedSOAS,
   SOAS,
@@ -33,6 +34,10 @@ module Data.SOAS (
   push,
   toNameMap,
   applyMetaSubsts,
+
+  -- * Utils
+  concatNameBinderLists,
+  withFreshNameBinderList,
 )
 where
 
@@ -314,7 +319,8 @@ match scope metavarTypes varTypes lhs rhs =
               argTypes
               Foil.emptyScope
               Foil.NameBinderListEmpty
-              $ \scope' binderList ->
+              Foil.emptyNameMap
+              $ \scope' binderList _ ->
                 trace
                   "matching metavar"
                   map
@@ -605,19 +611,22 @@ withFreshNameBinderList
   => [a]
   -> Foil.Scope n
   -> Foil.NameBinderList i n
+  -> Foil.NameMap n a
   -> ( forall l
         . (Foil.Distinct l)
        => Foil.Scope l
        -> Foil.NameBinderList i l
+       -> Foil.NameMap l a
        -> r
      )
   -> r
-withFreshNameBinderList [] scope binders cont = cont scope binders
-withFreshNameBinderList (_ : types) scope binders cont =
+withFreshNameBinderList [] scope binders nameMap cont = cont scope binders nameMap
+withFreshNameBinderList (typ : types) scope binders nameMap cont =
   Foil.withFresh scope $ \binder ->
     let scope' = Foil.extendScope binder scope
         binders' = push binder binders
-     in withFreshNameBinderList types scope' binders' cont
+        nameMap' = Foil.addNameBinder binder typ nameMap
+     in withFreshNameBinderList types scope' binders' nameMap' cont
 
 -- | /O(n)/. Push a name binder into the end of a name binder list.
 --

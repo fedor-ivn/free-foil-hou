@@ -51,6 +51,8 @@ module Language.Lambda.Impl (
   MetavarBinder,
   MetavarBinders,
   UnificationConstraint (..),
+  TermSig (..),
+  FoilPattern (..),
 
   -- * Core operations
   nfMetaTerm,
@@ -222,7 +224,6 @@ pattern MetaVar' metavar args typ = Node (AnnSig (L2 (MetavarSig metavar args)) 
 type Term = AST FoilPattern TermSig
 
 type MetaTerm metavar n t = TypedSOAS FoilPattern metavar TermSig n t
-type MetaTerm' metavar n t = TypedSOAS (AnnBinder t FoilPattern) metavar TermSig n t
 
 -- M[g, \z. z a]
 -- M[x, y] -> y x
@@ -442,43 +443,6 @@ annotate metavarTypes varTypes (Metavar metavar args) = do
     guard (actualType == expectedType)
     pure annotatedArg
 
-annotate'
-  :: MetavarBinders
-  -> Foil.NameMap n Raw.Type
-  -> Term n
-  -> Maybe (MetaTerm' Raw.MetavarIdent n Raw.Type, Raw.Type)
-annotate' _ varTypes (Var x) =
-  Just (Var x, Foil.lookupName x varTypes)
-annotate' metavarTypes varTypes (App function argument) = do
-  (function', functionType) <- annotate' metavarTypes varTypes function
-  (argument', argumentType) <- annotate' metavarTypes varTypes argument
-  case functionType of
-    Raw.Fun argumentType' returnType
-      | argumentType == argumentType' ->
-          let annSig = AnnSig (L2 (AppSig function' argument')) returnType
-              term = Node annSig
-           in Just (term, returnType)
-    _ -> Nothing
-annotate' metavarTypes varTypes (Lam typ binder body) = do
-  let (FoilAPattern name) = binder
-      varTypes' = Foil.addNameBinder name typ varTypes
-  (body', returnType) <- annotate' metavarTypes varTypes' body
-  let lamType = Raw.Fun typ returnType
-      annSig = AnnSig (L2 (LamSig typ (ScopedAST (AnnBinder binder typ) body'))) lamType
-      term = Node annSig
-  Just (term, lamType)
-annotate' metavarTypes varTypes (Metavar metavar args) = do
-  (expectedArgTypes, returnType) <- Map.lookup metavar metavarTypes
-  _ <- guard (length args == length expectedArgTypes)
-  annotatedArgs <- traverse checkArg (zip args expectedArgTypes)
-  let term = MetaApp metavar annotatedArgs returnType
-  pure (term, returnType)
- where
-  checkArg (arg, expectedType) = do
-    (annotatedArg, actualType) <- annotate' metavarTypes varTypes arg
-    guard (actualType == expectedType)
-    pure annotatedArg
-
 fromMetaTerm :: MetaTerm Raw.MetavarIdent n t -> Term n
 fromMetaTerm = \case
   Var name -> Var name
@@ -487,14 +451,6 @@ fromMetaTerm = \case
  where
   fromScopedMetaTerm (ScopedAST (AnnBinder binder _) body) =
     ScopedAST binder (fromMetaTerm body)
-
-fromMetaTerm' :: MetaTerm' Raw.MetavarIdent n t -> Term n
-fromMetaTerm' = \case
-  Var name -> Var name
-  Node (AnnSig (R2 (MetaAppSig metavar args)) _typ) -> Metavar metavar (map fromMetaTerm' args)
-  Node (AnnSig (L2 node) _) -> Node (bimap fromMetaScopedTerm fromMetaTerm' node)
- where
-  fromMetaScopedTerm (ScopedAST (AnnBinder binder _) body) = ScopedAST binder (fromMetaTerm' body)
 
 -- ** Conversion helpers
 
@@ -538,9 +494,6 @@ instance IsString (Term Foil.VoidS) where
 instance Show (MetaTerm Raw.MetavarIdent n Raw.Type) where
   show :: MetaTerm Raw.MetavarIdent n t -> String
   show = Raw.printTree . fromTerm . fromMetaTerm
-
-instance Show (MetaTerm' Raw.MetavarIdent n Raw.Type) where
-  show = Raw.printTree . fromTerm . fromMetaTerm'
 
 instance Show MetaSubst' where
   show :: MetaSubst' -> String
