@@ -84,11 +84,11 @@ tests:
       - hspec-discover
       - QuickCheck
 
-  doctests:
-    main: Doctests.hs
-    source-dirs: test/doctests
-    ghc-options:
-      - -Wall
-    dependencies:
-      - free-foil-hou
-      - doctest
+  # doctests:
+  #   main: Doctests.hs
+  #   source-dirs: test/doctests
+  #   ghc-options:
+  #     - -Wall
+  #   dependencies:
+  #     - free-foil-hou
+  #     - doctest

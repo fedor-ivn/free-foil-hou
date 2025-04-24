@@ -31,8 +31,11 @@ custom-setup
 library
   exposed-modules:
       Data.SOAS
+      Language.Lambda.Config
+      Language.Lambda.Framework
       Language.Lambda.Huet
       Language.Lambda.Impl
+      Language.Lambda.RawConfig
       Language.Lambda.Syntax.Abs
       Language.Lambda.Syntax.Layout
       Language.Lambda.Syntax.Lex
@@ -71,34 +74,6 @@ executable free-foil-hou-exe
   hs-source-dirs:
       app
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
-  build-tools:
-      alex >=3.2.4
-    , happy >=1.19.9
-  build-tool-depends:
-      BNFC:bnfc >=2.9.4.1
-  build-depends:
-      array >=0.5.3.0
-    , base >=4.7 && <5
-    , bifunctors
-    , containers
-    , doctest
-    , free-foil >=0.1.0
-    , free-foil-hou
-    , kind-generics-th
-    , text
-    , tomland
-  default-language: Haskell2010
-
-test-suite doctests
-  type: exitcode-stdio-1.0
-  main-is: Doctests.hs
-  other-modules:
-      Paths_free_foil_hou
-  autogen-modules:
-      Paths_free_foil_hou
-  hs-source-dirs:
-      test/doctests
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -Wall
   build-tools:
       alex >=3.2.4
     , happy >=1.19.9

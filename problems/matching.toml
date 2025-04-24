@@ -1,0 +1,55 @@
+[[problems]]
+metavars = [
+    "X: [t -> t, t] t",
+]
+constraints = [
+    "∀ f: t -> t, x: t. X[f, x] = f x"
+]
+
+[[problems.solutions]]
+name = "most general"
+metavars = []
+substitutions = [
+    "X[b, c] ↦ b c",
+]
+
+[[problems]]
+metavars = [
+    "N : [t] t -> t"
+]
+constraints = [
+    "∀ x: t. λy:t.N[x] = λy:t.λz:t.x"
+]
+
+[[problems.solutions]]
+name = "most general"
+metavars = []
+substitutions = [
+    "N[x] ↦ λz:t.x",
+]
+
+[[problems]]
+metavars = [
+    "N : [t] t -> t"
+]
+constraints = [
+    "∀ x: t. λy:t.λz:t.x = λy:t.N[x]"
+]
+
+[[problems.solutions]]
+name = "most general"
+metavars = []
+substitutions = []
+
+
+[[problems]]
+metavars = []
+constraints = [
+    "∀ x: t. x = x"
+]
+
+[[problems.solutions]]
+name = "most general"
+metavars = []
+substitutions = []
+
