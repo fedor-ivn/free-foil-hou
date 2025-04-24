@@ -16,11 +16,14 @@
 module Language.Lambda.Huet (
   Constraint (..),
   Metavariables (..),
+  MetaTypes (..),
+  MetaType (..),
   Substitution (..),
   Substitutions (..),
   Problem (..),
   Solution (..),
   solve,
+  someMetas,
 ) where
 
 import Control.Monad.Foil (

@@ -96,6 +96,7 @@ test-suite spec
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Language.Lambda.HuetSpec
       Language.Lambda.ImplSpec
       Paths_free_foil_hou
   autogen-modules:
