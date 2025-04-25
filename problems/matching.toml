@@ -29,18 +29,13 @@ substitutions = [
 ]
 
 [[problems]]
+# This problem isn't solvable by matching, so no solutions are provided.
 metavars = [
     "N : [t] t -> t"
 ]
 constraints = [
     "∀ x: t. λy:t.λz:t.x = λy:t.N[x]"
 ]
-
-[[problems.solutions]]
-name = "most general"
-metavars = []
-substitutions = []
-
 
 [[problems]]
 metavars = []

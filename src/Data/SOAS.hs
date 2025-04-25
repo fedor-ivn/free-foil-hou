@@ -50,9 +50,13 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (mapMaybe)
 import Data.ZipMatchK
-import Debug.Trace (trace)
+
+-- import Debug.Trace (trace)
 import qualified GHC.Generics as GHC
 import Generics.Kind.TH (deriveGenericK)
+
+trace :: String -> a -> a
+trace _ x = x
 
 -- | Second-order signature for metavariable applications.
 -- This way, metavariables can be added to any other signature using 'Sum'.
@@ -255,17 +259,15 @@ combineMetaSubsts (subst : substs) = foldr (mapMaybe . combine) [subst] substs
           Foil.NotUnifiable -> True
           _ -> error "unexpected renaming"
 
--- | Match left-hand side (with metavariables) against the rigid right-hand side.
+-- | Match left-hand side (with metavariables) against the rigid right-hand
+-- side.
 --
--- If matching is successful, it produces metavariable substitutions that when applied to LHS make it syntactically equal to RHS.
--- For example, matching
---   M[f x, g] = g (f x)
--- produces substitution
---   M[z₁, z₂] ↦ z₂ z₁
+-- If matching is successful, it produces metavariable substitutions that when
+-- applied to LHS make it syntactically equal to RHS. For example, matching \
+-- M[f x, g] = g (f x) produces substitution M[z₁, z₂] ↦ z₂ z₁
 --
--- There may be more than one solution for matching, e.g.
---   M[f x, f x] = f x
--- can be solved with two different substitutions:
+-- There may be more than one solution for matching, e.g. M[f x, f x] = f x can
+-- be solved with two different substitutions:
 --   1. M[z₁, z₂] ↦ z₁
 --   2. M[z₁, z₂] ↦ z₂
 --
