@@ -1,0 +1,40 @@
+[[problems]]
+metavars = [
+    "F: [t -> t, t] t -> t",
+    "X: [t -> t, t] t",
+]
+constraints = [
+    "∀ a: t -> t, b: t. a b = F[a, b] X[a, b]",
+]
+
+[[problems.solutions]]
+name = "X is ignored"
+metavars = []
+substitutions = [
+    "F[a, b] ↦ λx: t. a b",
+    "X[a, b] ↦ X[a, b]"
+]
+
+[[problems.solutions]]
+name = "structural"
+metavars = []
+substitutions = [
+    "F[a, b] ↦ a",
+    "X[a, b] ↦ b",
+]
+
+[[problems.solutions]]
+name = "F is id"
+metavars = []
+substitutions = [
+    "F[a, b] ↦ λx: t. x",
+    "X[a, b] ↦ a b",
+]
+
+[[problems.solutions]]
+name = "F is a"
+metavars = []
+substitutions = [
+    "F[a, b] ↦ λx: t. a x",
+    "X[a, b] ↦ b",
+]

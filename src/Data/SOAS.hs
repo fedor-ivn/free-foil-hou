@@ -21,6 +21,7 @@ module Data.SOAS (
   AnnBinder (..),
   TypedBinder (..),
   MetaAppSig (..),
+  pattern Node',
   TypedSOAS,
   TypedScopedSOAS,
   SOAS,
@@ -33,6 +34,10 @@ module Data.SOAS (
   push,
   toNameMap,
   applyMetaSubsts,
+
+  -- * Utils
+  concatNameBinderLists,
+  withFreshNameBinderList,
 )
 where
 
@@ -154,6 +159,14 @@ pattern MetaApp
 pattern MetaApp metavar args ann =
   Node (AnnSig (R2 (MetaAppSig metavar args)) ann)
 
+pattern Node'
+  :: sig (TypedScopedSOAS binder metavar sig n t) (TypedSOAS binder metavar sig n t)
+  -> t
+  -> TypedSOAS binder metavar sig n t
+pattern Node' term ann = Node (AnnSig (L2 term) ann)
+
+{-# COMPLETE Var, MetaApp, Node' #-}
+
 -- | A body of a metavariable substitution for one metavariable.
 data MetaAbs binder sig t where
   MetaAbs
@@ -203,9 +216,7 @@ applyMetaSubsts scope substs = \case
       Nothing -> MetaApp metavar args' ann
    where
     args' = map go args
-  Node (AnnSig (L2 term) ann) ->
-    let term' = bimap goScoped go term in Node (AnnSig (L2 term') ann)
-  _ -> error "unreachable"
+  Node' term ann -> Node' (bimap goScoped go term) ann
  where
   go = applyMetaSubsts scope substs
   goScoped (ScopedAST binder body) =
@@ -310,7 +321,8 @@ match scope metavarTypes varTypes lhs rhs =
               argTypes
               Foil.emptyScope
               Foil.NameBinderListEmpty
-              $ \scope' binderList ->
+              Foil.emptyNameMap
+              $ \scope' binderList _ ->
                 trace
                   "matching metavar"
                   map
@@ -601,19 +613,22 @@ withFreshNameBinderList
   => [a]
   -> Foil.Scope n
   -> Foil.NameBinderList i n
+  -> Foil.NameMap n a
   -> ( forall l
         . (Foil.Distinct l)
        => Foil.Scope l
        -> Foil.NameBinderList i l
+       -> Foil.NameMap l a
        -> r
      )
   -> r
-withFreshNameBinderList [] scope binders cont = cont scope binders
-withFreshNameBinderList (_ : types) scope binders cont =
+withFreshNameBinderList [] scope binders nameMap cont = cont scope binders nameMap
+withFreshNameBinderList (typ : types) scope binders nameMap cont =
   Foil.withFresh scope $ \binder ->
     let scope' = Foil.extendScope binder scope
         binders' = push binder binders
-     in withFreshNameBinderList types scope' binders' cont
+        nameMap' = Foil.addNameBinder binder typ nameMap
+     in withFreshNameBinderList types scope' binders' nameMap' cont
 
 -- | /O(n)/. Push a name binder into the end of a name binder list.
 --

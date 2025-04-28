@@ -51,6 +51,8 @@ module Language.Lambda.Impl (
   MetavarBinder,
   MetavarBinders,
   UnificationConstraint (..),
+  TermSig (..),
+  FoilPattern (..),
 
   -- * Core operations
   nfMetaTerm,
