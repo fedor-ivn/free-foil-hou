@@ -32,7 +32,7 @@ handleErr = either (\err -> print err >> exitFailure) pure
 
 solve :: CanonicalProblem -> Result [(CanonicalSolution, Framework.SolutionComparison)]
 solve problem = Framework.solveAndCompareToReferenceSolutionsWith problem $ \metas constraints ->
-  Right (take 10 $ toFrameworkSolution <$> Huet.solve [Huet.Problem metas constraints])
+  Right (toFrameworkSolution <$> Huet.solve [Huet.Problem metas constraints])
 
 toFrameworkSolution
   :: Huet.Solution Raw.Type Raw.MetavarIdent FoilPattern TermSig
