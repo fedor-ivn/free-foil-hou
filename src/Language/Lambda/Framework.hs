@@ -38,7 +38,7 @@ module Language.Lambda.Framework (
   solveByMatchingAndCompareToReferenceSolutionsWith,
 ) where
 
-import Control.Monad (forM_)
+import Control.Monad (forM, forM_)
 import Data.Either (partitionEithers)
 import qualified Data.Map as Map
 import Data.Maybe (fromMaybe, isJust, listToMaybe)
@@ -95,16 +95,39 @@ solveAndCompareToReferenceSolutionsWith
   -> Result [(CanonicalSolution, SolutionComparison)]
 solveAndCompareToReferenceSolutionsWith problem solve = do
   solutions <- solveWith solve problem
-  mapM findBestComparison solutions
+  forM referenceSolutions $ \reference -> do
+    findBestSolutionComparison originalBinders reference solutions
  where
   originalBinders = problemMetavarBinders problem
   referenceSolutions = problemSolutions problem
-  compare' = flip (compareSolutions originalBinders)
-  findBestComparison solution = do
-    let comparisons = map (compare' solution) referenceSolutions
-    case comparisons of
-      [] -> Left "No reference solutions"
-      (x : xs) -> Right (solution, foldr max x xs)
+
+findBestSolutionComparison
+  :: MetavarBinders
+  -> CanonicalSolution
+  -> [Result CanonicalSolution]
+  -> Result (CanonicalSolution, SolutionComparison)
+findBestSolutionComparison originalBinders reference = go Nothing
+ where
+  go Nothing [] = Left "No solutions to compare"
+  go (Just result) [] = Right result
+  go bestSoFar (result : rest) = do
+    solution <- result
+    let comparison = compareSolutions originalBinders reference solution
+    case comparison of
+      Equivalent -> do
+        -- Found an equivalent solution, return immediately
+        return (solution, Equivalent)
+      _ ->
+        -- Compare with our best so far and continue searching
+        let newBest =
+              case bestSoFar of
+                Nothing ->
+                  Just (solution, comparison)
+                Just (_, bestComp)
+                  | comparison > bestComp ->
+                      Just (solution, comparison)
+                _ -> bestSoFar
+         in go newBest rest
 
 -- >>> foldr (fmap . max) (Left "No reference solutions") [Right 1, Right 2]
 -- Left "No reference solutions"
@@ -132,7 +155,7 @@ solveWith
   -- ^ User's algorithm function
   -> CanonicalProblem
   -- ^ The problem definition with constraints to solve
-  -> Result [CanonicalSolution]
+  -> Result [Result CanonicalSolution]
   -- ^ Results for each constraint
 solveWith solve Problem{..} = do
   binders' <-
@@ -140,7 +163,7 @@ solveWith solve Problem{..} = do
   constraint' <-
     traverse (fromCanonicalConstraint problemMetavarBinders) problemConstraints
   solutions <- solve binders' constraint'
-  traverse (toCanonicalSolution problemMetavarBinders) solutions
+  Right $ map (toCanonicalSolution problemMetavarBinders) solutions
 
 data SolutionComparison
   = Incomparable
