@@ -54,7 +54,7 @@ import Data.Bitraversable
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe
-import Data.SOAS hiding (SOAS)
+import Data.SOAS hiding (SOAS, withFreshNameBinderList)
 import Data.String (IsString (..))
 import Data.ZipMatchK
 import Data.ZipMatchK.Bifunctor ()
@@ -185,14 +185,27 @@ instance Show (AST FoilPattern TermSig Foil.VoidS) where
 
 -- * Unification test
 
--- | Typeclass for signatures that can represent application 'f x'.
-class (Bifunctor sig) => ApplicativeSig sig where
-  -- | If the given signature node represents an application
-  matchApp :: sig scoped term -> Maybe (term, term)
-
-instance ApplicativeSig TermSig where
-  matchApp (AppTermSig f x) = Just (f, x)
-  matchApp _ = Nothing
+withFreshNameBinderList ::
+  (Foil.Distinct n) =>
+  [a] ->
+  Foil.Scope n ->
+  Foil.NameBinderList i n ->
+  Foil.NameMap n a ->
+  ( forall l.
+    (Foil.Distinct l) =>
+    Foil.Scope l ->
+    Foil.NameBinderList i l ->
+    Foil.NameMap l a ->
+    r
+  ) ->
+  r
+withFreshNameBinderList [] scope binders nameMap cont = cont scope binders nameMap
+withFreshNameBinderList (typ : types) scope binders nameMap cont =
+  Foil.withFresh scope $ \binder ->
+    let scope' = Foil.extendScope binder scope
+        binders' = push binder binders
+        nameMap' = Foil.addNameBinder binder typ nameMap
+     in withFreshNameBinderList types scope' binders' nameMap' cont
 
 class MetavarFresh metavar where
   newMetavarId :: metavar -> metavar
@@ -210,7 +223,7 @@ class
   ) =>
   FCUPreunifiable typ metavar binder sig
   where
-  -- existing methods...
+  -- Existing methods
   makeAbstraction ::
     (Distinct n) =>
     binder n l ->
@@ -224,7 +237,10 @@ class
     typ ->
     TypedSOAS binder metavar sig n typ
 
-  -- new method for generalized head normal form construction
+  matchApplication ::
+    TypedSOAS binder metavar sig n typ ->
+    Maybe (TypedSOAS binder metavar sig n typ, TypedSOAS binder metavar sig n typ)
+
   hnf ::
     (Distinct n) =>
     Scope n ->
@@ -233,21 +249,56 @@ class
     [Name n] ->
     TypedSOAS binder metavar sig n typ
 
+  abst ::
+    (Distinct n) =>
+    Scope n ->
+    (NameBinderList VoidS n, TypedSOAS binder metavar sig n typ) ->
+    TypedSOAS binder metavar sig n typ
+
 instance (Eq typ, SinkableK FoilPattern) => FCUPreunifiable typ Raw.MetavarId FoilPattern TermSig where
   makeAbstraction binder binderType body =
     Node (AnnSig (L2 (AbsTermSig (ScopedAST binder body))) binderType)
 
   makeApplication function argument resultType =
     Node (AnnSig (L2 (AppTermSig function argument)) resultType)
-  hnf _ _ _ _ = undefined
+
+  matchApplication term = case term of
+    Node (AnnSig (L2 (AppTermSig function argument)) _) -> Just (function, argument)
+    _ -> Nothing
+
+  hnf ::
+    (Distinct n) =>
+    Scope n ->
+    NameBinderList VoidS n ->
+    TypedSOAS FoilPattern Raw.MetavarId TermSig n typ ->
+    [Name n] ->
+    TypedSOAS FoilPattern Raw.MetavarId TermSig n typ
+  hnf scope vars base args = undefined
+
+  -- let termApplied = foldl (\acc arg -> makeApplication acc (Var arg) undefined) base args
+  --     termWithAbstractions = buildAbstractions scope vars termApplied
+  --  in termWithAbstractions
+  -- where
+  --   buildAbstractions ::
+  --     forall m l.
+  --     Scope l ->
+  --     NameBinderList m l ->
+  --     TypedSOAS FoilPattern Raw.MetavarId TermSig l typ ->
+  --     TypedSOAS FoilPattern Raw.MetavarId TermSig m typ
+  --   buildAbstractions scope NameBinderListEmpty term = term
+  --   buildAbstractions scope (NameBinderListCons binder rest) term =
+  --     let binderPattern = FoilPatternVar binder :: FoilPattern m l
+  --         scope' = extendScopePattern binderPattern scope
+  --         body = buildAbstractions scope' rest term
+  --      in makeAbstraction binderPattern undefined body
+
+  abst _ = undefined
 
 -- | Generalized term representation
 type Sig typ metavar binder sig n =
   sig (TypedScopedSOAS binder metavar sig n typ) (TypedSOAS binder metavar sig n typ)
 
 -- | Substitutions representations
-
--- TODO: REVISE!
 data Substitution typ metavar binder sig where
   Substitution ::
     metavar ->
@@ -339,21 +390,21 @@ applySubstitution' substitution scope node = case node of
         where
           scope' = extendScopePattern binder scope
 
+-- | Splits a term into head and a list of arguments
 strip' ::
-  (ApplicativeSig sig) =>
+  (FCUPreunifiable typ metavar binder sig) =>
   Scope n ->
   TypedSOAS binder metavar sig n typ ->
   (TypedSOAS binder metavar sig n typ, [TypedSOAS binder metavar sig n typ])
 strip' scope term = case term of
   MetaApp _ args _ -> (term, args)
-  Node (AnnSig (L2 nodeSig) _) ->
-    case matchApp nodeSig of
-      Just (f, x) ->
-        let (headF, argsF) = strip' scope f
-         in (headF, argsF ++ [x])
-      Nothing -> (term, [])
-  _ -> (term, [])
+  _ -> case matchApplication term of
+    Just (f, x) ->
+      let (headF, argsF) = strip' scope f
+       in (headF, argsF ++ [x])
+    Nothing -> (term, [])
 
+-- | Unify two terms using FCU algorithm
 unify ::
   ( Eq metavar,
     CoSinkable binder,
@@ -393,6 +444,7 @@ findScopedAST (AnnSig (L2 node) _) =
     collectScoped _ acc = acc
 findScopedAST _ = Nothing
 
+-- | Rule (0) implementation
 unifyAbstractions ::
   ( Eq metavar,
     CoSinkable binder,
@@ -427,6 +479,7 @@ unifyAbstractions scope th (ScopedAST binder1 body1) (ScopedAST binder2 body2) =
            in unify scope' (th, (body1, rhsTerm'))
     _ -> error "Not unifiable"
 
+-- | Select a rule (2)-(5) to proceed with (rule (1) is covered earlier)
 cases ::
   (Eq metavar, CoSinkable binder, SinkableK binder, Distinct n, UnifiablePattern binder, ZipMatchK (Sum TermSig (MetaAppSig metavar)), ZipMatchK typ, ZipMatchK metavar, FCUPreunifiable typ metavar binder TermSig) =>
   Scope n ->
@@ -467,27 +520,38 @@ caseFlexRigid ::
   Scope n ->
   (Substitutions typ metavar binder TermSig, (TypedSOAS binder metavar TermSig n typ, [TypedSOAS binder metavar TermSig n typ], TypedSOAS binder metavar TermSig n typ)) ->
   Substitutions typ metavar binder TermSig
-caseFlexRigid scope (th, (MetaApp metavar _ _, argsList, rigid))
-  | not (argumentRestriction scope argsList) = error "Argument restriction fail at flexrigid case"
-  | not (localRestriction scope argsList) = error "Local restriction fail at flexrigid case"
+caseFlexRigid scope (th, (MetaApp metavar _ _, tn, rigid))
+  | not (argumentRestriction scope tn) = error "Argument restriction fail at flexrigid case"
+  | not (localRestriction scope tn) = error "Local restriction fail at flexrigid case"
   | otherwise = combineSubstitutions (combineSubstitutions th pruningResult) newMetavarSubs
   where
-    freshVarNames = makeVarList (length argsList)
-    pruningResult = prune scope argsList (th, rigid)
-    newMetavarSubs = Substitutions [Substitution metavar freshVarNames (discharge scope argsList freshVarNames (devar' pruningResult scope rigid))]
+    zn = makeVarList (length tn)
+    pruningResult = prune scope tn (th, rigid)
+    newMetavarSubs =
+      Substitutions
+        [ Substitution
+            metavar
+            zn
+            (abst scope (zn, discharge scope tn zn (devar' pruningResult scope rigid)))
+        ]
 caseFlexRigid _ _ = error "Unexpected case in flexrigid"
 
 discharge ::
-  (Eq metavar, CoSinkable binder, SinkableK binder, Distinct n, UnifiablePattern binder) =>
+  ( Eq metavar,
+    CoSinkable binder,
+    SinkableK binder,
+    Distinct n
+  ) =>
   Scope n ->
   [TypedSOAS binder metavar TermSig n typ] ->
   NameBinderList VoidS n ->
   TypedSOAS binder metavar TermSig n typ ->
   TypedSOAS binder metavar TermSig n typ
-discharge scope args freshVarNames term =
-  let nameMap = toNameMap emptyNameMap freshVarNames args
-      substs' = nameMapToSubstitution nameMap
-   in substitute scope substs' term
+discharge _scope args freshVars body =
+  let scope' = extendScopePattern freshVars emptyScope
+      nameMap = toNameMap emptyNameMap freshVars args
+      substs = nameMapToSubstitution nameMap
+   in substitute scope' substs body
 
 -- | Create a list of fresh variable name binders
 makeVarList :: Int -> NameBinderList VoidS n
@@ -521,7 +585,6 @@ eqsel' ::
 eqsel' scope vsm tn sm =
   [v | (v, s) <- zip (namesOfPattern vsm) sm, any (alphaEquiv scope s) tn]
 
-
 permutate' ::
   ( Distinct n,
     CoSinkable binder,
@@ -553,9 +616,8 @@ elemIndexBy eq x (y : ys)
   | eq x y = Just 0
   | otherwise = (1 +) <$> elemIndexBy eq x ys
 
-
 prune ::
-  (Distinct n, CoSinkable binder, SinkableK binder, UnifiablePattern binder, Bitraversable sig, ZipMatchK sig, Eq metavar, ZipMatchK typ, ZipMatchK metavar, ApplicativeSig sig, FCUPreunifiable typ metavar binder sig) =>
+  (Distinct n, CoSinkable binder, SinkableK binder, UnifiablePattern binder, Bitraversable sig, ZipMatchK sig, Eq metavar, ZipMatchK typ, ZipMatchK metavar, FCUPreunifiable typ metavar binder sig) =>
   Scope n ->
   [TypedSOAS binder metavar sig n typ] ->
   (Substitutions typ metavar binder sig, TypedSOAS binder metavar sig n typ) ->
@@ -599,8 +661,6 @@ caseFlexFlex scope (th, (MetaApp meta1 sn typ1, MetaApp meta2 tn typ2))
   | otherwise = caseFlexFlexDiff scope (th, (MetaApp meta1 sn typ1, MetaApp meta2 tn typ2))
 caseFlexFlex _ _ = error "Unexpected case at flexflex case"
 
--- Then, your generalized `caseFlexFlexSame` can be something like this:
-
 caseFlexFlexSame ::
   (Eq metavar, CoSinkable binder, SinkableK binder, Distinct n, UnifiablePattern binder, ZipMatchK typ, MetavarFresh metavar, FCUPreunifiable typ metavar binder TermSig, ZipMatchK metavar) =>
   Scope n ->
@@ -622,7 +682,7 @@ caseFlexFlexSame scope (th, (MetaApp meta1 sn typ1, MetaApp meta2 tn typ2))
 caseFlexFlexSame _ _ = error "Unexpected case at FlexFlexSame"
 
 caseFlexFlexDiff ::
-  (ZipMatchK typ, ZipMatchK metavar, ApplicativeSig sig, FCUPreunifiable typ metavar binder sig, Distinct n, UnifiablePattern binder, Eq metavar) =>
+  (ZipMatchK typ, ZipMatchK metavar, FCUPreunifiable typ metavar binder sig, Distinct n, UnifiablePattern binder, Eq metavar) =>
   Scope n ->
   (Substitutions typ metavar binder sig, (TypedSOAS binder metavar sig n typ, TypedSOAS binder metavar sig n typ)) ->
   Substitutions typ metavar binder sig

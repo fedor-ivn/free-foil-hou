@@ -40,7 +40,7 @@ subset sm tn = all (`elem` tn) sm
 -- >>> subset ["x", "y", "z"] ["x", "y"]
 -- False
 
--- | Apply a permutation to two list of arguments
+-- | Apply a permutation to two lists of arguments
 permutate :: [Raw.Id] -> [Raw.Term] -> [Raw.Term] -> [Raw.Id]
 permutate zs as bs = [zs !! i | b <- bs, i <- maybeToList $ elemIndex b as]
 
