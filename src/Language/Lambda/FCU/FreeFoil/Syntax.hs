@@ -53,6 +53,7 @@ import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor, deriveBitraversable
 import Data.Bitraversable
 import Data.Map (Map)
 import Data.Map qualified as Map
+import Data.Maybe
 import Data.SOAS hiding (SOAS)
 import Data.String (IsString (..))
 import Data.ZipMatchK
@@ -520,6 +521,39 @@ eqsel' ::
 eqsel' scope vsm tn sm =
   [v | (v, s) <- zip (namesOfPattern vsm) sm, any (alphaEquiv scope s) tn]
 
+
+permutate' ::
+  ( Distinct n,
+    CoSinkable binder,
+    SinkableK binder,
+    Bitraversable sig,
+    ZipMatchK sig,
+    UnifiablePattern binder,
+    ZipMatchK typ,
+    ZipMatchK metavar
+  ) =>
+  Scope n ->
+  [Name n] ->
+  [TypedSOAS binder metavar sig n typ] ->
+  [TypedSOAS binder metavar sig n typ] ->
+  [Name n]
+permutate' scope zs as bs =
+  [ zs !! i
+    | b <- bs,
+      i <- maybeToList (elemIndexBy (alphaEquiv scope) b as)
+  ]
+
+elemIndexBy ::
+  (a -> a -> Bool) ->
+  a ->
+  [a] ->
+  Maybe Int
+elemIndexBy _ _ [] = Nothing
+elemIndexBy eq x (y : ys)
+  | eq x y = Just 0
+  | otherwise = (1 +) <$> elemIndexBy eq x ys
+
+
 prune ::
   (Distinct n, CoSinkable binder, SinkableK binder, UnifiablePattern binder, Bitraversable sig, ZipMatchK sig, Eq metavar, ZipMatchK typ, ZipMatchK metavar, ApplicativeSig sig, FCUPreunifiable typ metavar binder sig) =>
   Scope n ->
@@ -528,7 +562,6 @@ prune ::
   Substitutions typ metavar binder sig
 prune scope tn (rho, u) = case strip' scope (devar' rho scope u) of
   (_, []) -> rho
-
   -- (Node (AnnSig (L2 (AbsTermSig (ScopedAST binder body))) _), _) ->
   --   case assertDistinct binder of
   --     Distinct ->
@@ -588,6 +621,11 @@ caseFlexFlexSame scope (th, (MetaApp meta1 sn typ1, MetaApp meta2 tn typ2))
         ]
 caseFlexFlexSame _ _ = error "Unexpected case at FlexFlexSame"
 
+caseFlexFlexDiff ::
+  (ZipMatchK typ, ZipMatchK metavar, ApplicativeSig sig, FCUPreunifiable typ metavar binder sig, Distinct n, UnifiablePattern binder, Eq metavar) =>
+  Scope n ->
+  (Substitutions typ metavar binder sig, (TypedSOAS binder metavar sig n typ, TypedSOAS binder metavar sig n typ)) ->
+  Substitutions typ metavar binder sig
 caseFlexFlexDiff scope (th, (MetaApp meta1 sn typ1, MetaApp meta2 tn typ2))
   | not (globalRestriction scope sn tn) = error "Global restriction fail at flexflex case"
   | otherwise =
@@ -612,7 +650,7 @@ caseFlexFlexDiff scope (th, (MetaApp meta1 sn typ1, MetaApp meta2 tn typ2))
                 scope
                 vsm
                 (MetaApp (newMetavarId meta1) (Var <$> namesOfPattern vsm) typ1)
-                (undefined scope vsm (snd tmnew) (snd snnew))
+                (permutate' scope (namesOfPattern vsm) (snd tmnew) (snd snnew))
             )
         ]
 caseFlexFlexDiff _ _ = error "Unexpected case at FlexFlexDiff"
