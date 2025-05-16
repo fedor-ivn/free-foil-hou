@@ -260,11 +260,8 @@ class
   -- \| Method to construct an abstraction term from list of binders, base and list of arguments
   hnf ::
     (Distinct n) =>
-    -- | binders to abstract over
     NameBinderList VoidS n ->
-    -- | head
     TypedSOAS binder metavar sig n typ ->
-    -- | arguments
     [Name n] ->
     TypedSOAS binder metavar sig n typ
 
