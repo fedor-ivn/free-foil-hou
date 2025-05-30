@@ -48,10 +48,12 @@ import Control.Monad.Free.Foil.TH
     mkSignature,
   )
 import Data.Biapplicative (Bifunctor (bimap))
-import Data.Bifoldable (Bifoldable, biany, bifoldr)
+import Data.Bifoldable (Bifoldable, biany, bifoldl', bifoldr)
 import Data.Bifunctor.Sum (Sum (..))
 import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor, deriveBitraversable)
 import Data.Bitraversable
+import Data.Functor.Const (Const (..))
+import Data.Kind (Type)
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe
@@ -218,31 +220,58 @@ termType (Var _) = undefined
 termType (MetaApp _ _ t) = t
 termType (Node (AnnSig _ t)) = t
 
+data Constraint typ metavar binder sig where
+  Constraint ::
+    (Distinct n) =>
+    NameBinderList VoidS n ->
+    NameMap n typ ->
+    TypedSOAS binder metavar sig n typ ->
+    TypedSOAS binder metavar sig n typ ->
+    Constraint typ metavar binder sig
+
+data UnifyNameBinders' typ (pattern_ :: S -> S -> Type) n l r where
+  RenameBothBinders' ::
+    NameBinders n lr ->
+    (NameMap n typ -> NameMap lr typ) ->
+    (NameBinder n l -> NameBinder n lr) ->
+    (NameBinder n r -> NameBinder n lr) ->
+    UnifyNameBinders' typ pattern_ n l r
+  NotUnifiable' :: UnifyNameBinders' typ pattern_ n l r
+
+class TypedUnifiablePattern typ pattern_ where
+  typedUnifyPatterns ::
+    (Distinct n) =>
+    pattern_ n l ->
+    pattern_ n r ->
+    UnifyNameBinders' typ pattern_ n l r
+
+instance TypedUnifiablePattern () (AnnBinder () FoilPattern) where
+  typedUnifyPatterns
+    (AnnBinder (FoilPatternVar b1) t1)
+    (AnnBinder (FoilPatternVar b2) t2)
+      | t1 == t2 =
+          case Foil.unifyNameBinders b1 b2 of
+            Foil.NotUnifiable -> NotUnifiable'
+            Foil.RenameBothBinders ub rl rr ->
+              RenameBothBinders' ub (addNameBinders ub [t1]) rl rr
+            Foil.RenameLeftNameBinder ub rl ->
+              RenameBothBinders' ub (addNameBinders ub [t1]) rl id
+            Foil.RenameRightNameBinder ub rr ->
+              RenameBothBinders' ub (addNameBinders ub [t1]) id rr
+            Foil.SameNameBinders ub ->
+              RenameBothBinders' ub (addNameBinders ub [t1]) id id
+      | otherwise = NotUnifiable'
+
+swapConstraint ::
+  Constraint typ metavar binder sig ->
+  Constraint typ metavar binder sig
+swapConstraint (Constraint vs ty lhs rhs) = Constraint vs ty rhs lhs
+
 class MetavarFreshable metavar where
   newMetavarId :: metavar -> metavar
 
 instance MetavarFreshable Raw.MetavarId where
   newMetavarId (Raw.MetavarId name) = Raw.MetavarId (name ++ "'")
-
-class
-  ( Eq typ,
-    CoSinkable binder,
-    SinkableK binder,
-    Bitraversable sig,
-    ZipMatchK sig,
-    MetavarFreshable metavar
-  ) =>
-  FCUUnifiable typ metavar binder sig
-  where
-  -- | Method to check if term is an application term and return its head and argument
-  matchApplication ::
-    TypedSOAS binder metavar sig n typ ->
-    Maybe (TypedSOAS binder metavar sig n typ, TypedSOAS binder metavar sig n typ)
-
-instance (Eq typ, SinkableK FoilPattern) => FCUUnifiable typ Raw.MetavarId FoilPattern TermSig where
-  matchApplication term = case term of
-    Node (AnnSig (L2 (AppTermSig function argument)) _) -> Just (function, argument)
-    _ -> Nothing
 
 -- | Generalized term representation
 type Sig typ metavar binder sig n =
@@ -277,27 +306,13 @@ data MetaType typ = MetaType [typ] typ deriving (Eq, GHC.Generic)
 -- >>> termType typedTerm
 -- "DummyType"
 
--- | Decomposes a term into head and arguments
-strip' ::
-  (FCUUnifiable typ metavar binder sig) =>
-  Scope n ->
+-- | Get the metavariable arguments from a term.
+getMetavarArgs ::
   TypedSOAS binder metavar sig n typ ->
-  (TypedSOAS binder metavar sig n typ, [TypedSOAS binder metavar sig n typ])
-strip' scope term = case term of
-  MetaApp _ args _ -> (term, args)
-  _ -> case matchApplication term of
-    Just (f, x) ->
-      let (headF, argsF) = strip' scope f
-       in (headF, argsF ++ [x])
-    Nothing -> (term, [])
-
-headScoped ::
-  (Bifoldable sig) =>
-  TypedSOAS binder metavar sig n typ ->
-  Maybe (TypedScopedSOAS binder metavar sig n typ)
-headScoped (Node (AnnSig (L2 layer) _)) =
-  bifoldr (\sc _ -> Just sc) (const id) Nothing layer
-headScoped _ = Nothing
+  [TypedSOAS binder metavar sig n typ]
+getMetavarArgs term = case term of
+  MetaApp _ args _ -> args
+  _ -> error "Not a metavariable application term"
 
 -- | Unify two terms (generalised FCU algorithm).
 --   Rule (1) is selected when both sides are headed by a `ScopedAST`,
@@ -306,76 +321,35 @@ unify ::
   ( Eq metavar,
     CoSinkable binder,
     SinkableK binder,
-    Distinct n,
     UnifiablePattern binder,
     ZipMatchK (Sum sig (MetaAppSig metavar)),
     ZipMatchK typ,
     ZipMatchK metavar,
-    FCUUnifiable typ metavar binder sig, -- only for strip’, etc.
-    ExtEndo VoidS,
-    Bifoldable sig
+    Bifoldable sig,
+    Bifunctor sig,
+    MetavarFreshable metavar,
+    Bitraversable sig,
+    ZipMatchK sig,
+    TypedUnifiablePattern typ binder
   ) =>
-  Scope n ->
   ( MetaSubsts
       binder
       (AnnSig typ (Sum sig (MetaAppSig metavar)))
       metavar
       typ,
-    ( TypedSOAS binder metavar sig n typ,
-      TypedSOAS binder metavar sig n typ
-    )
+    Constraint typ metavar binder sig
   ) ->
   MetaSubsts
     binder
     (AnnSig typ (Sum sig (MetaAppSig metavar)))
     metavar
     typ
-unify scope (θ, (s, t)) =
-  let s' = applyMetaSubsts scope θ s
-      t' = applyMetaSubsts scope θ t
-   in case (headScoped s', headScoped t') of
-        (Just sc1, Just sc2) ->
-          -- rule (1)
-          unifyScoped scope θ sc1 sc2
-        (Nothing, Nothing) ->
-          -- rules (2-5)
-          cases scope (θ, (s', t'))
-        _ -> error "Not unifiable" -- abstraction on only one side
-
--- | Rule (1) implementation, abstraction case
-unifyScoped ::
-  ( Eq metavar,
-    CoSinkable binder,
-    SinkableK binder,
-    Distinct n,
-    UnifiablePattern binder,
-    ZipMatchK typ,
-    Bifunctor sig,
-    ZipMatchK metavar,
-    FCUUnifiable typ metavar binder sig,
-    ExtEndo VoidS
-  ) =>
-  Scope n ->
-  MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ ->
-  TypedScopedSOAS binder metavar sig n typ ->
-  TypedScopedSOAS binder metavar sig n typ ->
-  MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ
-unifyScoped scope th (ScopedAST binder1 body1) (ScopedAST binder2 body2) =
-  case Foil.unifyPatterns binder1 binder2 of
-    Foil.NotUnifiable -> error "Not unifiable"
-    Foil.RenameLeftNameBinder _ rename ->
-      case Foil.assertDistinct binder2 of
-        Foil.Distinct ->
-          let scope' = Foil.extendScopePattern binder2 scope
-              lhsTerm' = liftRM scope' (Foil.fromNameBinderRenaming rename) body1
-           in unify scope' (th, (lhsTerm', body2))
-    Foil.RenameRightNameBinder _ rename ->
-      case Foil.assertDistinct binder1 of
-        Foil.Distinct ->
-          let scope' = Foil.extendScopePattern binder1 scope
-              rhsTerm' = liftRM scope' (Foil.fromNameBinderRenaming rename) body2
-           in unify scope' (th, (body1, rhsTerm'))
-    _ -> error "Not unifiable"
+unify (th, Constraint forall_ forallTypes s t) =
+  let scope = extendScopePattern forall_ emptyScope
+      s' = applyMetaSubsts scope th s
+      t' = applyMetaSubsts scope th t
+      c' = Constraint forall_ forallTypes s' t'
+   in cases scope (th, c')
 
 -- | Select a rule (2)-(5) to proceed with (rule (1) is covered earlier)
 cases ::
@@ -387,71 +361,114 @@ cases ::
     ZipMatchK (Sum sig (MetaAppSig metavar)),
     ZipMatchK typ,
     ZipMatchK metavar,
-    FCUUnifiable typ metavar binder sig,
-    ExtEndo VoidS
-  ) =>
-  Scope n ->
-  (MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ, (TypedSOAS binder metavar sig n typ, TypedSOAS binder metavar sig n typ)) ->
-  MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ
-cases scope (th, (s, t)) = case (isFlexible s, isFlexible t) of
-  (True, False) -> caseFlexRigid scope (th, (s, t))
-  (False, True) -> caseFlexRigid scope (th, (t, s))
-  (True, True) -> caseFlexFlex scope (th, (s, t))
-  (False, False) -> caseRigidRigid scope (th, (s, t))
-  _ -> error "Unexpected case in cases"
-
--- | Rule (2) implementation, rigid-rigid
-caseRigidRigid ::
-  ( Eq metavar,
-    CoSinkable binder,
-    SinkableK binder,
-    Distinct n,
-    UnifiablePattern binder,
-    ZipMatchK typ,
-    ZipMatchK metavar,
-    FCUUnifiable typ metavar binder sig,
-    ExtEndo VoidS
+    MetavarFreshable metavar,
+    Bitraversable sig,
+    ZipMatchK sig,
+    TypedUnifiablePattern typ binder
   ) =>
   Scope n ->
   ( MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ,
-    ( TypedSOAS binder metavar sig n typ,
-      TypedSOAS binder metavar sig n typ
-    )
+    Constraint typ metavar binder sig
   ) ->
   MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ
-caseRigidRigid scope (th, (a, b)) = case (strip' scope a, strip' scope b) of
-  ((Var x, sn), (Var y, tm)) -> applicableCase (x, sn, y, tm)
-  _ -> error "Not unifiable in (2) rule"
-  where
-    applicableCase (x, sn, y, tm) =
-      if x == y && length sn == length tm
-        then foldl (\th' (s, t) -> unify scope (th', (s, t))) th (zip sn tm)
-        else error "Not unifiable in (2) rule"
+cases scope (th, c@(Constraint _ _ s t)) = case (isFlexible s, isFlexible t) of
+  (True, False) -> caseFlexRigid (th, c) -- Rule (3)
+  (False, True) -> caseFlexRigid (th, swapConstraint c) -- Rule (3)
+  (True, True) -> caseFlexFlex (th, c) -- Rules (4-5)
+  (False, False) -> caseRigidRigid (th, c) -- Rules (0-2)
+  _ -> error "Unexpected case in cases"
+
+decomposeRigidRigid ::
+  forall typ metavar binder sig.
+  ( CoSinkable binder,
+    SinkableK binder,
+    Bitraversable sig,
+    ZipMatchK sig,
+    UnifiablePattern binder,
+    ZipMatchK typ,
+    ZipMatchK metavar,
+    TypedUnifiablePattern typ binder
+  ) =>
+  Constraint typ metavar binder sig ->
+  Maybe
+    [Constraint typ metavar binder sig]
+decomposeRigidRigid (Constraint forall_ forallTypes s t) = case (s, t) of
+  (Var x, Var y)
+    | x == y -> Just []
+    | otherwise -> Nothing
+  (MetaApp {}, _) -> Nothing
+  (_, MetaApp {}) -> Nothing
+  (Node sTerm, Node tTerm) ->
+    case zipMatch2 sTerm tTerm of
+      Nothing -> Nothing
+      Just term ->
+        getConst $
+          bitraverse goScoped go term
+    where
+      go (s', t') = Const (Just [Constraint forall_ forallTypes s' t'])
+
+      goScoped (ScopedAST sBinder s', ScopedAST tBinder t') =
+        case typedUnifyPatterns sBinder tBinder of
+          NotUnifiable' -> Const Nothing
+          RenameBothBinders' unifiedBinder unifiedBinderTypes renameLeft renameRight
+            | Distinct <- assertDistinct unifiedBinder ->
+                let forall' =
+                      concatNameBinderLists
+                        (nameBindersList unifiedBinder)
+                        forall_
+                    scope' = extendScopePattern forall' emptyScope
+                    s'' = liftRM scope' (Foil.fromNameBinderRenaming renameLeft) s'
+                    t'' = liftRM scope' (Foil.fromNameBinderRenaming renameRight) t'
+                 in Const (Just [Constraint forall' (unifiedBinderTypes forallTypes) s'' t''])
+  _ -> Nothing
+
+-- | Rules (1-2) implementation
+caseRigidRigid ::
+  ( CoSinkable binder,
+    SinkableK binder,
+    Bitraversable sig,
+    ZipMatchK sig,
+    UnifiablePattern binder,
+    Eq metavar,
+    ZipMatchK typ,
+    ZipMatchK metavar,
+    MetavarFreshable metavar,
+    TypedUnifiablePattern typ binder
+  ) =>
+  ( MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ,
+    Constraint typ metavar binder sig
+  ) ->
+  MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ
+caseRigidRigid (th, constraint) =
+  case decomposeRigidRigid constraint of
+    Nothing -> error "not unifiable in rigid–rigid case"
+    Just [] -> th
+    Just newConstraints ->
+      let step th' nc = unify (th', nc)
+       in foldl step th newConstraints
 
 -- | Rule (3) implementation, flex-rigid
 caseFlexRigid ::
   ( Eq metavar,
     CoSinkable binder,
     SinkableK binder,
-    Distinct n,
     UnifiablePattern binder,
     ZipMatchK typ,
     ZipMatchK metavar,
-    FCUUnifiable typ metavar binder sig,
-    ExtEndo VoidS
+    MetavarFreshable metavar,
+    Bitraversable sig,
+    ZipMatchK sig
   ) =>
-  Scope n ->
   ( MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ,
-    ( TypedSOAS binder metavar sig n typ,
-      TypedSOAS binder metavar sig n typ
-    )
+    Constraint typ metavar binder sig
   ) ->
   MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ
-caseFlexRigid scope (th, (s, t))
-  | not (argumentRestriction scope tn) = error "argument restriction failed"
-  | not (localRestriction scope tn) = error "local restriction failed"
+caseFlexRigid (th, Constraint forall_ _ s t)
+  | not (argumentRestriction (extendScopePattern forall_ emptyScope) tn) = error "argument restriction failed"
+  | not (localRestriction (extendScopePattern forall_ emptyScope) tn) = error "local restriction failed"
   | otherwise =
-      let pruningResult = prune scope tn (th, s)
+      let scope = extendScopePattern forall_ emptyScope
+          pruningResult = prune scope tn (th, s)
           s' = applyMetaSubsts scope pruningResult s
        in withFreshNameBinderList
             (map termType tn)
@@ -467,13 +484,11 @@ caseFlexRigid scope (th, (s, t))
                       newSubst = MetaSubst (metavar, MetaAbs zn argsTypes body)
                    in collapseMetaSubsts' [th, pruningResult, MetaSubsts [newSubst]]
   where
-    tn = case strip' scope t of
-      (_, args) -> args
-      _ -> error "Unexpected flexible term structure in flex-rigid case"
+    tn = getMetavarArgs t
     metavar = case t of
       MetaApp meta _ _ -> meta
       _ -> error "Unexpected flexible term structure in flex-rigid case"
-caseFlexRigid _ _ = error "unexpected case in flex-rigid"
+caseFlexRigid _ = error "unexpected case in flex-rigid"
 
 -- | Discharge a term by replacing all matching occurences with zn
 discharge ::
@@ -587,20 +602,14 @@ prune ::
     Eq metavar,
     ZipMatchK typ,
     ZipMatchK metavar,
-    FCUUnifiable typ metavar binder sig,
-    ExtEndo VoidS
+    MetavarFreshable metavar
   ) =>
   Scope n ->
   [TypedSOAS binder metavar sig n typ] ->
   (MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ, TypedSOAS binder metavar sig n typ) ->
   MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ
-prune scope tn (rho, u) = case strip' scope (applyMetaSubsts scope rho u) of
-  (_, []) -> rho
-  (Var x, rr) ->
-    if any (alphaEquiv scope (Var x)) tn
-      then foldlN' scope tn (prune scope tn) (rho, rr)
-      else error "var not in lhs context"
-  (MetaApp meta sm typ, _) ->
+prune scope tn (rho, u) = case applyMetaSubsts scope rho u of
+  MetaApp meta sm typ ->
     if subset' scope sm tn
       then rho
       else withFreshNameBinderList
@@ -610,23 +619,29 @@ prune scope tn (rho, u) = case strip' scope (applyMetaSubsts scope rho u) of
         emptyNameMap
         $ \scope' vsm argsTypes -> case (Foil.assertDistinct vsm, Foil.assertExt vsm) of
           (Foil.Distinct, Foil.Ext) ->
-            let tn' = fmap sink tn
-                sm' = fmap sink sm
+            let tn' = fmap Foil.sink tn
+                sm' = fmap Foil.sink sm
                 selectedArgs = eqsel' scope' vsm tn' sm'
                 newMeta = newMetavarId meta
                 body = MetaApp newMeta (Var <$> selectedArgs) typ
                 newSubst = MetaSubst (meta, MetaAbs vsm argsTypes body)
              in collapseMetaSubsts' [MetaSubsts [newSubst], rho]
-  (term, _) | Just (ScopedAST binder body) <- headScoped term ->
-    case (assertDistinct binder, assertExt binder) of
-      (Distinct, Ext) ->
-        let scope' = extendScopePattern binder scope
-            [x] = namesOfPattern binder
-            newVar = Var x
-            tn' = newVar : fmap sink tn
-         in prune scope' tn' (rho, body)
-  (Node _, rr) ->
-    foldlN' scope tn (prune scope tn) (rho, rr)
+  Var x ->
+    if any (alphaEquiv scope (Var x)) tn
+      then rho
+      else error "var not in lhs context"
+  Node (AnnSig sig _) ->
+    bifoldl' stepScoped step rho sig
+    where
+      step rho' t = prune scope tn (rho', t)
+
+      stepScoped rho' (ScopedAST binder body) =
+        case (Foil.assertDistinct binder, Foil.assertExt binder) of
+          (Foil.Distinct, Foil.Ext) ->
+            let scope' = extendScopePattern binder scope
+                x = Var (head (namesOfPattern binder))
+                tn' = x : fmap Foil.sink tn
+             in prune scope' tn' (rho', body)
   _ -> error "Prune: unexpected generalized case"
 
 -- | Check the restrictions and select rule (4) or (5) to proceed with
@@ -634,48 +649,45 @@ caseFlexFlex ::
   ( Eq metavar,
     CoSinkable binder,
     SinkableK binder,
-    Distinct n,
     UnifiablePattern binder,
     ZipMatchK typ,
     ZipMatchK metavar,
-    FCUUnifiable typ metavar binder sig,
-    ExtEndo VoidS
+    MetavarFreshable metavar,
+    Bitraversable sig,
+    ZipMatchK sig
   ) =>
-  Scope n ->
   ( MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ,
-    (TypedSOAS binder metavar sig n typ, TypedSOAS binder metavar sig n typ)
+    Constraint typ metavar binder sig
   ) ->
   MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ
-caseFlexFlex scope (th, (MetaApp meta1 sn typ1, MetaApp meta2 tn typ2))
-  | not (argumentRestriction scope sn) = error "Global restriction fail at flexflex case"
-  | not (argumentRestriction scope tn) = error "Global restriction fail at flexflex case"
-  | not (localRestriction scope sn) = error "Local restriction fail at flexflex case"
-  | not (localRestriction scope tn) = error "Local restriction fail at flexflex case"
-  | meta1 == meta2 = caseFlexFlexSame scope (th, (MetaApp meta1 sn typ1, MetaApp meta2 tn typ2))
-  | otherwise = caseFlexFlexDiff scope (th, (MetaApp meta1 sn typ1, MetaApp meta2 tn typ2))
-caseFlexFlex _ _ = error "Unexpected case at flexflex case"
+caseFlexFlex (th, c@(Constraint forall_ _ (MetaApp meta1 sn _) (MetaApp meta2 tn _)))
+  | not (argumentRestriction (extendScopePattern forall_ emptyScope) sn) = error "Global restriction fail at flexflex case"
+  | not (argumentRestriction (extendScopePattern forall_ emptyScope) tn) = error "Global restriction fail at flexflex case"
+  | not (localRestriction (extendScopePattern forall_ emptyScope) sn) = error "Local restriction fail at flexflex case"
+  | not (localRestriction (extendScopePattern forall_ emptyScope) tn) = error "Local restriction fail at flexflex case"
+  | meta1 == meta2 = caseFlexFlexSame (th, c)
+  | otherwise = caseFlexFlexDiff (th, c)
+caseFlexFlex _ = error "Unexpected case at flexflex case"
 
 -- | Rule (4) implementation, flex-flex with same metavariable on both sides
 caseFlexFlexSame ::
   ( Eq metavar,
     CoSinkable binder,
     SinkableK binder,
-    Distinct n,
     UnifiablePattern binder,
     ZipMatchK typ,
     MetavarFreshable metavar,
-    FCUUnifiable typ metavar binder sig,
     ZipMatchK metavar,
-    ExtEndo VoidS
+    Bitraversable sig,
+    ZipMatchK sig
   ) =>
-  Scope n ->
   ( MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ,
-    (TypedSOAS binder metavar sig n typ, TypedSOAS binder metavar sig n typ)
+    Constraint typ metavar binder sig
   ) ->
   MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ
-caseFlexFlexSame scope (th, (MetaApp meta1 sn typ1, MetaApp _ tn _))
+caseFlexFlexSame (th, c@(Constraint forall_ _ (MetaApp meta1 sn typ1) (MetaApp _ tn _)))
   | length sn /= length tn = error "Different argument lists lengths in (4) rule"
-  | and (zipWith (alphaEquiv scope) sn tn) = error "Same argument lists in (4) rule"
+  | and (zipWith (alphaEquiv (extendScopePattern forall_ emptyScope)) sn tn) = error "Same argument lists in (4) rule"
   | otherwise = withFreshNameBinderList
       (map termType tn)
       emptyScope
@@ -683,32 +695,32 @@ caseFlexFlexSame scope (th, (MetaApp meta1 sn typ1, MetaApp _ tn _))
       emptyNameMap
       $ \scope' vsm argsTypes -> case (Foil.assertDistinct vsm, Foil.assertExt vsm) of
         (Foil.Distinct, Foil.Ext) ->
-          let tn' = fmap sink tn
-              sn' = fmap sink sn
+          let tn' = fmap Foil.sink tn
+              sn' = fmap Foil.sink sn
               selectedArgs = eqsel' scope' vsm tn' sn'
               newMeta = newMetavarId meta1
               body = MetaApp newMeta (Var <$> selectedArgs) typ1
               newSubs = MetaSubst (meta1, MetaAbs vsm argsTypes body)
            in collapseMetaSubsts' [th, MetaSubsts [newSubs]]
-caseFlexFlexSame _ _ = error "Unexpected case at FlexFlexSame"
+caseFlexFlexSame _ = error "Unexpected case at FlexFlexSame"
 
 -- | Rule (5) implementation, flex-flex with different metavariables
 caseFlexFlexDiff ::
   ( ZipMatchK typ,
     ZipMatchK metavar,
-    FCUUnifiable typ metavar binder sig,
-    Distinct n,
     UnifiablePattern binder,
     Eq metavar,
-    ExtEndo VoidS
+    Bitraversable sig,
+    ZipMatchK sig,
+    SinkableK binder,
+    MetavarFreshable metavar
   ) =>
-  Scope n ->
   ( MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ,
-    (TypedSOAS binder metavar sig n typ, TypedSOAS binder metavar sig n typ)
+    Constraint typ metavar binder sig
   ) ->
   MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ
-caseFlexFlexDiff scope (th, (MetaApp meta1 sn typ1, MetaApp meta2 tn typ2))
-  | not (globalRestriction scope sn tn) = error "Global restriction fail at flexflex case"
+caseFlexFlexDiff (th, Constraint forall_ _ (MetaApp meta1 sn typ1) (MetaApp meta2 tn typ2))
+  | not (globalRestriction (extendScopePattern forall_ emptyScope) sn tn) = error "Global restriction fail at flexflex case"
   | otherwise = withFreshNameBinderList
       (map termType tn)
       emptyScope
@@ -716,19 +728,19 @@ caseFlexFlexDiff scope (th, (MetaApp meta1 sn typ1, MetaApp meta2 tn typ2))
       emptyNameMap
       $ \scope' vsm argsTypes -> case (Foil.assertDistinct vsm, Foil.assertExt vsm) of
         (Foil.Distinct, Foil.Ext) ->
-          let pruningResultLeft = prune scope sn (th, MetaApp meta2 tn typ2)
-              pruningResultRight = prune scope tn (th, MetaApp meta1 sn typ1)
-              tmnew = snd (strip' scope (applyMetaSubsts scope pruningResultLeft (MetaApp meta2 tn typ2)))
-              snnew = snd (strip' scope (applyMetaSubsts scope pruningResultRight (MetaApp meta1 sn typ1)))
+          let pruningResultLeft = prune (extendScopePattern forall_ emptyScope) sn (th, MetaApp meta2 tn typ2)
+              pruningResultRight = prune (extendScopePattern forall_ emptyScope) tn (th, MetaApp meta1 sn typ1)
+              tmnew = getMetavarArgs (applyMetaSubsts (extendScopePattern forall_ emptyScope) pruningResultLeft (MetaApp meta2 tn typ2))
+              snnew = getMetavarArgs (applyMetaSubsts (extendScopePattern forall_ emptyScope) pruningResultRight (MetaApp meta1 sn typ1))
 
-              tmnew' = fmap sink tmnew
-              snnew' = fmap sink snnew
+              tmnew' = fmap Foil.sink tmnew
+              snnew' = fmap Foil.sink snnew
 
               permutatedArgs = permutate' scope' (namesOfPattern vsm) tmnew' snnew'
               body = MetaApp meta1 (Var <$> permutatedArgs) typ1
               newSubs = MetaSubst (meta2, MetaAbs vsm argsTypes body)
            in collapseMetaSubsts' [th, pruningResultLeft, pruningResultRight, MetaSubsts [newSubs]]
-caseFlexFlexDiff _ _ = error "Unexpected case at FlexFlexDiff"
+caseFlexFlexDiff _ = error "Unexpected case at FlexFlexDiff"
 
 -- | RESTRICTIONS (Done)
 
