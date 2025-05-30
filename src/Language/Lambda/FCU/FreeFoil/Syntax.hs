@@ -256,34 +256,9 @@ instance (Eq typ, SinkableK FoilPattern) => FCUUnifiable typ Raw.MetavarId FoilP
 type Sig typ metavar binder sig n =
   sig (TypedScopedSOAS binder metavar sig n typ) (TypedSOAS binder metavar sig n typ)
 
--- | Substitutions representations
-data Substitution typ metavar binder sig where
-  Substitution ::
-    metavar ->
-    NameBinderList VoidS n ->
-    TypedSOAS binder metavar sig n typ ->
-    Substitution typ metavar binder sig
-
-newtype Substitutions typ metavar binder sig = Substitutions [Substitution typ metavar binder sig]
-
 isFlexible :: TypedSOAS binder metavar sig n t -> Bool
 isFlexible MetaApp {} = True
 isFlexible _ = False
-
--- -- | Replace metavariables in terms with its substitutions
--- devar' ::
---   forall sig metavar metavar' n binder t.
---   ( Bifunctor sig,
---     Eq metavar,
---     Foil.Distinct n,
---     Foil.CoSinkable binder,
---     Foil.SinkableK binder
---   ) =>
---   Foil.Scope n ->
---   MetaSubsts binder (AnnSig t (Sum sig ext)) metavar t ->
---   TypedSOAS binder metavar sig n t ->
---   TypedSOAS binder metavar' sig n t
--- devar' = applyMetaSubsts
 
 toNameMap ::
   NameMap m a ->
@@ -295,16 +270,6 @@ toNameMap nameMap (NameBinderListCons binder rest) (x : xs) =
   toNameMap (addNameBinder binder x nameMap) rest xs
 toNameMap _ _ _ = error "mismatched name list and argument list"
 
-applySubstitutions' ::
-  (Eq metavar, CoSinkable binder, SinkableK binder, Bifunctor sig, Distinct n) =>
-  Substitutions typ metavar binder sig ->
-  Scope n ->
-  TypedSOAS binder metavar sig n typ ->
-  TypedSOAS binder metavar sig n typ
-applySubstitutions' (Substitutions []) _ term = term
-applySubstitutions' (Substitutions (subst : substs)) scope term =
-  applySubstitutions' (Substitutions substs) scope (applySubstitution' subst scope term)
-
 collapseMetaSubsts' ::
      [MetaSubsts binder sig metavar t]
   -> MetaSubsts binder sig metavar t
@@ -314,32 +279,6 @@ data Stream a = Stream a (Stream a) deriving (Eq, GHC.Generic)
 
 -- | Type of a metavariable with its parameter types and return type
 data MetaType typ = MetaType [typ] typ deriving (Eq, GHC.Generic)
-
--- | Apply a substitution to a term
-applySubstitution' ::
-  (Eq metavar, CoSinkable binder, SinkableK binder, Bifunctor sig, Foil.Distinct n) =>
-  Substitution typ metavar binder sig ->
-  Foil.Scope n ->
-  TypedSOAS binder metavar sig n typ ->
-  TypedSOAS binder metavar sig n typ
-applySubstitution' substitution scope node = case node of
-  Var {} -> node
-  MetaApp meta arguments _
-    | Substitution expectedMeta parameters body <- substitution,
-      meta == expectedMeta ->
-        let nameMap = toNameMap emptyNameMap parameters arguments
-            substs' = nameMapToSubstitution nameMap
-         in substitute scope substs' body
-  MetaApp meta parameters typ ->
-    MetaApp meta (applySubstitution' substitution scope <$> parameters) typ
-  Node term -> Node (bimap goScoped go term)
-    where
-      go = applySubstitution' substitution scope
-      goScoped (ScopedAST binder term)
-        | Distinct <- assertDistinct binder =
-            ScopedAST binder (applySubstitution' substitution scope' term)
-        where
-          scope' = extendScopePattern binder scope
 
 -- >>> let meta = Raw.MetavarId "M"
 -- >>> let typedTerm = MetaApp meta [] "DummyType" :: TypedSOAS FoilPattern Raw.MetavarId TermSig VoidS String
