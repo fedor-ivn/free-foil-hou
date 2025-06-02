@@ -68,6 +68,7 @@ import Language.Lambda.FCU.FCUSyntax.Lex qualified as Raw
 import Language.Lambda.FCU.FCUSyntax.Par qualified as Raw
 import Language.Lambda.FCU.FCUSyntax.Print qualified as Raw
 import Language.Lambda.FCU.Terms (showRaw)
+import Data.Bifunctor (first)
 
 -- * Generated code
 
@@ -354,7 +355,7 @@ unify (th, Constraint forall_ forallTypes s t) =
       c' = Constraint forall_ forallTypes s' t'
    in cases scope (th, c')
 
--- | Select a rule (2)-(5) to proceed with (rule (1) is covered earlier)
+-- | Select a rule (0)-(5) to proceed with
 cases ::
   ( Eq metavar,
     CoSinkable binder,
@@ -451,8 +452,9 @@ caseRigidRigid (th, constraint) =
        in foldl step th newConstraints
 
 discharge ::
-  forall n l typ metavar binder sig.
+  forall n l m typ metavar binder sig.
   ( Distinct n,
+    Distinct l,
     CoSinkable binder,
     SinkableK binder,
     Bifunctor sig,
@@ -460,14 +462,13 @@ discharge ::
     ZipMatchK sig,
     ZipMatchK typ,
     ZipMatchK metavar,
-    UnifiablePattern binder,
-    Distinct l
+    UnifiablePattern binder, Distinct m
   ) =>
   Scope n ->
-  [(TypedSOAS binder metavar sig n typ, TypedSOAS binder metavar sig l typ)] ->
+  [(TypedSOAS binder metavar sig n typ, Name l)] ->
   -- left are terms we are searching from, right are variables we are replacing them with
   TypedSOAS binder metavar sig n typ ->
-  TypedSOAS binder metavar sig l typ
+  TypedSOAS binder metavar sig m typ
 discharge scope pairs = go
   where
     replaceIfMatch u =
@@ -475,9 +476,9 @@ discharge scope pairs = go
         (v : _) -> Just v
         [] -> Nothing
 
-    go :: TypedSOAS binder metavar sig n typ -> TypedSOAS binder metavar sig l typ
+    go :: TypedSOAS binder metavar sig n typ -> TypedSOAS binder metavar sig m typ
     go tm = case replaceIfMatch tm of
-      Just newVar -> newVar
+      Just newVar -> Var newVar
       Nothing -> case tm of
         Var {} -> tm
         MetaApp m args t -> MetaApp m (map (discharge scope pairs) args) t
@@ -486,7 +487,7 @@ discharge scope pairs = go
     goScoped (ScopedAST binder term) =
       case (Foil.assertDistinct binder, Foil.assertExt binder) of
         (Foil.Distinct, Foil.Ext) ->
-          ScopedAST binder (discharge (extendScopePattern binder scope) (map (bimap sink sink) pairs) term)
+          ScopedAST binder (discharge (extendScopePattern binder scope) pairs term)
 
 -- | Rule (3) implementation, flex-rigid
 caseFlexRigid ::
@@ -505,25 +506,24 @@ caseFlexRigid ::
   ) ->
   MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ
 caseFlexRigid (th, Constraint forall_ _ s t)
-  | not (argumentRestriction (extendScopePattern forall_ emptyScope) tn) = error "argument restriction failed"
-  | not (localRestriction (extendScopePattern forall_ emptyScope) tn) = error "local restriction failed"
+  | not (argumentRestriction scope tn) = error "argument restriction failed"
+  | not (localRestriction scope tn) = error "local restriction failed"
   | otherwise =
-      let scope = extendScopePattern forall_ emptyScope
-          pruningResult = prune scope tn (th, s)
+      let pruningResult = prune scope tn (th, s)
           s' = applyMetaSubsts scope pruningResult s
        in withFreshNameBinderList
             (map termType tn)
             emptyScope
             NameBinderListEmpty
             emptyNameMap
-            $ \_ zn argsTypes -> case (Foil.assertDistinct zn, Foil.assertExt zn) of
+            $ \scope' zn argsTypes -> case (Foil.assertDistinct zn, Foil.assertExt zn) of
               (Foil.Distinct, Foil.Ext) ->
-                let freshVars = Var <$> namesOfPattern zn
-                    pairs = zip tn freshVars
+                let pairs = zip tn (namesOfPattern zn)
                     body = discharge scope pairs s'
                     newSub = MetaSubst (metavar, MetaAbs zn argsTypes body)
                  in collapseMetaSubsts' [th, pruningResult, MetaSubsts [newSub]]
   where
+    scope = extendScopePattern forall_ emptyScope
     tn = getMetavarArgs t
     metavar = getMetavar t
 caseFlexRigid _ = error "unexpected case in flex-rigid"
