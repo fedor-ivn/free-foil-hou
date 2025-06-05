@@ -18,7 +18,7 @@
             stack
             ghcid
             (haskell-language-server.override {
-              supportedGhcVersions = [ "98" ];
+              supportedGhcVersions = [ "982" ];
             })
             haskellPackages.fourmolu
             haskellPackages.BNFC
