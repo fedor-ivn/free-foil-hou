@@ -50,6 +50,7 @@ import Control.Monad.Free.Foil.TH
   )
 import Data.Biapplicative (Bifunctor (bimap))
 import Data.Bifoldable (Bifoldable (bifoldl), biany, bifoldl', bifoldr)
+import Data.Bifunctor (first)
 import Data.Bifunctor.Sum (Sum (..))
 import Data.Bifunctor.TH (deriveBifoldable, deriveBifunctor, deriveBitraversable)
 import Data.Bitraversable
@@ -69,7 +70,6 @@ import Language.Lambda.FCU.FCUSyntax.Lex qualified as Raw
 import Language.Lambda.FCU.FCUSyntax.Par qualified as Raw
 import Language.Lambda.FCU.FCUSyntax.Print qualified as Raw
 import Language.Lambda.FCU.Terms (showRaw)
-import Data.Bifunctor (first)
 
 -- * Generated code
 
@@ -354,14 +354,13 @@ unify (th, Constraint forall_ forallTypes s t) =
       s' = applyMetaSubsts scope th s
       t' = applyMetaSubsts scope th t
       c' = Constraint forall_ forallTypes s' t'
-   in cases scope (th, c')
+   in cases (th, c')
 
 -- | Select a rule (0)-(5) to proceed with
 cases ::
   ( Eq metavar,
     CoSinkable binder,
     SinkableK binder,
-    Distinct n,
     UnifiablePattern binder,
     ZipMatchK (Sum sig (MetaAppSig metavar)),
     ZipMatchK typ,
@@ -371,12 +370,11 @@ cases ::
     ZipMatchK sig,
     TypedUnifiablePattern typ binder
   ) =>
-  Scope n ->
   ( MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ,
     Constraint typ metavar binder sig
   ) ->
   MetaSubsts binder (AnnSig typ (Sum sig (MetaAppSig metavar))) metavar typ
-cases scope (th, c@(Constraint _ _ s t)) = case (isFlexible s, isFlexible t) of
+cases (th, c@(Constraint _ _ s t)) = case (isFlexible s, isFlexible t) of
   (True, False) -> caseFlexRigid (th, c) -- Rule (3)
   (False, True) -> caseFlexRigid (th, swapConstraint c) -- Rule (3)
   (True, True) -> caseFlexFlex (th, c) -- Rules (4-5)
@@ -465,11 +463,11 @@ discharge ::
     ZipMatchK metavar,
     UnifiablePattern binder
   ) =>
-    Scope n ->
-    Scope l ->
-    [(TypedSOAS binder metavar sig n typ, Name l)] ->
-    TypedSOAS binder metavar sig n typ ->
-    Maybe (TypedSOAS binder metavar sig l typ)
+  Scope n ->
+  Scope l ->
+  [(TypedSOAS binder metavar sig n typ, Name l)] ->
+  TypedSOAS binder metavar sig n typ ->
+  Maybe (TypedSOAS binder metavar sig l typ)
 discharge rhsScope substScope pairs term = case replaceIfMatch pairs term of
   Just v -> Just (Var v)
   Nothing -> case term of
@@ -479,24 +477,23 @@ discharge rhsScope substScope pairs term = case replaceIfMatch pairs term of
       Nothing -> Nothing
     Node term' -> Node <$> bimapM goScoped go term'
   where
-    replaceIfMatch tzn u = 
+    replaceIfMatch tzn u =
       case [v | (k, v) <- tzn, alphaEquiv rhsScope u k] of
         (v : _) -> Just v
         [] -> Nothing
 
     go = discharge rhsScope substScope pairs
 
-    goScoped (ScopedAST binder body) = 
+    goScoped (ScopedAST binder body) =
       Foil.withRefreshedPattern @_ @_ @(AST binder sig) substScope binder $
-        \_ binder' -> 
-          case (Foil.assertDistinct binder, Foil.assertExt binder) of 
+        \_ binder' ->
+          case (Foil.assertDistinct binder, Foil.assertExt binder) of
             (Foil.Distinct, Foil.Ext) ->
-              let 
-                rhsScope' = Foil.extendScopePattern binder rhsScope
-                substScope' = Foil.extendScopePattern binder' substScope
-                binderMap = zip (Var <$> Foil.namesOfPattern binder) (Foil.namesOfPattern binder')
-                pairs' = binderMap <> (bimap Foil.sink Foil.sink <$> pairs)
-                 in ScopedAST binder' <$> discharge rhsScope' substScope' pairs' body
+              let rhsScope' = Foil.extendScopePattern binder rhsScope
+                  substScope' = Foil.extendScopePattern binder' substScope
+                  binderMap = zip (Var <$> Foil.namesOfPattern binder) (Foil.namesOfPattern binder')
+                  pairs' = binderMap <> (bimap Foil.sink Foil.sink <$> pairs)
+               in ScopedAST binder' <$> discharge rhsScope' substScope' pairs' body
 
 -- | Rule (3) implementation, flex-rigid
 caseFlexRigid ::
