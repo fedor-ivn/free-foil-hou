@@ -452,48 +452,6 @@ caseRigidRigid (th, constraint) =
       let step th' nc = unify (th', nc)
        in foldl step th newConstraints
 
--- discharge ::
---   forall n l typ metavar binder sig.
---   ( Distinct n,
---     Distinct l,
---     CoSinkable binder,
---     SinkableK binder,
---     Bifunctor sig,
---     Bitraversable sig,
---     ZipMatchK sig,
---     ZipMatchK typ,
---     ZipMatchK metavar,
---     UnifiablePattern binder
---   ) =>
---   Scope n ->
---   [(TypedSOAS binder metavar sig n typ, Name l)] ->
---   -- left are terms we are searching from, right are variables we are replacing them with
---   TypedSOAS binder metavar sig n typ ->
---   TypedSOAS binder metavar sig l typ
--- discharge scope pairs = go scope
---   where
---     replaceIfMatch u = 
---       case [v | (k, v) <- pairs, alphaEquiv scope u k] of
---         (v : _) -> Just v
---         [] -> Nothing
-
---     go :: Ext n n' => Scope n' -> TypedSOAS binder metavar sig n' typ -> TypedSOAS binder metavar sig l typ
---     go sc tm = case replaceIfMatch tm of
---       Just v -> Var v
---       Nothing -> case tm of
---         Var x -> if Foil.member x scope 
---           then error "Free variable in substitution for flex-rigid case" 
---           else Var x
---         MetaApp m args t -> MetaApp m (map (discharge sc pairs) args) t
---         Node term -> Node (bimap (goScoped sc) (go sc) term)
-
---     goScoped sc (ScopedAST binder body) =
---       withRefreshedPattern sc binder $ \_ binder' ->
---         let sc' = Foil.extendScopePattern binder' sc
---             subst  = liftSubst Foil.emptySubstitution
---             body' = substitute sc' subst body
---         in  ScopedAST binder' (sink (go sc' body'))
-
 discharge ::
   forall n l typ metavar binder sig.
   ( Distinct n,
@@ -530,13 +488,15 @@ discharge rhsScope substScope pairs term = case replaceIfMatch pairs term of
 
     goScoped (ScopedAST binder body) = 
       Foil.withRefreshedPattern @_ @_ @(AST binder sig) substScope binder $
-        \_ binder' ->
-            let 
-              rhsScope' = Foil.extendScopePattern binder rhsScope
-              substScope' = Foil.extendScopePattern binder' substScope
-              binderMap = zip (Var <$> Foil.namesOfPattern binder) (Foil.namesOfPattern binder')
-              pairs' = binderMap <> (bimap Foil.sink Foil.sink <$> pairs)
-               in ScopedAST binder' <$> discharge rhsScope' substScope' pairs' body
+        \_ binder' -> 
+          case (Foil.assertDistinct binder, Foil.assertExt binder) of 
+            (Foil.Distinct, Foil.Ext) ->
+              let 
+                rhsScope' = Foil.extendScopePattern binder rhsScope
+                substScope' = Foil.extendScopePattern binder' substScope
+                binderMap = zip (Var <$> Foil.namesOfPattern binder) (Foil.namesOfPattern binder')
+                pairs' = binderMap <> (bimap Foil.sink Foil.sink <$> pairs)
+                 in ScopedAST binder' <$> discharge rhsScope' substScope' pairs' body
 
 -- | Rule (3) implementation, flex-rigid
 caseFlexRigid ::
