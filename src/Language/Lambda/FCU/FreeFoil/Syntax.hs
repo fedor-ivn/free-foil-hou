@@ -1000,6 +1000,12 @@ pattern App' ::
   AST binder (AnnSig () (Sum TermSig q)) n
 pattern App' f x = Node (AnnSig (L2 (AppTermSig f x)) ())
 
+pattern Pair' ::
+  AST binder (AnnSig () (Sum TermSig q)) n ->
+  AST binder (AnnSig () (Sum TermSig q)) n ->
+  AST binder (AnnSig () (Sum TermSig q)) n
+pattern Pair' f x = Node (AnnSig (L2 (PairTermSig f x)) ())
+
 ------------------------
 
 -- >>> let id1 = lam' Foil.emptyScope (\x _ -> Var x)
@@ -1068,7 +1074,6 @@ testDifferentApplications =
 
 -- >>> testFlexRigid
 -- { MetavarId "X"[x0, x1] ↦ x0 W x1 }
-
 testFlexRigid ::
   Substitutions () Raw.MetavarId FoilPattern TermSig
 testFlexRigid =
@@ -1091,7 +1096,6 @@ testFlexRigid =
 
 -- >>> testFlexRigidPruning
 -- { MetavarId "W"[x0, x1] ↦ W' x1, MetavarId "X"[x0] ↦ x0 W' x0 }
-
 testFlexRigidPruning ::
   Substitutions () Raw.MetavarId FoilPattern TermSig
 testFlexRigidPruning =
@@ -1112,7 +1116,28 @@ testFlexRigidPruning =
        in unify (Substitutions [], constr)
 
 
--- >>> testFlexFlexSame
+-- >>> testFlexRigidPruningPairs
+-- { MetavarId "W"[x0, x1] ↦ W' x1, MetavarId "X"[x0] ↦ (x0, W' x0) }
+testFlexRigidPruningPairs ::
+  Substitutions () Raw.MetavarId FoilPattern TermSig
+testFlexRigidPruningPairs =
+  withVar Foil.emptyScope $ \x scope1 ->
+    withVar scope1 $ \y _ ->
+      let _X = Raw.MetavarId "X"
+          _W = Raw.MetavarId "W"
+          termFlex = Foil.sink (MetaApp _X [Var (nameOf x)] ())
+          termFlexInternal = MetaApp _W [Foil.sink (Var (nameOf y)), Foil.sink (Var (nameOf x))] ()
+          termRigid = Pair' (Var (Foil.sink (nameOf x))) termFlexInternal
+          binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
+          typeEnv =
+            addNameBinder y () $
+              addNameBinder x () emptyNameMap
+          constr =
+            Constraint binders typeEnv termRigid termFlex ::
+              Constraint () Raw.MetavarId FoilPattern TermSig
+       in unify (Substitutions [], constr)
+
+-- >>> testFlexFlexSameError
 -- Different argument lists lengths in (4) rule
 testFlexFlexSameError ::
   Substitutions () Raw.MetavarId FoilPattern TermSig
@@ -1172,7 +1197,6 @@ testFlexFlexDiff =
 
 -- >>> testArgumentRestriction
 -- argument restriction failed
-
 testArgumentRestriction ::
   Substitutions () Raw.MetavarId FoilPattern TermSig
 testArgumentRestriction =
@@ -1189,7 +1213,6 @@ testArgumentRestriction =
 
 -- >>> testLocalRestriction
 -- local restriction failed
-
 testLocalRestriction ::
   Substitutions () Raw.MetavarId FoilPattern TermSig
 testLocalRestriction =

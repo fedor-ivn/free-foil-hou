@@ -11,6 +11,7 @@ OTerm.    Term ::= Id ;
 CTerm. Term ::= ConstructorId ;
 AppTerm.    Term ::= Term Term ;
 AbsTerm.    Term ::= "λ" Pattern "." ScopedTerm ;
+PairTerm.    Term ::= "(" Term "," Term ")" ;
 
 PatternVar. Pattern ::= Id ;
 
