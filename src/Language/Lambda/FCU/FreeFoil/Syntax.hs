@@ -665,7 +665,7 @@ prune scope tn (rho, u) = case applySubstitutionsInTerm rho scope u of
     if subset' scope sm tn
       then rho
       else withFreshNameBinderList
-        (map termType tn)
+        (map termType sm)
         emptyScope
         NameBinderListEmpty
         emptyNameMap
@@ -1083,7 +1083,7 @@ testFlexRigid =
 
 
 -- >>> testFlexRigidPruning
--- { MetavarId "W"[x0] ↦ W', MetavarId "X"[x0] ↦ x0 W' }
+-- { MetavarId "W"[x0, x1] ↦ W' x1, MetavarId "X"[x0] ↦ x0 W' x0 }
 
 testFlexRigidPruning ::
   Substitutions () Raw.MetavarId FoilPattern TermSig
