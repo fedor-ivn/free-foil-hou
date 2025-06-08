@@ -710,10 +710,10 @@ caseFlexFlex ::
   ) ->
   Substitutions typ metavar binder sig
 caseFlexFlex (th, c@(Constraint forall_ _ (MetaApp meta1 sn _) (MetaApp meta2 tn _)))
-  | not (argumentRestriction (extendScopePattern forall_ emptyScope) sn) = error "Global restriction fail at flexflex case"
-  | not (argumentRestriction (extendScopePattern forall_ emptyScope) tn) = error "Global restriction fail at flexflex case"
-  | not (localRestriction (extendScopePattern forall_ emptyScope) sn) = error "Local restriction fail at flexflex case"
-  | not (localRestriction (extendScopePattern forall_ emptyScope) tn) = error "Local restriction fail at flexflex case"
+  | not (argumentRestriction (extendScopePattern forall_ emptyScope) sn) = error "global restriction failed"
+  | not (argumentRestriction (extendScopePattern forall_ emptyScope) tn) = error "global restriction failed"
+  | not (localRestriction (extendScopePattern forall_ emptyScope) sn) = error "local restriction failed"
+  | not (localRestriction (extendScopePattern forall_ emptyScope) tn) = error "local restriction failed"
   | meta1 == meta2 = caseFlexFlexSame (th, c)
   | otherwise = caseFlexFlexDiff (th, c)
 caseFlexFlex _ = error "Unexpected case at flexflex case"
@@ -766,24 +766,31 @@ caseFlexFlexDiff ::
     Constraint typ metavar binder sig
   ) ->
   Substitutions typ metavar binder sig
-caseFlexFlexDiff (th, Constraint forall_ _ (MetaApp meta1 sn typ1) (MetaApp meta2 tn typ2))
-  | not (globalRestriction (extendScopePattern forall_ emptyScope) sn tn) = error "Global restriction fail at flexflex case"
+caseFlexFlexDiff (th, Constraint forall_ _ (MetaApp meta1 sn typ1) (MetaApp meta2 tm typ2))
+  | not (globalRestriction (extendScopePattern forall_ emptyScope) sn tm) = error "global restriction failed"
   | otherwise = withFreshNameBinderList
-      (map termType tn)
+      (map termType tm)
       emptyScope
       NameBinderListEmpty
       emptyNameMap
       $ \_ vsm _ ->
         let scope = extendScopePattern forall_ emptyScope
-            pruningResultLeft = prune scope sn (th, MetaApp meta2 tn typ2)
-            pruningResultRight = prune scope tn (th, MetaApp meta1 sn typ1)
-            tmnew = getMetavarArgs (applySubstitutionsInTerm pruningResultLeft scope (MetaApp meta2 tn typ2))
-            snnew = getMetavarArgs (applySubstitutionsInTerm pruningResultRight scope (MetaApp meta1 sn typ1))
+            pruningResultLeft = prune scope sn (th, MetaApp meta2 tm typ2)
+            pruningResultRight = prune scope tm (th, MetaApp meta1 sn typ1)
 
-            permutatedArgs = permutate' scope (namesOfPattern vsm) tmnew snnew
+            s' = applySubstitutionsInTerm pruningResultRight scope (MetaApp meta1 sn typ1)
+            t' = applySubstitutionsInTerm pruningResultLeft scope (MetaApp meta2 tm typ2)
+            
+            sn' = getMetavarArgs s'
+            tm' = getMetavarArgs t'
 
-            body = MetaApp meta1 (Var <$> permutatedArgs) typ1
-            newSubs = Substitution meta2 vsm body
+            meta1' = getMetavar s'
+            meta2' = getMetavar t'
+
+            permutatedArgs = permutate' scope (namesOfPattern vsm) tm' sn'
+
+            body = MetaApp meta1' (Var <$> permutatedArgs) typ1
+            newSubs = Substitution meta2' vsm body
          in collapseSubstitutions [th, pruningResultLeft, pruningResultRight, Substitutions [newSubs]]
 caseFlexFlexDiff _ = error "Unexpected case at FlexFlexDiff"
 
@@ -1104,6 +1111,65 @@ testFlexRigidPruning =
               Constraint () Raw.MetavarId FoilPattern TermSig
        in unify (Substitutions [], constr)
 
+
+-- >>> testFlexFlexSame
+-- Different argument lists lengths in (4) rule
+testFlexFlexSameError ::
+  Substitutions () Raw.MetavarId FoilPattern TermSig
+testFlexFlexSameError =
+  withVar Foil.emptyScope $ \x scope1 ->
+    withVar scope1 $ \y _ ->
+      let _X = Raw.MetavarId "X"
+          termFlex1 = MetaApp _X [Var (Foil.sink (nameOf x)), Var (Foil.sink (nameOf y))] ()
+          termFlex2 = MetaApp _X [App' (Var (nameOf y)) (Var (Foil.sink (nameOf x)))] ()
+          binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
+          typeEnv =
+            addNameBinder y () $
+              addNameBinder x () emptyNameMap
+          constr =
+            Constraint binders typeEnv termFlex1 termFlex2 ::
+              Constraint () Raw.MetavarId FoilPattern TermSig
+       in unify (Substitutions [], constr)
+
+-- >>> testFlexFlexSame
+-- { MetavarId "X"[x0, x1] ↦ X' x1 }
+testFlexFlexSame ::
+  Substitutions () Raw.MetavarId FoilPattern TermSig
+testFlexFlexSame =
+  withVar Foil.emptyScope $ \x scope1 ->
+    withVar scope1 $ \y _ ->
+      let _X = Raw.MetavarId "X"
+          termFlex1 = MetaApp _X [Var (Foil.sink (nameOf x)), Var (Foil.sink (nameOf y))] ()
+          termFlex2 = MetaApp _X [App' (Var (Foil.sink (nameOf x))) (Var (Foil.sink (nameOf x))), Var (Foil.sink (nameOf y))] ()
+          binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
+          typeEnv =
+            addNameBinder y () $
+              addNameBinder x () emptyNameMap
+          constr =
+            Constraint binders typeEnv termFlex1 termFlex2 ::
+              Constraint () Raw.MetavarId FoilPattern TermSig
+       in unify (Substitutions [], constr)
+
+-- >>> testFlexFlexDiff
+-- { MetavarId "Y"[x0, x1] ↦ Y' x1, MetavarId "Y'"[x0, x1] ↦ X x0 }
+testFlexFlexDiff ::
+  Substitutions () Raw.MetavarId FoilPattern TermSig
+testFlexFlexDiff =
+  withVar Foil.emptyScope $ \x scope1 ->
+    withVar scope1 $ \y _ ->
+      let _X = Raw.MetavarId "X"
+          _Y = Raw.MetavarId "Y"
+          termFlex1 = MetaApp _X [Var (Foil.sink (nameOf y))] ()
+          termFlex2 = MetaApp _Y [App' (Var (Foil.sink (nameOf x))) (Var (Foil.sink (nameOf x))), Var (Foil.sink (nameOf y))] ()
+          binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
+          typeEnv =
+            addNameBinder y () $
+              addNameBinder x () emptyNameMap
+          constr =
+            Constraint binders typeEnv termFlex1 termFlex2 ::
+              Constraint () Raw.MetavarId FoilPattern TermSig
+       in unify (Substitutions [], constr)
+
 -- >>> testArgumentRestriction
 -- argument restriction failed
 
@@ -1137,3 +1203,23 @@ testLocalRestriction =
           Constraint binders typeEnv termRigid termFlex ::
             Constraint () Raw.MetavarId FoilPattern TermSig
      in unify (Substitutions [], constr)
+
+-- >>> testGlobalRestriction
+-- global restriction failed
+testGlobalRestriction ::
+  Substitutions () Raw.MetavarId FoilPattern TermSig
+testGlobalRestriction =
+  withVar Foil.emptyScope $ \x scope1 ->
+    withVar scope1 $ \y _ ->
+      let _X = Raw.MetavarId "X"
+          _Y = Raw.MetavarId "Y"
+          termFlex1 = MetaApp _X [Var (Foil.sink (nameOf x))] ()
+          termFlex2 = MetaApp _Y [App' (Var (nameOf y)) (Var (Foil.sink (nameOf x)))] ()
+          binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
+          typeEnv =
+            addNameBinder y () $
+              addNameBinder x () emptyNameMap
+          constr =
+            Constraint binders typeEnv termFlex1 termFlex2 ::
+              Constraint () Raw.MetavarId FoilPattern TermSig
+       in unify (Substitutions [], constr)
