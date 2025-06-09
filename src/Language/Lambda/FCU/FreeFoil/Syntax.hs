@@ -390,8 +390,9 @@ unify (th, Constraint forall_ forallTypes s t) =
   let scope = extendScopePattern forall_ emptyScope
       s' = applySubstitutionsInTerm th scope s
       t' = applySubstitutionsInTerm th scope t
-      c' = Constraint forall_ forallTypes s' t'
-   in cases (th, c')
+   in if alphaEquiv scope s' t'
+       then th
+       else cases (th , Constraint forall_ forallTypes s' t')
 
 -- | Select a rule (0)-(5) to proceed with
 cases ::
@@ -589,7 +590,7 @@ subset' ::
   Bool
 subset' scope xs ys = all (\x -> any (alphaEquiv scope x) ys) xs
 
--- | Helper function to get a list of names
+-- | Helper function to get a list of names based on the appearance of a term from sm in tn
 eqsel' ::
   forall m n typ metavar binder sig.
   ( Distinct m,
@@ -609,6 +610,26 @@ eqsel' ::
   [Name m]
 eqsel' scope vsm tn sm =
   [v | (v, s) <- zip (namesOfPattern vsm) sm, any (alphaEquiv scope s) tn]
+
+selectzrk' ::
+  forall m n typ metavar binder sig.
+  ( Distinct m,
+    CoSinkable binder,
+    SinkableK binder,
+    Bitraversable sig,
+    ZipMatchK sig,
+    UnifiablePattern binder,
+    ZipMatchK typ,
+    ZipMatchK metavar,
+    Distinct n
+  ) =>
+  Scope n ->
+  NameBinderList VoidS m ->
+  [TypedSOAS binder metavar sig n typ] ->
+  [TypedSOAS binder metavar sig n typ] ->
+  [Name m]
+selectzrk' scope vsm tn sn = 
+  [v | (v, s, t) <- zip3 (namesOfPattern vsm) sn tn, alphaEquiv scope s t]
 
 -- | Helper function for permutation in (5) rule
 permutate' ::
@@ -744,7 +765,7 @@ caseFlexFlexSame (th, Constraint forall_ _ (MetaApp meta1 sn typ1) (MetaApp _ tn
       emptyNameMap
       $ \_ vsm _ ->
         let scope = extendScopePattern forall_ emptyScope
-            selectedArgs = eqsel' scope vsm tn sn
+            selectedArgs = selectzrk' scope vsm tn sn
             newMeta = newMetavarId meta1
             body = MetaApp newMeta (Var <$> selectedArgs) typ1
             newSubs = Substitution meta1 vsm body
@@ -1006,7 +1027,7 @@ pattern Pair' ::
   AST binder (AnnSig () (Sum TermSig q)) n
 pattern Pair' f x = Node (AnnSig (L2 (PairTermSig f x)) ())
 
-------------------------
+------------------------ Test cases ------------------------
 
 -- >>> let id1 = lam' Foil.emptyScope (\x _ -> Var x)
 -- >>> id1
@@ -1126,7 +1147,7 @@ testFlexRigidPruningPairs =
       let _X = Raw.MetavarId "X"
           _W = Raw.MetavarId "W"
           termFlex = Foil.sink (MetaApp _X [Var (nameOf x)] ())
-          termFlexInternal = MetaApp _W [Foil.sink (Var (nameOf y)), Foil.sink (Var (nameOf x))] ()
+          termFlexInternal = MetaApp _W [Var (nameOf y), Foil.sink (Var (nameOf x))] ()
           termRigid = Pair' (Var (Foil.sink (nameOf x))) termFlexInternal
           binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
           typeEnv =
