@@ -7,6 +7,7 @@ import Language.Lambda.FCU.FCUSyntax.Abs qualified as Raw
 import Language.Lambda.FCU.Strip (strip)
 import Language.Lambda.FCU.Substitutions (Substitutions (..), combineSubstitutions, devar, mkvars)
 import Language.Lambda.FCU.Terms (newMetaVarId, subset)
+import Language.Lambda.FCU.FreeFoil.Syntax (selectzrk')
 
 abst :: ([Raw.Id], Raw.Term) -> Raw.Term
 abst ([], t) = t
@@ -39,6 +40,10 @@ hnf (vars, base, args) =
 eqsel :: [Raw.Id] -> [Raw.Term] -> [Raw.Term] -> [Raw.Id]
 eqsel vsm tn sm =
   [v | (v, s) <- zip vsm sm, s `elem` tn]
+
+selectzrk :: [Raw.Id] -> [Raw.Term] -> [Raw.Term] -> [Raw.Id]
+selectzrk vsm tn sn =
+  [v | (v, s, t) <- zip3 vsm sn tn, s == t]
 
 -- >>> eqsel ["z1", "z2", "z3"] ["x", "y", "z"] ["x", "y", "z"]
 -- [Id "z1",Id "z2",Id "z3"]

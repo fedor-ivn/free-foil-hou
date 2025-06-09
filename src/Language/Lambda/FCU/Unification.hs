@@ -5,7 +5,7 @@ module Language.Lambda.FCU.Unification where
 
 import Language.Lambda.FCU.Discharge (discharge)
 import Language.Lambda.FCU.FCUSyntax.Abs qualified as Raw
-import Language.Lambda.FCU.Prune ( abst, hnf, eqsel, prune )
+import Language.Lambda.FCU.Prune ( abst, hnf, eqsel, prune, selectzrk )
 import Language.Lambda.FCU.Restrictions
   ( argumentRestriction,
     globalRestriction,
@@ -47,6 +47,9 @@ import Language.Lambda.FCU.Terms (newMetaVarId, permutate)
 
 -- >>> unify [] (Substitutions [], ("((X a) b1) c", "((X a) b2) c"))
 -- [("X" |-> λz1 . λz2 . λz3 . ((X' z1) z3))]
+
+-- >>> unify [] (Substitutions [], ("((X c) b) a", "((X a) b) c"))
+-- [("X" |-> λz1 . λz2 . λz3 . (X' z2))]
 
 -- >>> unify [] (Substitutions [], ("((X a) b1) c", "((Y c) b2) a"))
 -- Global restriction fail at flexflex case
@@ -108,7 +111,7 @@ caseFlexFlexSame _ (Raw.MetavarId _F, sn, tn, th)
   | otherwise = combineSubstitutions th newMetavarSubs
   where
     vsm = mkvars sn
-    newMetavarSubs = Substitutions [(_F, hnf (vsm, Raw.WTerm (newMetaVarId (Raw.MetavarId _F)), eqsel vsm tn sn))]
+    newMetavarSubs = Substitutions [(_F, hnf (vsm, Raw.WTerm (newMetaVarId (Raw.MetavarId _F)), selectzrk vsm tn sn))]
 
 caseFlexFlexDiff :: [(Char, Raw.Id)] -> (Raw.MetavarId, Raw.MetavarId, [Raw.Term], [Raw.Term], Substitutions) -> Substitutions
 caseFlexFlexDiff _ (_F, _G, sn, tm, th)
