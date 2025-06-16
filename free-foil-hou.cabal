@@ -33,7 +33,6 @@ library
       Data.SOAS
       Language.Lambda.Config
       Language.Lambda.Framework
-      Language.Lambda.FCU.Covers
       Language.Lambda.FCU.Discharge
       Language.Lambda.FCU.FCUImplSW.Covers
       Language.Lambda.FCU.FCUImplSW.Discharge
