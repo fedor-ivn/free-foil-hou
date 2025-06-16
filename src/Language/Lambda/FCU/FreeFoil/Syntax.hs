@@ -481,7 +481,7 @@ caseRigidRigid ::
   Substitutions typ metavar binder sig
 caseRigidRigid (th, constraint) =
   case decomposeRigidRigid constraint of
-    Nothing -> error "not unifiable in rigid–rigid case"
+    Nothing -> error "not unifiable in rigid-rigid case"
     Just [] -> th
     Just newConstraints ->
       let step th' nc = unify (th', nc)
@@ -730,13 +730,19 @@ caseFlexFlex ::
     Constraint typ metavar binder sig
   ) ->
   Substitutions typ metavar binder sig
-caseFlexFlex (th, c@(Constraint forall_ _ (MetaApp meta1 sn _) (MetaApp meta2 tn _)))
-  | not (argumentRestriction (extendScopePattern forall_ emptyScope) sn) = error "global restriction failed"
-  | not (argumentRestriction (extendScopePattern forall_ emptyScope) tn) = error "global restriction failed"
-  | not (localRestriction (extendScopePattern forall_ emptyScope) sn) = error "local restriction failed"
-  | not (localRestriction (extendScopePattern forall_ emptyScope) tn) = error "local restriction failed"
+caseFlexFlex (th, c@(Constraint forall_ _ s t))
+  | not (argumentRestriction scope sn) = error "argument restriction failed"
+  | not (argumentRestriction scope tn) = error "argument restriction failed"
+  | not (localRestriction scope sn) = error "local restriction failed"
+  | not (localRestriction scope tn) = error "local restriction failed"
   | meta1 == meta2 = caseFlexFlexSame (th, c)
   | otherwise = caseFlexFlexDiff (th, c)
+  where
+    scope = extendScopePattern forall_ emptyScope
+    sn = getMetavarArgs s
+    tn = getMetavarArgs t
+    meta1 = getMetavar s
+    meta2 = getMetavar t
 caseFlexFlex _ = error "Unexpected case at flexflex case"
 
 -- | Rule (4) implementation, flex-flex with same metavariable on both sides
@@ -755,7 +761,7 @@ caseFlexFlexSame ::
     Constraint typ metavar binder sig
   ) ->
   Substitutions typ metavar binder sig
-caseFlexFlexSame (th, Constraint forall_ _ (MetaApp meta1 sn typ1) (MetaApp _ tn _))
+caseFlexFlexSame (th, Constraint forall_ _ (MetaApp meta sn typ) (MetaApp _ tn _))
   | length sn /= length tn = error "Different argument lists lengths in (4) rule"
   | and (zipWith (alphaEquiv (extendScopePattern forall_ emptyScope)) sn tn) = error "Same argument lists in (4) rule"
   | otherwise = withFreshNameBinderList
@@ -766,9 +772,9 @@ caseFlexFlexSame (th, Constraint forall_ _ (MetaApp meta1 sn typ1) (MetaApp _ tn
       $ \_ vsm _ ->
         let scope = extendScopePattern forall_ emptyScope
             selectedArgs = selectzrk' scope vsm tn sn
-            newMeta = newMetavarId meta1
-            body = MetaApp newMeta (Var <$> selectedArgs) typ1
-            newSubs = Substitution meta1 vsm body
+            newMeta = newMetavarId meta
+            body = MetaApp newMeta (Var <$> selectedArgs) typ
+            newSubs = Substitution meta vsm body
          in collapseSubstitutions [th, Substitutions [newSubs]]
 caseFlexFlexSame _ = error "Unexpected case at FlexFlexSame"
 
@@ -788,15 +794,14 @@ caseFlexFlexDiff ::
   ) ->
   Substitutions typ metavar binder sig
 caseFlexFlexDiff (th, Constraint forall_ _ (MetaApp meta1 sn typ1) (MetaApp meta2 tm typ2))
-  | not (globalRestriction (extendScopePattern forall_ emptyScope) sn tm) = error "global restriction failed"
+  | not (globalRestriction scope sn tm) = error "global restriction failed"
   | otherwise = withFreshNameBinderList
       (map termType tm)
       emptyScope
       NameBinderListEmpty
       emptyNameMap
       $ \_ vsm _ ->
-        let scope = extendScopePattern forall_ emptyScope
-            pruningResultLeft = prune scope sn (th, MetaApp meta2 tm typ2)
+        let pruningResultLeft = prune scope sn (th, MetaApp meta2 tm typ2)
             pruningResultRight = prune scope tm (th, MetaApp meta1 sn typ1)
 
             s' = applySubstitutionsInTerm pruningResultRight scope (MetaApp meta1 sn typ1)
@@ -813,6 +818,7 @@ caseFlexFlexDiff (th, Constraint forall_ _ (MetaApp meta1 sn typ1) (MetaApp meta
             body = MetaApp meta1' (Var <$> permutatedArgs) typ1
             newSubs = Substitution meta2' vsm body
          in collapseSubstitutions [th, pruningResultLeft, pruningResultRight, Substitutions [newSubs]]
+    where scope = extendScopePattern forall_ emptyScope 
 caseFlexFlexDiff _ = error "Unexpected case at FlexFlexDiff"
 
 -- | RESTRICTIONS (Done)
@@ -829,7 +835,7 @@ argumentRestriction ::
   Scope n ->
   [AST binder sig n] ->
   Bool
-argumentRestriction scope tn = and [isRTerm scope t | t <- tn]
+argumentRestriction scope args = and [isRTerm scope t | t <- args]
 
 isRTerm ::
   ( Bifoldable sig,
@@ -1050,7 +1056,7 @@ pattern Pair' f x = Node (AnnSig (L2 (PairTermSig f x)) ())
 -- >>> let parameters2 x y = NameBinderListCons x (NameBinderListCons y NameBinderListEmpty)
 -- >>> let parameterTypes2 x y typ1 typ2 = addNameBinder y typ2 (addNameBinder x typ1 emptyNameMap)
 -- >>> withFresh Foil.emptyScope $ \x -> withFresh (Foil.extendScope x Foil.emptyScope) $ \y -> unify (Substitutions [], (Constraint (parameters2 x y) (parameterTypes2 x y () ()) (Var (Foil.sink (nameOf x))) (Var (nameOf y)) :: Constraint () Raw.MetavarId FoilPattern TermSig))
--- not unifiable in rigid–rigid case
+-- not unifiable in rigid-rigid case
 
 -- | Two same function applications
 -- >>> let parameters x = NameBinderListCons x NameBinderListEmpty
@@ -1075,7 +1081,7 @@ testSameApplication =
 
 -- | Two different function applications
 -- >>> testDifferentApplications
--- not unifiable in rigid–rigid case
+-- not unifiable in rigid-rigid case
 testDifferentApplications ::
   Substitutions () Raw.MetavarId FoilPattern TermSig
 testDifferentApplications =
