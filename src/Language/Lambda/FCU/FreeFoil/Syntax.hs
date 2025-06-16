@@ -63,7 +63,7 @@ import Data.List (intercalate)
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe
-import Data.SOAS hiding (SOAS, withFreshNameBinderList)
+import Data.SOAS (AnnSig (..), MetaAppSig (..), push)
 import Data.String (IsString (..))
 import Data.ZipMatchK
 import Data.ZipMatchK.Bifunctor ()
@@ -201,6 +201,24 @@ instance Show (Term n) where
   show = Raw.printTree . fromTerm
 
 -- Helpers
+
+type TypedSOAS binder metavar sig n t =
+          AST binder (AnnSig t (Sum sig (MetaAppSig metavar))) n
+type TypedScopedSOAS binder metavar sig n t =
+  ScopedAST binder (AnnSig t (Sum sig (MetaAppSig metavar))) n
+
+pattern MetaApp
+  :: metavar
+  -> [TypedSOAS binder metavar sig n t]
+  -> t -- Type annotation
+  -> TypedSOAS binder metavar sig n t
+pattern MetaApp metavar args ann =
+  Node (AnnSig (R2 (MetaAppSig metavar args)) ann)
+
+concatNameBinderLists :: Foil.NameBinderList i l -> Foil.NameBinderList n i -> Foil.NameBinderList n l
+concatNameBinderLists lst Foil.NameBinderListEmpty = lst
+concatNameBinderLists lst (Foil.NameBinderListCons x xs) =
+  Foil.NameBinderListCons x (concatNameBinderLists lst xs)
 
 withFreshNameBinderList ::
   (Foil.Distinct n) =>
@@ -761,7 +779,7 @@ caseFlexFlexSame ::
     Constraint typ metavar binder sig
   ) ->
   Substitutions typ metavar binder sig
-caseFlexFlexSame (th, Constraint forall_ _ (MetaApp meta sn typ) (MetaApp _ tn _))
+caseFlexFlexSame (th, Constraint forall_ _ s t)
   | length sn /= length tn = error "Different argument lists lengths in (4) rule"
   | and (zipWith (alphaEquiv (extendScopePattern forall_ emptyScope)) sn tn) = error "Same argument lists in (4) rule"
   | otherwise = withFreshNameBinderList
@@ -770,12 +788,17 @@ caseFlexFlexSame (th, Constraint forall_ _ (MetaApp meta sn typ) (MetaApp _ tn _
       NameBinderListEmpty
       emptyNameMap
       $ \_ vsm _ ->
-        let scope = extendScopePattern forall_ emptyScope
-            selectedArgs = selectzrk' scope vsm tn sn
+        let selectedArgs = selectzrk' scope vsm tn sn
             newMeta = newMetavarId meta
             body = MetaApp newMeta (Var <$> selectedArgs) typ
             newSubs = Substitution meta vsm body
          in collapseSubstitutions [th, Substitutions [newSubs]]
+  where
+    scope = extendScopePattern forall_ emptyScope
+    meta = getMetavar s
+    sn = getMetavarArgs s
+    tn = getMetavarArgs t
+    typ = termType s
 caseFlexFlexSame _ = error "Unexpected case at FlexFlexSame"
 
 -- | Rule (5) implementation, flex-flex with different metavariables
