@@ -1,0 +1,11 @@
+[[problems]]
+metavars = []
+
+constraints = [
+    "∀ a: t. a = a",
+]
+
+[[problems.solutions]]
+name = "Rule (0)"
+metavars = []
+substitutions = []

@@ -1,0 +1,13 @@
+[[problems]]
+metavars = [
+    "X: [t, t -> t] t",
+]
+
+constraints = [
+    "∀ f: t -> t, a: t. X[a, f] = f a",
+]
+
+[[problems.solutions]]
+name = "Rule (3), no pruning"
+metavars = []
+substitutions = ["X[x0, x1] ↦ x1 x0"]

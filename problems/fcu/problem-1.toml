@@ -1,0 +1,11 @@
+[[problems]]
+metavars = []
+
+constraints = [
+    "∀ f: t -> t -> t , a: t, b: t. f a b = f a b",
+]
+
+[[problems.solutions]]
+name = "Rule (2)"
+metavars = []
+substitutions = []
