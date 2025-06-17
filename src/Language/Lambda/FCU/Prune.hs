@@ -7,7 +7,6 @@ import Language.Lambda.FCU.FCUSyntax.Abs qualified as Raw
 import Language.Lambda.FCU.Strip (strip)
 import Language.Lambda.FCU.Substitutions (Substitutions (..), combineSubstitutions, devar, mkvars)
 import Language.Lambda.FCU.Terms (newMetaVarId, subset)
-import Language.Lambda.FCU.FreeFoil.Syntax (selectzrk')
 
 abst :: ([Raw.Id], Raw.Term) -> Raw.Term
 abst ([], t) = t
@@ -25,10 +24,7 @@ foldlN f (rho, t : ts) = foldlN f (f (rho, t), ts)
 
 hnf :: ([Raw.Id], Raw.Term, [Raw.Id]) -> Raw.Term
 hnf (vars, base, args) =
-  foldr
-    (\p t -> Raw.AbsTerm p (Raw.ScopedTerm t))
-    (foldl (\acc x -> Raw.AppTerm acc (Raw.OTerm x)) base args)
-    (map Raw.PatternVar vars)
+  foldr ((\p t -> Raw.AbsTerm p (Raw.ScopedTerm t)) . Raw.PatternVar) (foldl (\acc x -> Raw.AppTerm acc (Raw.OTerm x)) base args) vars
 
 -- >>> hnf (["z1", "z2"], "X", ["z1", "z2", "z3"])
 -- AbsTerm (PatternVar (Id "z1")) (ScopedTerm (AbsTerm (PatternVar (Id "z2")) (ScopedTerm (AppTerm (AppTerm (AppTerm (WTerm (MetavarId "X")) (OTerm (Id "z1"))) (OTerm (Id "z2"))) (OTerm (Id "z3"))))))

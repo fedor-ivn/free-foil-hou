@@ -1,0 +1,13 @@
+[[problems]]
+metavars = [
+    "X: [t, t, t] t",
+]
+
+constraints = [
+    "∀ x: t, y: t, z: t. X[x, y, z] = X[z, y, x]",
+]
+
+[[problems.solutions]]
+name = "Rule (4)"
+metavars = ["X': [t] t"]
+substitutions = ["X[x0, x1, x2] ↦ X'[x1]"]
