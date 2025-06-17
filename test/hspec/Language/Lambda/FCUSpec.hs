@@ -45,22 +45,6 @@ import qualified Language.Lambda.Syntax.Abs as Raw
 handleErr :: (Show e) => Either e a -> IO a
 handleErr = either (\err -> print err >> exitFailure) pure
 
-instance
-  (Show metavar, forall n. Show (TypedSOAS binder metavar sig n typ))
-  => Show (FCU.Substitution typ metavar binder sig)
-  where
-  show (FCU.Substitution meta parameters body) =
-    show meta <> "[" <> intercalate ", " parameters' <> "] ↦ " <> show body
-   where
-    parameters' = fmap (\name -> "x" <> show name) (Foil.namesOfPattern parameters)
-
-instance
-  (Show metavar, forall n. Show (TypedSOAS binder metavar sig n typ))
-  => Show (FCU.Substitutions typ metavar binder sig)
-  where
-  show (FCU.Substitutions []) = "{ }"
-  show (FCU.Substitutions substitutions) = "{ " <> intercalate ", " (show <$> substitutions) <> " }"
-
 instance FCU.MetavarFreshable Raw.MetavarIdent where
   newMetavarId (Raw.MetavarIdent name) = Raw.MetavarIdent (name ++ "'")
 

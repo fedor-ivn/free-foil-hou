@@ -63,7 +63,7 @@ import Data.List (intercalate)
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe
-import Data.SOAS (AnnSig (..), AnnBinder (AnnBinder), push, TypedSOAS, pattern MetaApp, TypedScopedSOAS)
+import Data.SOAS (AnnSig (..), AnnBinder (AnnBinder), push, TypedSOAS, pattern MetaApp, TypedScopedSOAS, MetaAppSig (..))
 import Data.String (IsString (..))
 import Data.ZipMatchK
 import Data.ZipMatchK.Bifunctor ()
@@ -73,7 +73,6 @@ import Language.Lambda.FCU.FCUSyntax.Abs qualified as Raw
 import Language.Lambda.FCU.FCUSyntax.Lex qualified as Raw
 import Language.Lambda.FCU.FCUSyntax.Par qualified as Raw
 import Language.Lambda.FCU.FCUSyntax.Print qualified as Raw
-import Debug.Trace (trace)
 
 -- * Generated code
 
@@ -232,6 +231,22 @@ data Substitution typ metavar binder sig where
 
 newtype Substitutions typ metavar binder sig = Substitutions [Substitution typ metavar binder sig]
 
+instance
+  (Show metavar, forall n. Show (TypedSOAS binder metavar sig n typ))
+  => Show (Substitution typ metavar binder sig)
+  where
+  show (Substitution meta parameters body) =
+    show meta <> "[" <> intercalate ", " parameters' <> "] ↦ " <> show body
+   where
+    parameters' = fmap (\name -> "x" <> show name) (Foil.namesOfPattern parameters)
+
+instance
+  (Show metavar, forall n. Show (TypedSOAS binder metavar sig n typ))
+  => Show (Substitutions typ metavar binder sig)
+  where
+  show (Substitutions []) = "{ }"
+  show (Substitutions substitutions) = "{ " <> intercalate ", " (show <$> substitutions) <> " }"
+
 applySubstitutionInTerm ::
   (Eq metavar, CoSinkable binder, SinkableK binder, Bifunctor sig, Distinct n) =>
   Substitution typ metavar binder sig ->
@@ -293,10 +308,10 @@ class TypedUnifiablePattern typ pattern_ where
     pattern_ n r ->
     UnifyNameBinders' typ pattern_ n l r
 
-instance TypedUnifiablePattern () FoilPattern where
+instance TypedUnifiablePattern () (AnnBinder () FoilPattern) where
   typedUnifyPatterns
-    (FoilPatternVar b1)
-    (FoilPatternVar b2) =
+    (AnnBinder (FoilPatternVar b1) _)
+    (AnnBinder (FoilPatternVar b2) _) =
       case Foil.unifyNameBinders b1 b2 of
         Foil.NotUnifiable -> NotUnifiable'
         Foil.RenameBothBinders ub rl rr ->
@@ -318,10 +333,6 @@ class MetavarFreshable metavar where
 
 instance MetavarFreshable Raw.MetavarId where
   newMetavarId (Raw.MetavarId name) = Raw.MetavarId (name ++ "'")
-
--- | Generalized term representation
-type Sig typ metavar binder sig n =
-  sig (TypedScopedSOAS binder metavar sig n typ) (TypedSOAS binder metavar sig n typ)
 
 isFlexible :: TypedSOAS binder metavar sig n t -> Bool
 isFlexible MetaApp {} = True
@@ -929,342 +940,306 @@ isStrictSubTerm scope l r = isSubTerm scope l r && not (alphaEquiv scope l r)
 
 -- ** Pretty printing
 
--- convertFromAnnSig ::
---   AnnSig
---     typ
---     (Sum TermSig (MetaAppSig Raw.MetavarId))
---     (Raw.Pattern, Raw.ScopedTerm)
---     Raw.Term ->
---   Raw.Term
--- convertFromAnnSig (AnnSig sig _) = case sig of
---   -- user constructors: just reuse the function that was generated
---   -- for the original signature
---   L2 termSig ->
---     convertFromTermSig termSig
---   -- metavariable application
---   R2 (MetaAppSig m args) ->
---     foldl Raw.AppTerm (Raw.WTerm m) args --  X t1 … tn
+convertFromAnnSig ::
+  AnnSig
+    typ
+    (Sum TermSig (MetaAppSig Raw.MetavarId))
+    (Raw.Pattern, Raw.ScopedTerm)
+    Raw.Term ->
+  Raw.Term
+convertFromAnnSig (AnnSig sig _) = case sig of
+  L2 termSig ->
+    convertFromTermSig termSig
+  R2 (MetaAppSig m args) ->
+    foldl Raw.AppTerm (Raw.WTerm m) args
 
--- fromFoilPatternScoped ::
---   TypedScopedSOAS FoilPattern Raw.MetavarId TermSig n typ ->
---   (Raw.Pattern, Raw.ScopedTerm)
--- fromFoilPatternScoped (ScopedAST pat body) =
---   (fromFoilPattern mkId pat, Raw.ScopedTerm (fromTypedSOAS body))
---   where
---     mkId n = Raw.Id ("x" ++ show n)
+fromTypedSOAS ::
+  TypedSOAS FoilPattern Raw.MetavarId TermSig n typ ->
+  Raw.Term
+fromTypedSOAS =
+  convertFromAST
+    convertFromAnnSig
+    Raw.OTerm
+    (\(AnnBinder pat _) -> fromFoilPattern mkId pat)
+    Raw.ScopedTerm
+    mkId
+  where
+    mkId n = Raw.Id ("x" ++ show n)
 
--- fromTypedSOAS ::
---   TypedSOAS FoilPattern Raw.MetavarId TermSig n typ ->
---   Raw.Term
--- fromTypedSOAS =
---   convertFromAST
---     convertFromAnnSig
---     Raw.OTerm
---     (fromFoilPattern mkId)
---     Raw.ScopedTerm
---     mkId
---   where
---     mkId n = Raw.Id ("x" ++ show n)
-
--- instance Show (TypedSOAS FoilPattern Raw.MetavarId TermSig n typ) where
---   show = Raw.printTree . fromTypedSOAS
-
--- instance
---   (Show typ, forall n. Show (TypedSOAS binder metavar sig n typ)) =>
---   Show (Constraint typ metavar binder sig)
---   where
---   show (Constraint _ _ lhs rhs) =
---     show lhs <> " = " <> show rhs
-
--- deriving instance Show (Foil.NameBinderList n l)
-
--- instance
---   (Show metavar, forall n. Show (TypedSOAS binder metavar sig n typ)) =>
---   Show (Substitution typ metavar binder sig)
---   where
---   show (Substitution meta parameters body) =
---     show meta <> "[" <> intercalate ", " parameters' <> "] ↦ " <> show body
---     where
---       parameters' = fmap (\name -> "x" <> show name) (namesOfPattern parameters)
-
--- instance
---   (Show metavar, forall n. Show (TypedSOAS binder metavar sig n typ)) =>
---   Show (Substitutions typ metavar binder sig)
---   where
---   show (Substitutions []) = "{ }"
---   show (Substitutions substitutions) = "{ " <> intercalate ", " (show <$> substitutions) <> " }"
+instance Show (TypedSOAS FoilPattern Raw.MetavarId TermSig n typ) where
+  show = Raw.printTree . fromTypedSOAS
 
 -- ** Patterns
 
--- withVar :: (Distinct n) => Scope n -> (forall l. (DExt n l) => NameBinder n l -> Scope l -> r) -> r
--- withVar scope makeTerm = withFresh scope $ \x -> makeTerm x (extendScope x scope)
+withVar :: (Distinct n) => Scope n -> (forall l. (DExt n l) => NameBinder n l -> Scope l -> r) -> r
+withVar scope makeTerm = withFresh scope $ \x -> makeTerm x (extendScope x scope)
 
--- pattern Lam' ::
---   binder n l ->
---   AST binder (AnnSig () (Sum TermSig q)) l ->
---   AST binder (AnnSig () (Sum TermSig q)) n
--- pattern Lam' binder body =
---   Node (AnnSig (L2 (AbsTermSig (ScopedAST binder body))) ())
+pattern Lam' ::
+  binder n l ->
+  AST binder (AnnSig () (Sum TermSig q)) l ->
+  AST binder (AnnSig () (Sum TermSig q)) n
+pattern Lam' binder body =
+  Node (AnnSig (L2 (AbsTermSig (ScopedAST binder body))) ())
 
--- lam' ::
---   (Distinct n) =>
---   Scope n ->
---   (forall l. (DExt n l) => Name l -> Scope l -> TypedSOAS FoilPattern Raw.MetavarId TermSig l ()) ->
---   TypedSOAS FoilPattern Raw.MetavarId TermSig n ()
--- lam' scope makeBody = withFresh scope $ \x ->
---   let body = makeBody (nameOf x) (extendScope x scope)
---       binder = FoilPatternVar x
---    in Lam' binder body
+lam' ::
+  (Distinct n) =>
+  Scope n ->
+  (forall l. (DExt n l) => Name l -> Scope l -> TypedSOAS FoilPattern Raw.MetavarId TermSig l ()) ->
+  TypedSOAS FoilPattern Raw.MetavarId TermSig n ()
+lam' scope makeBody = withFresh scope $ \x ->
+  let body = makeBody (nameOf x) (extendScope x scope)
+      binder = AnnBinder (FoilPatternVar x) ()
+   in Lam' binder body
 
--- pattern App' ::
---   AST binder (AnnSig () (Sum TermSig q)) n ->
---   AST binder (AnnSig () (Sum TermSig q)) n ->
---   AST binder (AnnSig () (Sum TermSig q)) n
--- pattern App' f x = Node (AnnSig (L2 (AppTermSig f x)) ())
+pattern App' ::
+  AST binder (AnnSig () (Sum TermSig q)) n ->
+  AST binder (AnnSig () (Sum TermSig q)) n ->
+  AST binder (AnnSig () (Sum TermSig q)) n
+pattern App' f x = Node (AnnSig (L2 (AppTermSig f x)) ())
 
--- pattern Pair' ::
---   AST binder (AnnSig () (Sum TermSig q)) n ->
---   AST binder (AnnSig () (Sum TermSig q)) n ->
---   AST binder (AnnSig () (Sum TermSig q)) n
--- pattern Pair' f x = Node (AnnSig (L2 (PairTermSig f x)) ())
+pattern Pair' ::
+  AST binder (AnnSig () (Sum TermSig q)) n ->
+  AST binder (AnnSig () (Sum TermSig q)) n ->
+  AST binder (AnnSig () (Sum TermSig q)) n
+pattern Pair' f x = Node (AnnSig (L2 (PairTermSig f x)) ())
 
--- ------------------------ Test cases ------------------------
+-- >>> let id1 = lam' Foil.emptyScope (\x _ -> Var x)
+-- >>> id1
+-- λ x0 . x0
 
--- -- >>> let id1 = lam' Foil.emptyScope (\x _ -> Var x)
--- -- >>> id1
--- -- λ x0 . x0
+------------------------ Test cases ------------------------
 
--- -- | A simple example with two lambda abstractions
--- -- >>> let id1 = lam' Foil.emptyScope (\x _ -> Var x)
--- -- >>> let id2 = lam' Foil.emptyScope (\y _ -> Var y)
--- -- >>> let c = Constraint Foil.NameBinderListEmpty Foil.emptyNameMap id1 id2
--- -- >>> unify (Substitutions [], c)
--- -- { }
+-- | A simple example with two lambda abstractions
+-- >>> let id1 = lam' Foil.emptyScope (\x _ -> Var x)
+-- >>> let id2 = lam' Foil.emptyScope (\y _ -> Var y)
+-- >>> let c = Constraint Foil.NameBinderListEmpty Foil.emptyNameMap id1 id2
+-- >>> unify (Substitutions [], c)
+-- { }
 
--- -- | Same variables on both sides
--- -- >>> let parameters x = NameBinderListCons x NameBinderListEmpty
--- -- >>> let parameterTypes x typ = addNameBinder x typ emptyNameMap
--- -- >>> withFresh Foil.emptyScope $ \x -> unify(Substitutions [], (Constraint (parameters x) (parameterTypes x ()) (Var (nameOf x)) (Var (nameOf x)) :: Constraint () Raw.MetavarId FoilPattern TermSig))
--- -- { }
+-- | Same variables on both sides
+-- >>> let parameters x = NameBinderListCons x NameBinderListEmpty
+-- >>> let parameterTypes x typ = addNameBinder x typ emptyNameMap
+-- >>> withFresh Foil.emptyScope $ \x -> unify(Substitutions [], (Constraint (parameters x) (parameterTypes x ()) (Var (nameOf x)) (Var (nameOf x)) :: Constraint () Raw.MetavarId FoilPattern TermSig))
+-- { }
 
--- -- | Different variables
--- -- >>> let parameters2 x y = NameBinderListCons x (NameBinderListCons y NameBinderListEmpty)
--- -- >>> let parameterTypes2 x y typ1 typ2 = addNameBinder y typ2 (addNameBinder x typ1 emptyNameMap)
--- -- >>> withFresh Foil.emptyScope $ \x -> withFresh (Foil.extendScope x Foil.emptyScope) $ \y -> unify (Substitutions [], (Constraint (parameters2 x y) (parameterTypes2 x y () ()) (Var (Foil.sink (nameOf x))) (Var (nameOf y)) :: Constraint () Raw.MetavarId FoilPattern TermSig))
--- -- not unifiable in rigid-rigid case
+-- | Different variables
+-- >>> let parameters2 x y = NameBinderListCons x (NameBinderListCons y NameBinderListEmpty)
+-- >>> let parameterTypes2 x y typ1 typ2 = addNameBinder y typ2 (addNameBinder x typ1 emptyNameMap)
+-- >>> withFresh Foil.emptyScope $ \x -> withFresh (Foil.extendScope x Foil.emptyScope) $ \y -> unify (Substitutions [], (Constraint (parameters2 x y) (parameterTypes2 x y () ()) (Var (Foil.sink (nameOf x))) (Var (nameOf y)) :: Constraint () Raw.MetavarId FoilPattern TermSig))
+-- not unifiable in rigid-rigid case
 
--- -- | Two same function applications
--- -- >>> let parameters x = NameBinderListCons x NameBinderListEmpty
--- -- >>> let parameterTypes x typ = addNameBinder x typ emptyNameMap
--- -- >>> withFresh Foil.emptyScope $ \x -> unify(Substitutions [], (Constraint (parameters x) (parameterTypes x ()) (App' (Var (nameOf x)) (Var (nameOf x))) (App' (Var (nameOf x)) (Var (nameOf x))) :: Constraint () Raw.MetavarId FoilPattern TermSig))
--- -- { }
+-- | Two same function applications
+-- >>> let parameters x = NameBinderListCons x NameBinderListEmpty
+-- >>> let parameterTypes x typ = addNameBinder x typ emptyNameMap
+-- >>> withFresh Foil.emptyScope $ \x -> unify(Substitutions [], (Constraint (parameters x) (parameterTypes x ()) (App' (Var (nameOf x)) (Var (nameOf x))) (App' (Var (nameOf x)) (Var (nameOf x))) :: Constraint () Raw.MetavarId FoilPattern TermSig))
+-- { }
 
--- -- | Two syntactically equal function applications
--- -- >>> testSameApplication
--- -- { }
--- testSameApplication ::
---   Substitutions () Raw.MetavarId FoilPattern TermSig
--- testSameApplication =
---   withVar Foil.emptyScope $ \x _ ->
---     let tm = App' (Var (nameOf x)) (Var (nameOf x))
---         binders = NameBinderListCons x NameBinderListEmpty
---         typeEnv = addNameBinder x () emptyNameMap
---         constr =
---           Constraint binders typeEnv tm tm ::
---             Constraint () Raw.MetavarId FoilPattern TermSig
---      in unify (Substitutions [], constr)
+-- | Two syntactically equal function applications
+-- >>> testSameApplication
+-- { }
+testSameApplication ::
+  Substitutions () Raw.MetavarId FoilPattern TermSig
+testSameApplication =
+  withVar Foil.emptyScope $ \x _ ->
+    let tm = App' (Var (nameOf x)) (Var (nameOf x))
+        binders = NameBinderListCons x NameBinderListEmpty
+        typeEnv = addNameBinder x () emptyNameMap
+        constr =
+          Constraint binders typeEnv tm tm ::
+            Constraint () Raw.MetavarId FoilPattern TermSig
+     in unify (Substitutions [], constr)
 
--- -- | Two different function applications
--- -- >>> testDifferentApplications
--- -- not unifiable in rigid-rigid case
--- testDifferentApplications ::
---   Substitutions () Raw.MetavarId FoilPattern TermSig
--- testDifferentApplications =
---   withVar Foil.emptyScope $ \x scope1 ->
---     withVar scope1 $ \y _ ->
---       let term1 = Foil.sink (App' (Var (nameOf x)) (Var (nameOf x)))
---           term2 = App' (Var (Foil.sink (nameOf x))) (Var (nameOf y))
---           binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
---           typeEnv =
---             addNameBinder y () $
---               addNameBinder x () emptyNameMap
---           constr =
---             Constraint binders typeEnv term1 term2 ::
---               Constraint () Raw.MetavarId FoilPattern TermSig
---        in unify (Substitutions [], constr)
-
-
--- -- >>> testFlexRigid
--- -- { MetavarId "X"[x0, x1] ↦ x0 W x1 }
--- testFlexRigid ::
---   Substitutions () Raw.MetavarId FoilPattern TermSig
--- testFlexRigid =
---   withVar Foil.emptyScope $ \x scope1 ->
---     withVar scope1 $ \y _ ->
---       let _X = Raw.MetavarId "X"
---           _W = Raw.MetavarId "W"
---           termFlex = Foil.sink (MetaApp _X [Var (nameOf y), Foil.sink (Var (nameOf x))] ())
---           termFlexInternal = MetaApp _W [Foil.sink (Var (nameOf x))] ()
---           termRigid = App' (Var (Foil.sink (nameOf y))) termFlexInternal
---           binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
---           typeEnv =
---             addNameBinder y () $
---               addNameBinder x () emptyNameMap
---           constr =
---             Constraint binders typeEnv termRigid termFlex ::
---               Constraint () Raw.MetavarId FoilPattern TermSig
---        in unify (Substitutions [], constr)
+-- | Two different function applications
+-- >>> testDifferentApplications
+-- not unifiable in rigid-rigid case
+testDifferentApplications ::
+  Substitutions () Raw.MetavarId FoilPattern TermSig
+testDifferentApplications =
+  withVar Foil.emptyScope $ \x scope1 ->
+    withVar scope1 $ \y _ ->
+      let term1 = Foil.sink (App' (Var (nameOf x)) (Var (nameOf x)))
+          term2 = App' (Var (Foil.sink (nameOf x))) (Var (nameOf y))
+          binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
+          typeEnv =
+            addNameBinder y () $
+              addNameBinder x () emptyNameMap
+          constr =
+            Constraint binders typeEnv term1 term2 ::
+              Constraint () Raw.MetavarId FoilPattern TermSig
+       in unify (Substitutions [], constr)
 
 
--- -- >>> testFlexRigidPruning
--- -- { MetavarId "W"[x0, x1] ↦ W' x1, MetavarId "X"[x0] ↦ x0 W' x0 }
--- testFlexRigidPruning ::
---   Substitutions () Raw.MetavarId FoilPattern TermSig
--- testFlexRigidPruning =
---   withVar Foil.emptyScope $ \x scope1 ->
---     withVar scope1 $ \y _ ->
---       let _X = Raw.MetavarId "X"
---           _W = Raw.MetavarId "W"
---           termFlex = Foil.sink (MetaApp _X [Var (nameOf x)] ())
---           termFlexInternal = MetaApp _W [Foil.sink (Var (nameOf y)), Foil.sink (Var (nameOf x))] ()
---           termRigid = App' (Var (Foil.sink (nameOf x))) termFlexInternal
---           binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
---           typeEnv =
---             addNameBinder y () $
---               addNameBinder x () emptyNameMap
---           constr =
---             Constraint binders typeEnv termRigid termFlex ::
---               Constraint () Raw.MetavarId FoilPattern TermSig
---        in unify (Substitutions [], constr)
+-- >>> testFlexRigid
+-- { MetavarId "X"[x0, x1] ↦ x0 W x1 }
+testFlexRigid ::
+  Substitutions () Raw.MetavarId FoilPattern TermSig
+testFlexRigid =
+  withVar Foil.emptyScope $ \x scope1 ->
+    withVar scope1 $ \y _ ->
+      let _X = Raw.MetavarId "X"
+          _W = Raw.MetavarId "W"
+          termFlex = Foil.sink (MetaApp _X [Var (nameOf y), Foil.sink (Var (nameOf x))] ())
+          termFlexInternal = MetaApp _W [Foil.sink (Var (nameOf x))] ()
+          termRigid = App' (Var (Foil.sink (nameOf y))) termFlexInternal
+          binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
+          typeEnv =
+            addNameBinder y () $
+              addNameBinder x () emptyNameMap
+          constr =
+            Constraint binders typeEnv termRigid termFlex ::
+              Constraint () Raw.MetavarId FoilPattern TermSig
+       in unify (Substitutions [], constr)
 
 
--- -- >>> testFlexRigidPruningPairs
--- -- { MetavarId "W"[x0, x1] ↦ W' x1, MetavarId "X"[x0] ↦ (x0, W' x0) }
--- testFlexRigidPruningPairs ::
---   Substitutions () Raw.MetavarId FoilPattern TermSig
--- testFlexRigidPruningPairs =
---   withVar Foil.emptyScope $ \x scope1 ->
---     withVar scope1 $ \y _ ->
---       let _X = Raw.MetavarId "X"
---           _W = Raw.MetavarId "W"
---           termFlex = Foil.sink (MetaApp _X [Var (nameOf x)] ())
---           termFlexInternal = MetaApp _W [Var (nameOf y), Foil.sink (Var (nameOf x))] ()
---           termRigid = Pair' (Var (Foil.sink (nameOf x))) termFlexInternal
---           binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
---           typeEnv =
---             addNameBinder y () $
---               addNameBinder x () emptyNameMap
---           constr =
---             Constraint binders typeEnv termRigid termFlex ::
---               Constraint () Raw.MetavarId FoilPattern TermSig
---        in unify (Substitutions [], constr)
+-- >>> testFlexRigidPruning
+-- { MetavarId "W"[x0, x1] ↦ W' x1, MetavarId "X"[x0] ↦ x0 W' x0 }
+testFlexRigidPruning ::
+  Substitutions () Raw.MetavarId FoilPattern TermSig
+testFlexRigidPruning =
+  withVar Foil.emptyScope $ \x scope1 ->
+    withVar scope1 $ \y _ ->
+      let _X = Raw.MetavarId "X"
+          _W = Raw.MetavarId "W"
+          termFlex = Foil.sink (MetaApp _X [Var (nameOf x)] ())
+          termFlexInternal = MetaApp _W [Foil.sink (Var (nameOf y)), Foil.sink (Var (nameOf x))] ()
+          termRigid = App' (Var (Foil.sink (nameOf x))) termFlexInternal
+          binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
+          typeEnv =
+            addNameBinder y () $
+              addNameBinder x () emptyNameMap
+          constr =
+            Constraint binders typeEnv termRigid termFlex ::
+              Constraint () Raw.MetavarId FoilPattern TermSig
+       in unify (Substitutions [], constr)
 
--- -- >>> testFlexFlexSameError
--- -- Different argument lists lengths in (4) rule
--- testFlexFlexSameError ::
---   Substitutions () Raw.MetavarId FoilPattern TermSig
--- testFlexFlexSameError =
---   withVar Foil.emptyScope $ \x scope1 ->
---     withVar scope1 $ \y _ ->
---       let _X = Raw.MetavarId "X"
---           termFlex1 = MetaApp _X [Var (Foil.sink (nameOf x)), Var (Foil.sink (nameOf y))] ()
---           termFlex2 = MetaApp _X [App' (Var (nameOf y)) (Var (Foil.sink (nameOf x)))] ()
---           binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
---           typeEnv =
---             addNameBinder y () $
---               addNameBinder x () emptyNameMap
---           constr =
---             Constraint binders typeEnv termFlex1 termFlex2 ::
---               Constraint () Raw.MetavarId FoilPattern TermSig
---        in unify (Substitutions [], constr)
 
--- -- >>> testFlexFlexSame
--- -- { MetavarId "X"[x0, x1] ↦ X' x1 }
--- testFlexFlexSame ::
---   Substitutions () Raw.MetavarId FoilPattern TermSig
--- testFlexFlexSame =
---   withVar Foil.emptyScope $ \x scope1 ->
---     withVar scope1 $ \y _ ->
---       let _X = Raw.MetavarId "X"
---           termFlex1 = MetaApp _X [Var (Foil.sink (nameOf x)), Var (Foil.sink (nameOf y))] ()
---           termFlex2 = MetaApp _X [App' (Var (Foil.sink (nameOf x))) (Var (Foil.sink (nameOf x))), Var (Foil.sink (nameOf y))] ()
---           binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
---           typeEnv =
---             addNameBinder y () $
---               addNameBinder x () emptyNameMap
---           constr =
---             Constraint binders typeEnv termFlex1 termFlex2 ::
---               Constraint () Raw.MetavarId FoilPattern TermSig
---        in unify (Substitutions [], constr)
+-- >>> testFlexRigidPruningPairs
+-- { MetavarId "W"[x0, x1] ↦ W' x1, MetavarId "X"[x0] ↦ (x0, W' x0) }
+testFlexRigidPruningPairs ::
+  Substitutions () Raw.MetavarId FoilPattern TermSig
+testFlexRigidPruningPairs =
+  withVar Foil.emptyScope $ \x scope1 ->
+    withVar scope1 $ \y _ ->
+      let _X = Raw.MetavarId "X"
+          _W = Raw.MetavarId "W"
+          termFlex = Foil.sink (MetaApp _X [Var (nameOf x)] ())
+          termFlexInternal = MetaApp _W [Var (nameOf y), Foil.sink (Var (nameOf x))] ()
+          termRigid = Pair' (Var (Foil.sink (nameOf x))) termFlexInternal
+          binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
+          typeEnv =
+            addNameBinder y () $
+              addNameBinder x () emptyNameMap
+          constr =
+            Constraint binders typeEnv termRigid termFlex ::
+              Constraint () Raw.MetavarId FoilPattern TermSig
+       in unify (Substitutions [], constr)
 
--- -- >>> testFlexFlexDiff
--- -- { MetavarId "Y"[x0, x1] ↦ Y' x1, MetavarId "Y'"[x0, x1] ↦ X x0 }
--- testFlexFlexDiff ::
---   Substitutions () Raw.MetavarId FoilPattern TermSig
--- testFlexFlexDiff =
---   withVar Foil.emptyScope $ \x scope1 ->
---     withVar scope1 $ \y _ ->
---       let _X = Raw.MetavarId "X"
---           _Y = Raw.MetavarId "Y"
---           termFlex1 = MetaApp _X [Var (Foil.sink (nameOf y))] ()
---           termFlex2 = MetaApp _Y [App' (Var (Foil.sink (nameOf x))) (Var (Foil.sink (nameOf x))), Var (Foil.sink (nameOf y))] ()
---           binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
---           typeEnv =
---             addNameBinder y () $
---               addNameBinder x () emptyNameMap
---           constr =
---             Constraint binders typeEnv termFlex1 termFlex2 ::
---               Constraint () Raw.MetavarId FoilPattern TermSig
---        in unify (Substitutions [], constr)
+-- >>> testFlexFlexSameError
+-- Different argument lists lengths in (4) rule
+testFlexFlexSameError ::
+  Substitutions () Raw.MetavarId FoilPattern TermSig
+testFlexFlexSameError =
+  withVar Foil.emptyScope $ \x scope1 ->
+    withVar scope1 $ \y _ ->
+      let _X = Raw.MetavarId "X"
+          termFlex1 = MetaApp _X [Var (Foil.sink (nameOf x)), Var (Foil.sink (nameOf y))] ()
+          termFlex2 = MetaApp _X [App' (Var (nameOf y)) (Var (Foil.sink (nameOf x)))] ()
+          binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
+          typeEnv =
+            addNameBinder y () $
+              addNameBinder x () emptyNameMap
+          constr =
+            Constraint binders typeEnv termFlex1 termFlex2 ::
+              Constraint () Raw.MetavarId FoilPattern TermSig
+       in unify (Substitutions [], constr)
 
--- -- >>> testArgumentRestriction
--- -- argument restriction failed
--- testArgumentRestriction ::
---   Substitutions () Raw.MetavarId FoilPattern TermSig
--- testArgumentRestriction =
---   withVar Foil.emptyScope $ \x _ ->
---     let termRigid = Var (nameOf x)
---         _X = Raw.MetavarId "X"
---         termFlex = MetaApp _X [MetaApp _X [] ()] ()
---         binders = NameBinderListCons x NameBinderListEmpty
---         typeEnv = addNameBinder x () emptyNameMap
---         constr =
---           Constraint binders typeEnv termRigid termFlex ::
---             Constraint () Raw.MetavarId FoilPattern TermSig
---      in unify (Substitutions [], constr)
+-- >>> testFlexFlexSame
+-- { MetavarId "X"[x0, x1] ↦ X' x1 }
+testFlexFlexSame ::
+  Substitutions () Raw.MetavarId FoilPattern TermSig
+testFlexFlexSame =
+  withVar Foil.emptyScope $ \x scope1 ->
+    withVar scope1 $ \y _ ->
+      let _X = Raw.MetavarId "X"
+          termFlex1 = MetaApp _X [Var (Foil.sink (nameOf x)), Var (Foil.sink (nameOf y))] ()
+          termFlex2 = MetaApp _X [App' (Var (Foil.sink (nameOf x))) (Var (Foil.sink (nameOf x))), Var (Foil.sink (nameOf y))] ()
+          binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
+          typeEnv =
+            addNameBinder y () $
+              addNameBinder x () emptyNameMap
+          constr =
+            Constraint binders typeEnv termFlex1 termFlex2 ::
+              Constraint () Raw.MetavarId FoilPattern TermSig
+       in unify (Substitutions [], constr)
 
--- -- >>> testLocalRestriction
--- -- local restriction failed
--- testLocalRestriction ::
---   Substitutions () Raw.MetavarId FoilPattern TermSig
--- testLocalRestriction =
---   withVar Foil.emptyScope $ \x _ ->
---     let termRigid = Var (nameOf x)
---         _X = Raw.MetavarId "X"
---         termFlex = MetaApp _X [Var (nameOf x), Var (nameOf x)] ()
---         binders = NameBinderListCons x NameBinderListEmpty
---         typeEnv = addNameBinder x () emptyNameMap
---         constr =
---           Constraint binders typeEnv termRigid termFlex ::
---             Constraint () Raw.MetavarId FoilPattern TermSig
---      in unify (Substitutions [], constr)
+-- >>> testFlexFlexDiff
+-- { MetavarId "Y"[x0, x1] ↦ Y' x1, MetavarId "Y'"[x0, x1] ↦ X x0 }
+testFlexFlexDiff ::
+  Substitutions () Raw.MetavarId FoilPattern TermSig
+testFlexFlexDiff =
+  withVar Foil.emptyScope $ \x scope1 ->
+    withVar scope1 $ \y _ ->
+      let _X = Raw.MetavarId "X"
+          _Y = Raw.MetavarId "Y"
+          termFlex1 = MetaApp _X [Var (Foil.sink (nameOf y))] ()
+          termFlex2 = MetaApp _Y [App' (Var (Foil.sink (nameOf x))) (Var (Foil.sink (nameOf x))), Var (Foil.sink (nameOf y))] ()
+          binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
+          typeEnv =
+            addNameBinder y () $
+              addNameBinder x () emptyNameMap
+          constr =
+            Constraint binders typeEnv termFlex1 termFlex2 ::
+              Constraint () Raw.MetavarId FoilPattern TermSig
+       in unify (Substitutions [], constr)
 
--- -- >>> testGlobalRestriction
--- -- global restriction failed
--- testGlobalRestriction ::
---   Substitutions () Raw.MetavarId FoilPattern TermSig
--- testGlobalRestriction =
---   withVar Foil.emptyScope $ \x scope1 ->
---     withVar scope1 $ \y _ ->
---       let _X = Raw.MetavarId "X"
---           _Y = Raw.MetavarId "Y"
---           termFlex1 = MetaApp _X [Var (Foil.sink (nameOf x))] ()
---           termFlex2 = MetaApp _Y [App' (Var (nameOf y)) (Var (Foil.sink (nameOf x)))] ()
---           binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
---           typeEnv =
---             addNameBinder y () $
---               addNameBinder x () emptyNameMap
---           constr =
---             Constraint binders typeEnv termFlex1 termFlex2 ::
---               Constraint () Raw.MetavarId FoilPattern TermSig
---        in unify (Substitutions [], constr)
+-- >>> testArgumentRestriction
+-- argument restriction failed
+testArgumentRestriction ::
+  Substitutions () Raw.MetavarId FoilPattern TermSig
+testArgumentRestriction =
+  withVar Foil.emptyScope $ \x _ ->
+    let termRigid = Var (nameOf x)
+        _X = Raw.MetavarId "X"
+        termFlex = MetaApp _X [MetaApp _X [] ()] ()
+        binders = NameBinderListCons x NameBinderListEmpty
+        typeEnv = addNameBinder x () emptyNameMap
+        constr =
+          Constraint binders typeEnv termRigid termFlex ::
+            Constraint () Raw.MetavarId FoilPattern TermSig
+     in unify (Substitutions [], constr)
+
+-- >>> testLocalRestriction
+-- local restriction failed
+testLocalRestriction ::
+  Substitutions () Raw.MetavarId FoilPattern TermSig
+testLocalRestriction =
+  withVar Foil.emptyScope $ \x _ ->
+    let termRigid = Var (nameOf x)
+        _X = Raw.MetavarId "X"
+        termFlex = MetaApp _X [Var (nameOf x), Var (nameOf x)] ()
+        binders = NameBinderListCons x NameBinderListEmpty
+        typeEnv = addNameBinder x () emptyNameMap
+        constr =
+          Constraint binders typeEnv termRigid termFlex ::
+            Constraint () Raw.MetavarId FoilPattern TermSig
+     in unify (Substitutions [], constr)
+
+-- >>> testGlobalRestriction
+-- global restriction failed
+testGlobalRestriction ::
+  Substitutions () Raw.MetavarId FoilPattern TermSig
+testGlobalRestriction =
+  withVar Foil.emptyScope $ \x scope1 ->
+    withVar scope1 $ \y _ ->
+      let _X = Raw.MetavarId "X"
+          _Y = Raw.MetavarId "Y"
+          termFlex1 = MetaApp _X [Var (Foil.sink (nameOf x))] ()
+          termFlex2 = MetaApp _Y [App' (Var (nameOf y)) (Var (Foil.sink (nameOf x)))] ()
+          binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
+          typeEnv =
+            addNameBinder y () $
+              addNameBinder x () emptyNameMap
+          constr =
+            Constraint binders typeEnv termFlex1 termFlex2 ::
+              Constraint () Raw.MetavarId FoilPattern TermSig
+       in unify (Substitutions [], constr)
