@@ -33,6 +33,7 @@ library
       Data.SOAS
       Language.Lambda.Config
       Language.Lambda.Framework
+      Language.Lambda.Huet
       Language.Lambda.Impl
       Language.Lambda.RawConfig
       Language.Lambda.Syntax.Abs
@@ -40,7 +41,6 @@ library
       Language.Lambda.Syntax.Lex
       Language.Lambda.Syntax.Par
       Language.Lambda.Syntax.Print
-      Language.Lambda.Typed
   other-modules:
       Paths_free_foil_hou
   autogen-modules:
@@ -53,7 +53,6 @@ library
     , happy >=1.19.9
   build-tool-depends:
       BNFC:bnfc >=2.9.4.1
-    , hspec-discover:hspec-discover >=2.7.0
   build-depends:
       array >=0.5.3.0
     , base >=4.7 && <5
@@ -80,7 +79,6 @@ executable free-foil-hou-exe
     , happy >=1.19.9
   build-tool-depends:
       BNFC:bnfc >=2.9.4.1
-    , hspec-discover:hspec-discover >=2.7.0
   build-depends:
       array >=0.5.3.0
     , base >=4.7 && <5
@@ -98,6 +96,7 @@ test-suite spec
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Language.Lambda.HuetSpec
       Language.Lambda.ImplSpec
       Paths_free_foil_hou
   autogen-modules:
@@ -110,7 +109,6 @@ test-suite spec
     , happy >=1.19.9
   build-tool-depends:
       BNFC:bnfc >=2.9.4.1
-    , hspec-discover:hspec-discover >=2.7.0
   build-depends:
       QuickCheck
     , array >=0.5.3.0

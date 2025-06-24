@@ -1,0 +1,108 @@
+[[problems]]
+metavars = [
+    "F: [t -> t -> t, t -> t, t] t",
+    "X: [t -> t, t] t -> t -> t",
+]
+constraints = [
+    "∀ a: t -> t, b: t. F[X[a, b], a, b] = a b",
+]
+
+[[problems.solutions]]
+name = "simplest"
+metavars = []
+substitutions = [
+    "F[x, a, b] ↦ a b",
+    "X[a, b] ↦ X[a, b]",
+]
+
+[[problems.solutions]]
+name = "F is a"
+metavars = [
+    "M0: [t -> t -> t, t -> t, t] t",
+    "M1: [t -> t -> t, t -> t, t] t",
+]
+substitutions = [
+    "F[x, a, b] ↦ a (x M0[x, a, b] M1[x, a, b])",
+    "X[a, b] ↦ λx: t. λy: t. b",
+]
+
+[[problems.solutions]]
+name = "X projects the left argument"
+metavars = [
+    "M0: [t -> t -> t, t -> t, t] t",
+]
+substitutions = [
+    "F[x, a, b] ↦ a (x b M0[x, a, b])",
+    "X[a, b] ↦ λx: t. λy: t. x",
+]
+
+[[problems.solutions]]
+name = "X projects the right argument"
+metavars = [
+    "M0: [t -> t -> t, t -> t, t] t",
+]
+substitutions = [
+    "F[x, a, b] ↦ a (x M0[x, a, b] b)",
+    "X[a, b] ↦ λx: t. λy: t. y",
+]
+
+[[problems.solutions]]
+name = "F is id"
+metavars = [
+    "M0: [t -> t -> t, t -> t, t] t",
+    "M1: [t -> t -> t, t -> t, t] t",
+]
+substitutions = [
+    "F[x, a, b] ↦ x M0[x, a, b] M1[x, a, b]",
+    "X[a, b] ↦ λx: t. λy: t. a b",
+]
+
+[[problems.solutions]]
+name = "X uses the left argument"
+metavars = [
+    "M0: [t -> t -> t, t -> t, t] t",
+]
+substitutions = [
+    "F[x, a, b] ↦ x b M0[x, a, b]",
+    "X[a, b] ↦ λx: t. λy: t. a x",
+]
+
+[[problems.solutions]]
+name = "X uses the right argument"
+metavars = [
+    "M0: [t -> t -> t, t -> t, t] t",
+]
+substitutions = [
+    "F[x, a, b] ↦ x M0[x, a, b] b",
+    "X[a, b] ↦ λx: t. λy: t. a y",
+]
+
+[[problems.solutions]]
+name = "X is η-reduced"
+metavars = [
+    "M0: [t -> t -> t, t -> t, t] t",
+]
+substitutions = [
+    "F[x, a, b] ↦ x M0[x, a, b] b",
+    "X[a, b] ↦ λx: t. a",
+]
+
+[[problems.solutions]]
+name = "the left argument is complex"
+metavars = [
+    "M0: [t -> t -> t, t -> t, t] t",
+]
+substitutions = [
+    "F[x, a, b] ↦ x (a b) M0[x, a, b]",
+    "X[a, b] ↦ λx: t. λy: t. x",
+]
+
+[[problems.solutions]]
+name = "the right argument is complex"
+metavars = [
+    "M0: [t -> t -> t, t -> t, t] t",
+]
+substitutions = [
+    "F[x, a, b] ↦ x M0[x, a, b] (a b)",
+    "X[a, b] ↦ λx: t. λy: t. y",
+]
