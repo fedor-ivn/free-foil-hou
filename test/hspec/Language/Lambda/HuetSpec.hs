@@ -12,6 +12,7 @@ import System.Exit (exitFailure)
 import Test.Hspec
 
 import Data.SOAS (MetaAbs (..), MetaSubst (..), MetaSubsts (..))
+import Data.Text (unpack)
 import Language.Lambda.Config (
   CanonicalConstraint (..),
   CanonicalProblem,
@@ -67,14 +68,16 @@ instance Framework.IsCanonicalSubstitutions (Huet.Substitutions Raw.Type Raw.Met
 
 forFile path = do
   Config{configProblems} <- runIO $ handleErr =<< decodeConfigFile path
-  let [problem] = configProblems
-  result <- runIO $ handleErr (solve problem)
-  forM_ (zip [1 ..] result) $ \(j, (_, comparison)) -> do
-    it ("solution #" <> show j) $ do
-      comparison `shouldBe` Framework.Equivalent
+  forM_ (zip [1 ..] configProblems) $ \(i, problem) -> do
+    result <- runIO $ handleErr (solve problem)
+    describe ("problem #" <> show i) $ do
+      forM_ (zip [1 ..] result) $ \(j, (_, comparison)) -> do
+        it ("solution #" <> show j) $ do
+          comparison `shouldBe` Framework.Equivalent
 
 spec :: Spec
 spec = do
   describe "F[a, b] X[a, b] = a b" $ forFile "problems/huet/problem-1.toml"
   describe "F[a, b, c] X[a, b, c] = a b c" $ forFile "problems/huet/problem-2.toml"
   describe "F[X[a, b], a, b] = a b" $ forFile "problems/huet/problem-3.toml"
+  describe "Matching" $ forFile "problems/matching.toml"
