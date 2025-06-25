@@ -753,7 +753,7 @@ step
   -> Solution typ metavar binder sig
   -> [Solution typ metavar binder sig]
 step constraint (Solution metas constraints substitutions) =
-  decomposed <> solved
+  maybeToList decomposed <> solved
  where
   imitations = imitationRule metas constraint
   projections = projectionRule metas constraint
@@ -765,10 +765,12 @@ step constraint (Solution metas constraints substitutions) =
 
   -- `F[] X[] = a b` does not decompose semantically, but it decomposes
   -- structurally. Try structural decomposition once we dealt with the semantics
-  decomposed = do
-    _ <- introductions
-    decomposition <- maybeToList (decomposeAll decompose [constraint])
-    return (Solution metas (decomposition <> constraints) substitutions)
+  decomposed = case decompose constraint of
+    Failed -> Nothing
+    Flexible -> Nothing
+    Decomposed constraints' -> do
+      decomposition <- decomposeAll decompose constraints'
+      return (Solution metas (decomposition <> constraints) substitutions)
 
 -- >>> :set -XTypeApplications
 -- >>> t = Raw.Base (Raw.VarIdent "t")
