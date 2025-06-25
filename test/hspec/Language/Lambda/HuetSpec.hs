@@ -80,4 +80,6 @@ spec = do
   describe "F[a, b] X[a, b] = a b" $ forFile "problems/huet/problem-1.toml"
   describe "F[a, b, c] X[a, b, c] = a b c" $ forFile "problems/huet/problem-2.toml"
   describe "F[X[a, b], a, b] = a b" $ forFile "problems/huet/problem-3.toml"
+  describe "F[a, b] X[a, b] b = a b" $ forFile "problems/huet/problem-4.toml"
+  describe "F[] = λx. λ y. y x" $ forFile "problems/huet/problem-5.toml"
   describe "Matching" $ forFile "problems/matching.toml"

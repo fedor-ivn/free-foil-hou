@@ -1,0 +1,14 @@
+[[problems]]
+metavars = [
+    "F: [] t -> (t -> t) -> t",
+]
+constraints = [
+    "∀. F[] = λx: t. λ y: t -> t. y x",
+]
+
+[[problems.solutions]]
+name = "imitation"
+metavars = []
+substitutions = [
+    "F[] ↦ λx: t. λ y: t -> t. y x",
+]

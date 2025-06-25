@@ -1,0 +1,204 @@
+[[problems]]
+metavars = [
+    "F: [t -> t, t] (t -> t -> t) -> t -> t",
+    "X: [t -> t, t] t -> t -> t",
+]
+constraints = [
+    "∀ a: t -> t, b: t. F[a, b] X[a, b] b = a b",
+]
+
+[[problems.solutions]]
+name = "#1"
+metavars = []
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. a",
+    "X[a, b] ↦ X[a, b]",
+]
+
+[[problems.solutions]]
+name = "#2"
+metavars = []
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. a y",
+    "X[a, b] ↦ X[a, b]",
+]
+
+[[problems.solutions]]
+name = "#3"
+metavars = []
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. a b",
+    "X[a, b] ↦ X[a, b]",
+]
+
+[[problems.solutions]]
+name = "#4"
+metavars = [
+  "H1: [t -> t, t, t -> t -> t, t] t",
+  "H2: [t -> t, t, t -> t -> t, t] t",
+]
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. a (x H1[a, b, x, y] H2[a, b, x, y])",
+    "X[a, b] ↦ λx: t. λy: t. b",
+]
+
+[[problems.solutions]]
+name = "#5"
+metavars = [
+  "H1: [t -> t, t, t -> t -> t, t] t",
+]
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. a (x b H1[a, b, x, y])",
+    "X[a, b] ↦ λx: t. λy: t. x",
+]
+
+[[problems.solutions]]
+name = "#6"
+metavars = [
+  "H1: [t -> t, t, t -> t -> t, t] t",
+]
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. a (x y H1[a, b, x, y])",
+    "X[a, b] ↦ λx: t. λy: t. x",
+]
+
+[[problems.solutions]]
+name = "#7"
+metavars = [
+  "H1: [t -> t, t, t -> t -> t, t] t",
+]
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. a (x H1[a, b, x, y] b)",
+    "X[a, b] ↦ λx: t. λy: t. y",
+]
+
+[[problems.solutions]]
+name = "#8"
+metavars = [
+  "H1: [t -> t, t, t -> t -> t, t] t",
+]
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. a (x H1[a, b, x, y] y)",
+    "X[a, b] ↦ λx: t. λy: t. y",
+]
+
+[[problems.solutions]]
+name = "#9"
+metavars = [
+  "H1: [t -> t, t, t -> t -> t, t] t",
+  "H2: [t -> t, t, t -> t -> t, t] t",
+]
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. x H1[a, b, x, y] H2[a, b, x, y]",
+    "X[a, b] ↦ λx: t. λy: t. a b",
+]
+
+[[problems.solutions]]
+name = "#10"
+metavars = [
+  "H1: [t -> t, t, t -> t -> t, t] t",
+]
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. x b H1[a, b, x, y]",
+    "X[a, b] ↦ λx: t. λy: t. a x",
+]
+
+[[problems.solutions]]
+name = "#11"
+metavars = [
+  "H1: [t -> t, t, t -> t -> t, t] t",
+]
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. x y H1[a, b, x, y]",
+    "X[a, b] ↦ λx: t. λy: t. a x",
+]
+
+[[problems.solutions]]
+name = "#12"
+metavars = [
+  "H1: [t -> t, t, t -> t -> t, t] t",
+]
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. x H1[a, b, x, y] b",
+    "X[a, b] ↦ λx: t. λy: t. a y",
+]
+
+[[problems.solutions]]
+name = "#13"
+metavars = [
+  "H1: [t -> t, t, t -> t -> t, t] t",
+]
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. x H1[a, b, x, y] y",
+    "X[a, b] ↦ λx: t. λy: t. a y",
+]
+
+[[problems.solutions]]
+name = "#14"
+metavars = [
+  "H1: [t -> t, t, t -> t -> t, t] t",
+]
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. x H1[a, b, x, y] b",
+    "X[a, b] ↦ λx: t. a",
+]
+
+[[problems.solutions]]
+name = "#15"
+metavars = [
+  "H1: [t -> t, t, t -> t -> t, t] t",
+]
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. x H1[a, b, x, y] y",
+    "X[a, b] ↦ λx: t. a",
+]
+
+[[problems.solutions]]
+name = "#16"
+metavars = [
+  "H1: [t -> t, t, t -> t -> t, t] t",
+]
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. x (a b) H1[a, b, x, y]",
+    "X[a, b] ↦ λx: t. λy: t. x",
+]
+
+[[problems.solutions]]
+name = "#17"
+metavars = [
+  "H1: [t -> t, t, t -> t -> t, t] t",
+]
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. x (a y) H1[a, b, x, y]",
+    "X[a, b] ↦ λx: t. λy: t. x",
+]
+
+[[problems.solutions]]
+name = "#18"
+metavars = [
+  "H1: [t -> t, t, t -> t -> t, t] t",
+]
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. x H1[a, b, x, y] (a b)",
+    "X[a, b] ↦ λx: t. λy: t. y",
+]
+
+[[problems.solutions]]
+name = "#19"
+metavars = [
+  "H1: [t -> t, t, t -> t -> t, t] t",
+]
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. λy: t. x H1[a, b, x, y] (a y)",
+    "X[a, b] ↦ λx: t. λy: t. y",
+]
+
+[[problems.solutions]]
+name = "#20"
+metavars = [
+  "H1: [t -> t, t, t -> t -> t] t",
+]
+substitutions = [
+    "F[a, b] ↦ λx: t -> t -> t. x H1[a, b, x]",
+    "X[a, b] ↦ λx: t. a",
+]
