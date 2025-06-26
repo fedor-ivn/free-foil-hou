@@ -1,14 +1,21 @@
 [[problems]]
 metavars = [
-    "F: [] t -> (t -> t) -> t",
+    "F: [t -> t] t -> t -> t",
 ]
 constraints = [
-    "∀. F[] = λx: t. λ y: t -> t. y x",
+    "∀. F[λz: t. z] = λx: t. λ y: t. y",
 ]
 
 [[problems.solutions]]
 name = "imitation"
 metavars = []
 substitutions = [
-    "F[] ↦ λx: t. λ y: t -> t. y x",
+    "F[f] ↦ λx: t. λ y: t. y",
+]
+
+[[problems.solutions]]
+name = "projection"
+metavars = []
+substitutions = [
+    "F[f] ↦ λx: t. f",
 ]
