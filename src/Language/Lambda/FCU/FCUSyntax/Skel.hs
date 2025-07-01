@@ -35,6 +35,8 @@ transTerm x = case x of
   Language.Lambda.FCU.FCUSyntax.Abs.AppTerm term1 term2 -> failure x
   Language.Lambda.FCU.FCUSyntax.Abs.AbsTerm pattern_ scopedterm -> failure x
   Language.Lambda.FCU.FCUSyntax.Abs.PairTerm term1 term2 -> failure x
+  Language.Lambda.FCU.FCUSyntax.Abs.FstTerm term -> failure x
+  Language.Lambda.FCU.FCUSyntax.Abs.SndTerm term -> failure x
 
 transPattern :: Language.Lambda.FCU.FCUSyntax.Abs.Pattern -> Result
 transPattern x = case x of

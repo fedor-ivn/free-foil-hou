@@ -151,6 +151,8 @@ instance Print Language.Lambda.FCU.FCUSyntax.Abs.Term where
     Language.Lambda.FCU.FCUSyntax.Abs.AppTerm term1 term2 -> prPrec i 0 (concatD [prt 0 term1, prt 0 term2])
     Language.Lambda.FCU.FCUSyntax.Abs.AbsTerm pattern_ scopedterm -> prPrec i 0 (concatD [doc (showString "\955"), prt 0 pattern_, doc (showString "."), prt 0 scopedterm])
     Language.Lambda.FCU.FCUSyntax.Abs.PairTerm term1 term2 -> prPrec i 0 (concatD [doc (showString "("), prt 0 term1, doc (showString ","), prt 0 term2, doc (showString ")")])
+    Language.Lambda.FCU.FCUSyntax.Abs.FstTerm term -> prPrec i 0 (concatD [doc (showString "fst"), prt 0 term])
+    Language.Lambda.FCU.FCUSyntax.Abs.SndTerm term -> prPrec i 0 (concatD [doc (showString "snd"), prt 0 term])
 
 instance Print Language.Lambda.FCU.FCUSyntax.Abs.Pattern where
   prt i = \case

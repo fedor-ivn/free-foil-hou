@@ -25,7 +25,7 @@
 {-# OPTIONS_GHC -Wno-redundant-constraints #-}
 {-# OPTIONS_GHC -fno-warn-orphans #-}
 
-module Language.Lambda.FCU.FreeFoil.Syntax (unify, Constraint(..), Substitutions(..), Substitution(..), MetavarFreshable(..), TypedUnifiablePattern(..), UnifyNameBinders'(..)) where
+module Language.Lambda.FCU.FreeFoil.Syntax (unify, Constraint (..), Substitutions (..), Substitution (..), MetavarFreshable (..), TypedUnifiablePattern (..), UnifyNameBinders' (..)) where
 
 import Control.Monad.Foil qualified as Foil
 import Control.Monad.Foil.Internal as FoilInternal hiding (Substitution)
@@ -63,7 +63,7 @@ import Data.List (intercalate)
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe
-import Data.SOAS (AnnSig (..), AnnBinder (AnnBinder), push, TypedSOAS, pattern MetaApp, TypedScopedSOAS, MetaAppSig (..))
+import Data.SOAS (AnnBinder (AnnBinder), AnnSig (..), MetaAppSig (..), TypedSOAS, TypedScopedSOAS, push, pattern MetaApp)
 import Data.String (IsString (..))
 import Data.ZipMatchK
 import Data.ZipMatchK.Bifunctor ()
@@ -232,17 +232,17 @@ data Substitution typ metavar binder sig where
 newtype Substitutions typ metavar binder sig = Substitutions [Substitution typ metavar binder sig]
 
 instance
-  (Show metavar, forall n. Show (TypedSOAS binder metavar sig n typ))
-  => Show (Substitution typ metavar binder sig)
+  (Show metavar, forall n. Show (TypedSOAS binder metavar sig n typ)) =>
+  Show (Substitution typ metavar binder sig)
   where
   show (Substitution meta parameters body) =
     show meta <> "[" <> intercalate ", " parameters' <> "] ↦ " <> show body
-   where
-    parameters' = fmap (\name -> "x" <> show name) (Foil.namesOfPattern parameters)
+    where
+      parameters' = fmap (\name -> "x" <> show name) (Foil.namesOfPattern parameters)
 
 instance
-  (Show metavar, forall n. Show (TypedSOAS binder metavar sig n typ))
-  => Show (Substitutions typ metavar binder sig)
+  (Show metavar, forall n. Show (TypedSOAS binder metavar sig n typ)) =>
+  Show (Substitutions typ metavar binder sig)
   where
   show (Substitutions []) = "{ }"
   show (Substitutions substitutions) = "{ " <> intercalate ", " (show <$> substitutions) <> " }"
@@ -391,9 +391,7 @@ unify (th, Constraint forall_ forallTypes s t) =
   let scope = extendScopePattern forall_ emptyScope
       s' = applySubstitutionsInTerm th scope s
       t' = applySubstitutionsInTerm th scope t
-   in if alphaEquiv scope s' t'
-       then th
-       else cases (th , Constraint forall_ forallTypes s' t')
+    in cases (th, Constraint forall_ forallTypes s' t')
 
 -- | Select a rule (0)-(5) to proceed with
 cases ::
@@ -417,7 +415,6 @@ cases (th, c@(Constraint _ _ s t)) = case (isFlexible s, isFlexible t) of
   (True, False) -> caseFlexRigid (th, swapConstraint c) -- Rule (3)
   (True, True) -> caseFlexFlex (th, c) -- Rules (4-5)
   (False, False) -> caseRigidRigid (th, c) -- Rules (0-2)
-  _ -> error "Unexpected case in cases"
 
 decomposeRigidRigid ::
   forall typ metavar binder sig.
@@ -488,6 +485,21 @@ caseRigidRigid (th, constraint) =
       let step th' nc = unify (th', nc)
        in foldl step th newConstraints
 
+occ :: ( Eq metavar,
+    Bifoldable sig,
+    CoSinkable binder,
+    SinkableK binder
+  ) => metavar -> TypedSOAS binder metavar sig n typ -> Bool
+occ meta s = case s of
+  Var _ -> True
+  MetaApp m _ _ -> m /= meta
+  Node node ->
+    bifoldr
+      (\(ScopedAST _ body) acc -> occ meta body && acc)
+      (\term acc -> acc && occ meta term)
+      True
+      node
+
 discharge ::
   forall n l typ metavar binder sig.
   ( Distinct n,
@@ -550,6 +562,7 @@ caseFlexRigid ::
   ) ->
   Substitutions typ metavar binder sig
 caseFlexRigid (th, Constraint forall_ _ s t)
+  | not (occ metavar s) = error "occ failed"
   | not (argumentRestriction scope tn) = error "argument restriction failed"
   | not (localRestriction scope tn) = error "local restriction failed"
   | otherwise =
@@ -629,11 +642,11 @@ selectzrk' ::
   [TypedSOAS binder metavar sig n typ] ->
   [TypedSOAS binder metavar sig n typ] ->
   [Name m]
-selectzrk' scope vsm tn sn = 
+selectzrk' scope vsm tn sn =
   [v | (v, s, t) <- zip3 (namesOfPattern vsm) sn tn, alphaEquiv scope s t]
 
 -- | Helper function for permutation in (5) rule
-permutate' ::
+permute' ::
   ( Distinct n,
     CoSinkable binder,
     SinkableK binder,
@@ -648,7 +661,7 @@ permutate' ::
   [TypedSOAS binder metavar sig n typ] ->
   [TypedSOAS binder metavar sig n typ] ->
   [Name l]
-permutate' scope zs as bs =
+permute' scope zs as bs =
   [ zs !! i
     | b <- bs,
       i <- maybeToList (elemIndexBy (alphaEquiv scope) b as)
@@ -812,19 +825,20 @@ caseFlexFlexDiff (th, Constraint forall_ _ (MetaApp meta1 sn typ1) (MetaApp meta
 
             s' = applySubstitutionsInTerm pruningResultRight scope (MetaApp meta1 sn typ1)
             t' = applySubstitutionsInTerm pruningResultLeft scope (MetaApp meta2 tm typ2)
-            
+
             sn' = getMetavarArgs s'
             tm' = getMetavarArgs t'
 
             meta1' = getMetavar s'
             meta2' = getMetavar t'
 
-            permutatedArgs = permutate' scope (namesOfPattern vsm) tm' sn'
+            permutedArgs = permute' scope (namesOfPattern vsm) tm' sn'
 
-            body = MetaApp meta1' (Var <$> permutatedArgs) typ1
+            body = MetaApp meta1' (Var <$> permutedArgs) typ1
             newSubs = Substitution meta2' vsm body
          in collapseSubstitutions [th, pruningResultLeft, pruningResultRight, Substitutions [newSubs]]
-    where scope = extendScopePattern forall_ emptyScope 
+  where
+    scope = extendScopePattern forall_ emptyScope
 caseFlexFlexDiff _ = error "Unexpected case at FlexFlexDiff"
 
 -- | RESTRICTIONS (Done)
@@ -1003,6 +1017,16 @@ pattern Pair' ::
   AST binder (AnnSig () (Sum TermSig q)) n
 pattern Pair' f x = Node (AnnSig (L2 (PairTermSig f x)) ())
 
+pattern Fst' ::
+  AST binder (AnnSig () (Sum TermSig q)) n ->
+  AST binder (AnnSig () (Sum TermSig q)) n
+pattern Fst' pair = Node (AnnSig (L2 (FstTermSig pair)) ())
+
+pattern Snd' ::
+  AST binder (AnnSig () (Sum TermSig q)) n ->
+  AST binder (AnnSig () (Sum TermSig q)) n
+pattern Snd' pair = Node (AnnSig (L2 (SndTermSig pair)) ())
+
 -- >>> let id1 = lam' Foil.emptyScope (\x _ -> Var x)
 -- >>> id1
 -- λ x0 . x0
@@ -1068,7 +1092,6 @@ testDifferentApplications =
               Constraint () Raw.MetavarId FoilPattern TermSig
        in unify (Substitutions [], constr)
 
-
 -- >>> testFlexRigid
 -- { MetavarId "X"[x0, x1] ↦ x0 W x1 }
 testFlexRigid ::
@@ -1078,10 +1101,16 @@ testFlexRigid =
     withVar scope1 $ \y _ ->
       let _X = Raw.MetavarId "X"
           _W = Raw.MetavarId "W"
-          termFlex = Foil.sink (MetaApp _X [Var (nameOf y), Foil.sink (Var (nameOf x))] ())
+          termFlex =
+            Foil.sink
+              ( MetaApp _X 
+                [ Var (nameOf y), Foil.sink (Var (nameOf x))] ()
+                )
           termFlexInternal = MetaApp _W [Foil.sink (Var (nameOf x))] ()
           termRigid = App' (Var (Foil.sink (nameOf y))) termFlexInternal
-          binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
+          binders =
+            NameBinderListCons x $
+              NameBinderListCons y NameBinderListEmpty
           typeEnv =
             addNameBinder y () $
               addNameBinder x () emptyNameMap
@@ -1089,7 +1118,6 @@ testFlexRigid =
             Constraint binders typeEnv termRigid termFlex ::
               Constraint () Raw.MetavarId FoilPattern TermSig
        in unify (Substitutions [], constr)
-
 
 -- >>> testFlexRigidPruning
 -- { MetavarId "W"[x0, x1] ↦ W' x1, MetavarId "X"[x0] ↦ x0 W' x0 }
@@ -1112,9 +1140,8 @@ testFlexRigidPruning =
               Constraint () Raw.MetavarId FoilPattern TermSig
        in unify (Substitutions [], constr)
 
-
 -- >>> testFlexRigidPruningPairs
--- { MetavarId "W"[x0, x1] ↦ W' x1, MetavarId "X"[x0] ↦ (x0, W' x0) }
+-- { MetavarId "W"[x0, x1] ↦ W' x1, MetavarId "X"[x0, x1] ↦ fst (x0, W' x0) }
 testFlexRigidPruningPairs ::
   Substitutions () Raw.MetavarId FoilPattern TermSig
 testFlexRigidPruningPairs =
@@ -1122,9 +1149,9 @@ testFlexRigidPruningPairs =
     withVar scope1 $ \y _ ->
       let _X = Raw.MetavarId "X"
           _W = Raw.MetavarId "W"
-          termFlex = Foil.sink (MetaApp _X [Var (nameOf x)] ())
+          termFlex = Foil.sink (MetaApp _X [Foil.sink (Var (nameOf x)), Snd' (Pair' (Foil.sink (Var (nameOf y))) (Var (nameOf y)))] ())
           termFlexInternal = MetaApp _W [Var (nameOf y), Foil.sink (Var (nameOf x))] ()
-          termRigid = Pair' (Var (Foil.sink (nameOf x))) termFlexInternal
+          termRigid = Fst' (Pair' (Var (Foil.sink (nameOf x))) termFlexInternal)
           binders = NameBinderListCons x $ NameBinderListCons y NameBinderListEmpty
           typeEnv =
             addNameBinder y () $

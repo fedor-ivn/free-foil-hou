@@ -31,7 +31,9 @@ import Language.Lambda.FCU.FCUSyntax.Lex
   ')'             { PT _ (TS _ 2)             }
   ','             { PT _ (TS _ 3)             }
   '.'             { PT _ (TS _ 4)             }
-  'λ'             { PT _ (TS _ 5)             }
+  'fst'           { PT _ (TS _ 5)             }
+  'snd'           { PT _ (TS _ 6)             }
+  'λ'             { PT _ (TS _ 7)             }
   L_Id            { PT _ (T_Id $$)            }
   L_MetavarId     { PT _ (T_MetavarId $$)     }
   L_ConstructorId { PT _ (T_ConstructorId $$) }
@@ -55,6 +57,8 @@ Term
   | Term Term { Language.Lambda.FCU.FCUSyntax.Abs.AppTerm $1 $2 }
   | 'λ' Pattern '.' ScopedTerm { Language.Lambda.FCU.FCUSyntax.Abs.AbsTerm $2 $4 }
   | '(' Term ',' Term ')' { Language.Lambda.FCU.FCUSyntax.Abs.PairTerm $2 $4 }
+  | 'fst' Term { Language.Lambda.FCU.FCUSyntax.Abs.FstTerm $2 }
+  | 'snd' Term { Language.Lambda.FCU.FCUSyntax.Abs.SndTerm $2 }
   | '(' Term ')' { $2 }
 
 Pattern :: { Language.Lambda.FCU.FCUSyntax.Abs.Pattern }

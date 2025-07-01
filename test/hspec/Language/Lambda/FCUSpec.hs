@@ -72,8 +72,8 @@ solveFCU ::
 solveFCU problem =
   Framework.solveAndCompareToReferenceSolutionsWith problem solver
   where
-    solver :: FCUMetavariables -> 
-              [FCU.Constraint Raw.Type Raw.MetavarIdent FoilPattern TermSig] -> 
+    solver :: FCUMetavariables ->
+              [FCU.Constraint Raw.Type Raw.MetavarIdent FoilPattern TermSig] ->
               Result [Solution FCUMetavariables (FCU.Substitutions Raw.Type Raw.MetavarIdent FoilPattern TermSig)]
     solver _metas constraints =
       let result = unsafePerformIO $ try @SomeException $ evaluate $
@@ -91,8 +91,7 @@ toFrameworkSolution ::
   Solution
     FCUMetavariables
     (FCU.Substitutions Raw.Type Raw.MetavarIdent FoilPattern TermSig)
-toFrameworkSolution substitutions =
-  Solution Nothing FCUMetavariables substitutions
+toFrameworkSolution = Solution Nothing FCUMetavariables
 
 instance Framework.IsCanonicalMetavarBinders FCUMetavariables where
   toCanonicalMetavarBinders _ = Right Map.empty

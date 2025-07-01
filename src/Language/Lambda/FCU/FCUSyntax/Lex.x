@@ -165,7 +165,9 @@ eitherResIdent tv s = treeFind resWords
 -- | The keywords and symbols of the language organized as binary search tree.
 resWords :: BTree
 resWords =
-  b "," 3 (b ")" 2 (b "(" 1 N N) N) (b "\955" 5 (b "." 4 N N) N)
+  b "." 4
+    (b ")" 2 (b "(" 1 N N) (b "," 3 N N))
+    (b "snd" 6 (b "fst" 5 N N) (b "\955" 7 N N))
   where
   b s n = B bs (TS bs n)
     where

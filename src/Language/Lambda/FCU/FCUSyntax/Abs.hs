@@ -22,6 +22,8 @@ data Term
     | AppTerm Term Term
     | AbsTerm Pattern ScopedTerm
     | PairTerm Term Term
+    | FstTerm Term
+    | SndTerm Term
   deriving (C.Eq, C.Ord, C.Show, C.Read, C.Data, C.Typeable, C.Generic)
 
 data Pattern = PatternVar Id
