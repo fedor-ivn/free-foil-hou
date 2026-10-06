@@ -49,11 +49,23 @@ stack build
 
 ### Running the Project
 
-Run test suite with:
+Run the test suite with:
 
 ```bash
-stack run
+stack test
 ```
+
+Matching tests read `problems/matching.toml` and
+`problems/matching-regressions.toml`. They check every expected solution,
+reject unexpected solutions, and apply each computed substitution to the
+left-hand side before checking alpha-equivalence with the unchanged right-hand
+side. Problems without reference solutions must produce no solutions.
+
+`test/hspec/Data/SOASSpec.hs` tests the generic matcher directly on a separate
+signature with constants, mixed binding and non-binding arguments, and multiple
+bound variables. It covers type and arity checks, repeated and nested
+metavariables, alternative projections, discarded arguments, and renaming of
+both binder lists. These tests do not require changes to the lambda parser.
 
 ## Usage
 

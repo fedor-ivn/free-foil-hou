@@ -28,10 +28,8 @@ module Language.Lambda.Huet (
 
 import Control.Monad.Foil (
   CoSinkable,
-  DExt,
   Distinct,
   DistinctEvidence (Distinct),
-  Name,
   NameBinder,
   NameBinderList (NameBinderListCons, NameBinderListEmpty),
   NameBinders,
@@ -45,14 +43,11 @@ import Control.Monad.Foil (
   assertDistinct,
   emptyNameMap,
   emptyScope,
-  extendScope,
   extendScopePattern,
   fromNameBinderRenaming,
   lookupName,
   nameMapToSubstitution,
-  nameOf,
   namesOfPattern,
-  sink,
   unifyNameBinders,
   withFresh,
  )
@@ -79,7 +74,6 @@ import Data.SOAS (
 import Data.ZipMatchK (ZipMatchK, zipMatch2)
 import Language.Lambda.Impl (
   FoilPattern (FoilAPattern),
-  MetaTerm,
   TermSig (..),
   matchPattern,
   pattern App',
@@ -87,19 +81,13 @@ import Language.Lambda.Impl (
  )
 import qualified Language.Lambda.Syntax.Abs as Raw
 
-withVar :: (Distinct n) => Scope n -> (forall l. (DExt n l) => NameBinder n l -> Scope l -> r) -> r
-withVar scope makeTerm = withFresh scope $ \x -> makeTerm x (extendScope x scope)
-
-lam'
-  :: (Distinct n)
-  => Raw.Type
-  -> Scope n
-  -> Raw.Type
-  -> (forall l. (DExt n l) => Name l -> Scope l -> MetaTerm metavar l Raw.Type)
-  -> MetaTerm metavar n Raw.Type
-lam' binderType scope returnType makeBody = withFresh scope $ \x ->
-  let body = makeBody (nameOf x) (extendScope x scope)
-   in Lam' (AnnBinder (FoilAPattern x) binderType) binderType body (Raw.Fun binderType returnType)
+-- $setup
+-- Helpers used only by the examples.
+-- >>> :set -XRankNTypes -XFlexibleContexts -XGADTs
+-- >>> import Control.Monad.Foil (DExt, Name, extendScope, nameOf, sink)
+-- >>> import Language.Lambda.Impl (MetaTerm)
+-- >>> let withVar :: (Distinct n) => Scope n -> (forall l. (DExt n l) => NameBinder n l -> Scope l -> r) -> r; withVar scope makeTerm = withFresh scope $ \x -> makeTerm x (extendScope x scope)
+-- >>> let lam' :: (Distinct n) => Raw.Type -> Scope n -> Raw.Type -> (forall l. (DExt n l) => Name l -> Scope l -> MetaTerm metavar l Raw.Type) -> MetaTerm metavar n Raw.Type; lam' binderType scope returnType makeBody = withFresh scope $ \x -> let body = makeBody (nameOf x) (extendScope x scope) in Lam' (AnnBinder (FoilAPattern x) binderType) binderType body (Raw.Fun binderType returnType)
 
 class (CoSinkable pattern_) => TypedUnifiablePattern typ pattern_ where
   typedUnifyPatterns :: (Distinct n) => pattern_ n l -> pattern_ n r -> UnifyNameBinders' typ pattern_ n l r

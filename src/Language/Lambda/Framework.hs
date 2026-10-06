@@ -392,7 +392,6 @@ main = mainFoo
 
 -- main = parseConfigAndValidate
 -- main = mainDebug
--- main = mainMatchDebug
 
 mainFoo :: IO ()
 mainFoo = do
@@ -400,7 +399,7 @@ mainFoo = do
   case config of
     Left err -> print err
     Right cfg -> do
-      forM_ (zip [1 ..] (configProblems cfg)) $ \(i, problem) -> do
+      forM_ (zip [1 :: Int ..] (configProblems cfg)) $ \(i, problem) -> do
         putStrLn $ "Problem #" ++ show i
         case solveByMatchingAndCompareToReferenceSolutionsWith problem of
           Left err -> print err
@@ -408,20 +407,6 @@ mainFoo = do
             forM_ result $ \(solution, comparison) -> do
               putStrLn $ "Solution: " ++ show solution
               putStrLn $ "Comparison: " ++ show comparison
-
-mainMatchDebug :: IO ()
-mainMatchDebug = either print print result
- where
-  result = do
-    let rawMetavarBinders = ["M : [t] t -> t", "H1 : [t] t -> t", "H2 : [t] t -> t"]
-    metavarBinders <- parseMetavarBinders rawMetavarBinders
-    let res = Map.lookup "M" metavarBinders
-    (argTypes, _) <- maybe (Left "not found") Right res
-    lhs <- parseMetaSubst metavarBinders "M[x] ↦ H1[x]"
-    rhs <- parseMetaSubst metavarBinders "M[x] ↦ H2[x]"
-    let (_, lhsAbs) = metaSubst lhs
-        (_, rhsAbs) = metaSubst rhs
-    pure $ matchMetaAbs argTypes metavarBinders lhsAbs rhsAbs
 
 -- mainDebug :: IO ()
 -- mainDebug = do

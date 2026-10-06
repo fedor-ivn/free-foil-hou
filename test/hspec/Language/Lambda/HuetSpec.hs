@@ -12,13 +12,11 @@ import System.Exit (exitFailure)
 import Test.Hspec
 
 import Data.SOAS (MetaAbs (..), MetaSubst (..), MetaSubsts (..))
-import Data.Text (unpack)
 import Language.Lambda.Config (
   CanonicalConstraint (..),
   CanonicalProblem,
   CanonicalSolution,
   Config (..),
-  Problem (..),
   Result,
   Solution (..),
  )
@@ -66,12 +64,17 @@ instance Framework.IsCanonicalSubstitutions (Huet.Substitutions Raw.Type Raw.Met
    where
     substs' = fmap (\(Huet.Substitution k parameters rhs) -> MetaSubst (k, MetaAbs parameters rhs)) substs
 
+  fromCanonicalSubstitution _ (MetaSubsts substs) = Right (Huet.Substitutions substs')
+   where
+    substs' = fmap (\(MetaSubst (k, MetaAbs parameters rhs)) -> Huet.Substitution k parameters rhs) substs
+
+forFile :: FilePath -> Spec
 forFile path = do
   Config{configProblems} <- runIO $ handleErr =<< decodeConfigFile path
-  forM_ (zip [1 ..] configProblems) $ \(i, problem) -> do
+  forM_ (zip [1 :: Int ..] configProblems) $ \(i, problem) -> do
     result <- runIO $ handleErr (solve problem)
     describe ("problem #" <> show i) $ do
-      forM_ (zip [1 ..] result) $ \(j, (_, comparison)) -> do
+      forM_ (zip [1 :: Int ..] result) $ \(j, (_, comparison)) -> do
         it ("solution #" <> show j) $ do
           comparison `shouldBe` Framework.Equivalent
 

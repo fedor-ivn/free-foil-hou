@@ -33,6 +33,7 @@ module Data.SOAS (
   match,
   push,
   toNameMap,
+  renameNameMap,
   applyMetaSubsts,
 
   -- * Utils
@@ -51,6 +52,8 @@ import Data.Bifunctor
 import Data.Bifunctor.Sum
 import Data.Bifunctor.TH
 import Data.Bitraversable (Bitraversable (bitraverse))
+import Data.Coerce (coerce)
+import qualified Data.IntMap.Strict as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (mapMaybe)
@@ -105,8 +108,12 @@ instance
     t == t' && Foil.unifyInPattern binder binder'
 
 instance
-  (Foil.UnifiablePattern binder)
+  (Eq t, Foil.UnifiablePattern binder)
   => Foil.UnifiablePattern (AnnBinder t binder)
+  where
+  unifyPatterns (AnnBinder lhs ty) (AnnBinder rhs ty')
+    | ty == ty' = coerce (Foil.unifyPatterns lhs rhs)
+    | otherwise = Foil.NotUnifiable
 
 class TypedBinder binder t where
   addBinderTypes
@@ -235,11 +242,21 @@ toNameMap nameMap (Foil.NameBinderListCons binder rest) (x : xs) =
   toNameMap (Foil.addNameBinder binder x nameMap) rest xs
 toNameMap _ _ _ = error "mismatched name list and argument list"
 
--- | Combine (compose) metavariable substitutions.
---
--- TODO: refactor
+-- | Transport a name map along an injective renaming of its scope.
+renameNameMap :: (Foil.Name n -> Foil.Name l) -> Foil.NameMap n a -> Foil.NameMap l a
+renameNameMap rename (Foil.NameMap entries) =
+  Foil.NameMap (IntMap.mapKeys (Foil.nameId . rename . Foil.UnsafeName) entries)
+
+-- | Read the type annotation of a term, consulting the context for variables.
+termType :: Foil.NameMap n t -> AST binder (AnnSig t sig) n -> t
+termType types (Var x) = Foil.lookupName x types
+termType _ (Node (AnnSig _ ty)) = ty
+
+-- | Combine compatible simultaneous substitutions, keeping one entry per name.
+-- The empty collection has one solution: the empty substitution.
 combineMetaSubsts
   :: ( Eq metavar
+     , Eq t
      , Bitraversable sig
      , ZipMatchK (Sum sig ext)
      , Foil.SinkableK binder
@@ -249,13 +266,14 @@ combineMetaSubsts
      )
   => [MetaSubsts (AnnBinder t binder) (AnnSig t (Sum sig ext)) metavar t]
   -> [MetaSubsts (AnnBinder t binder) (AnnSig t (Sum sig ext)) metavar t]
-combineMetaSubsts [] = []
-combineMetaSubsts (subst : substs) = foldr (mapMaybe . combine) [subst] substs
+combineMetaSubsts = foldr (mapMaybe . combine) [MetaSubsts []]
  where
   combine (MetaSubsts xs) (MetaSubsts ys)
     | conflicts = trace "there are conflicts" Nothing
-    | otherwise = trace "no conflicts" return (MetaSubsts (xs ++ ys))
+    | otherwise = trace "no conflicts" $
+        return (MetaSubsts (xs ++ filter isNew ys))
    where
+    isNew (MetaSubst (m, _)) = m `notElem` map (fst . metaSubst) xs
     conflicts = or $ do
       MetaSubst (m, MetaAbs binders body) <- xs
       MetaSubst (m', MetaAbs binders' body') <- ys
@@ -268,7 +286,23 @@ combineMetaSubsts (subst : substs) = foldr (mapMaybe . combine) [subst] substs
                 let scope = Foil.extendScopePattern binders Foil.emptyScope
                  in not (alphaEquiv scope body body')
           Foil.NotUnifiable -> True
-          _ -> error "unexpected renaming"
+          Foil.RenameLeftNameBinder _ rename ->
+            case Foil.assertDistinct binders' of
+              Foil.Distinct ->
+                let scope = Foil.extendScopePattern binders' Foil.emptyScope
+                 in not (alphaEquiv scope (Foil.liftRM scope (Foil.fromNameBinderRenaming rename) body) body')
+          Foil.RenameRightNameBinder _ rename ->
+            case Foil.assertDistinct binders of
+              Foil.Distinct ->
+                let scope = Foil.extendScopePattern binders Foil.emptyScope
+                 in not (alphaEquiv scope body (Foil.liftRM scope (Foil.fromNameBinderRenaming rename) body'))
+          Foil.RenameBothBinders common renameLeft renameRight ->
+            case Foil.assertDistinct common of
+              Foil.Distinct ->
+                let scope = Foil.extendScopePattern common Foil.emptyScope
+                 in not (alphaEquiv scope
+                      (Foil.liftRM scope (Foil.fromNameBinderRenaming renameLeft) body)
+                      (Foil.liftRM scope (Foil.fromNameBinderRenaming renameRight) body'))
 
 -- | Match left-hand side (with metavariables) against the rigid right-hand
 -- side.
@@ -283,6 +317,11 @@ combineMetaSubsts (subst : substs) = foldr (mapMaybe . combine) [subst] substs
 --   2. M[z₁, z₂] ↦ z₂
 --
 -- Hence, this function produces a list of possible substitutions.
+--
+-- Inputs must be well-scoped, with complete variable contexts and correct
+-- operator annotations. Matching checks the types of the compared terms and
+-- the declared arities and types of metavariables. It does not implement an
+-- object-language type checker.
 match
   :: ( Bitraversable sig
      , ZipMatchK sig
@@ -309,14 +348,16 @@ match
   -> AST (AnnBinder t binder) (AnnSig t (Sum sig ext)) n
   -- ^ The right hand side (rigid)
   -> [MetaSubsts (AnnBinder t binder) (AnnSig t (Sum sig ext)) metavar t]
-match scope metavarTypes varTypes lhs rhs =
-  trace "matching non-scoped lhs and rhs" $
+match scope metavarTypes varTypes lhs rhs
+  | termType varTypes lhs /= termType varTypes rhs = []
+  | otherwise = trace "matching non-scoped lhs and rhs" $
     case (lhs, rhs) of
       (Var x, Var y) | x == y -> trace "matched same vars" return (MetaSubsts [])
       (Node (AnnSig (R2 (MetaAppSig metavar args)) metavarType), _) ->
         case trace "looking up metavar" Map.lookup metavar metavarTypes of
-          -- todo: should we check here for type?
-          Just (argTypes, _) ->
+          Just (argTypes, resultType)
+            | resultType == metavarType
+            , argTypes == map (termType varTypes) args ->
             withFreshNameBinderList
               argTypes
               Foil.emptyScope
@@ -325,11 +366,11 @@ match scope metavarTypes varTypes lhs rhs =
               $ \scope' binderList _ ->
                 trace
                   "matching metavar"
-                  map
-                  ( \(term, MetaSubsts substs) ->
+                  concatMap
+                  ( \(term, substs) ->
                       let metaAbs = MetaAbs binderList term
                           subst = MetaSubst (metavar, metaAbs)
-                       in MetaSubsts (subst : substs)
+                       in combineMetaSubsts [MetaSubsts [subst], substs]
                   )
                   ( matchMetavar
                       scope'
@@ -398,8 +439,9 @@ matchScoped
   metavarTypes
   varTypes
   (ScopedAST (AnnBinder binder ann) lhs)
-  (ScopedAST (AnnBinder binder' ann') rhs) =
-    case trace "matching scoped terms" Foil.unifyPatterns binder binder' of
+  (ScopedAST (AnnBinder binder' ann') rhs)
+    | ann /= ann' = []
+    | otherwise = case trace "matching scoped terms" Foil.unifyPatterns binder binder' of
       -- \x.t1 = \x.t2
       Foil.SameNameBinders _ ->
         case trace "same name binders" Foil.assertDistinct binder of
@@ -422,15 +464,15 @@ matchScoped
                 varTypes' = addBinderTypes binder ann varTypes
                 rhs' = Foil.liftRM scope' (Foil.fromNameBinderRenaming rename) rhs
              in match scope' metavarTypes varTypes' lhs rhs'
-      Foil.RenameBothBinders{} -> error "not implemented"
-      -- Foil.RenameBothBinders binders rename1 rename2 ->
-      -- case trace "rename both binders" Foil.assertDistinct binders of
-      --   Foil.Distinct -> undefined
-      -- let scope' = Foil.extendScopePattern binders scope
-      --     varTypes' = addBinderTypes binder binderTypeLhs varTypes
-      --     lhs' = Foil.liftRM scope' (Foil.fromNameBinderRenaming rename1) lhs
-      --     rhs' = Foil.liftRM scope' (Foil.fromNameBinderRenaming rename2) rhs
-      --  in match scope' metavarTypes varTypes' lhs' rhs'
+      Foil.RenameBothBinders common renameLeft renameRight ->
+        case Foil.assertDistinct common of
+          Foil.Distinct ->
+            let scope' = Foil.extendScopePattern common scope
+                rename = Foil.fromNameBinderRenaming renameLeft
+                varTypes' = renameNameMap rename (addBinderTypes binder ann varTypes)
+                lhs' = Foil.liftRM scope' rename lhs
+                rhs' = Foil.liftRM scope' (Foil.fromNameBinderRenaming renameRight) rhs
+             in match scope' metavarTypes varTypes' lhs' rhs'
       Foil.NotUnifiable -> trace "not unifiable" []
 
 -- | A special case of 'match', when LHS is a parametrised metavariable.
@@ -484,7 +526,9 @@ matchMetavar
        , MetaSubsts (AnnBinder t binder) (AnnSig t (Sum sig ext)) metavar t
        )
      ]
-matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes args expectedType rhs =
+matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes args expectedType rhs
+  | expectedType /= termType varTypes rhs = []
+  | otherwise =
   let projections = project metavarNameBinders args
       imitations = trace "imitate on: " $ case rhs of
         Var _ -> []
@@ -498,16 +542,16 @@ matchMetavar metavarScope metavarTypes metavarNameBinders scope varTypes args ex
                   scope
                   varTypes
                   args
-                  expectedType
               )
-              ( matchMetavar
+              ( \child -> matchMetavar
                   metavarScope
                   metavarTypes
                   metavarNameBinders
                   scope
                   varTypes
                   args
-                  expectedType
+                  (termType varTypes child)
+                  child
               )
               sig
           let term = Node (bimap fst fst traversedSig)
@@ -563,8 +607,6 @@ matchMetavarScoped
   -> [TypedSOAS binder metavar sig n t]
   -- ^ A list of arguments of the parametrised metavariable on the left-hand
   -- side.
-  -> t
-  -- ^ The expected type of the right-hand side.
   -> ScopedAST (AnnBinder t binder) (AnnSig t (Sum sig ext)) n
   -> [ ( ScopedAST (AnnBinder t binder) (AnnSig t (Sum sig ext)) m
        , MetaSubsts (AnnBinder t binder) (AnnSig t (Sum sig ext)) metavar t
@@ -577,7 +619,6 @@ matchMetavarScoped
   scope
   varTypes
   args
-  expectedType
   (ScopedAST (AnnBinder binder binderType) rhs) =
     trace "matching metavar scoped" $
       case (Foil.assertExt binder, Foil.assertDistinct binder) of
@@ -602,7 +643,7 @@ matchMetavarScoped
                       scope'
                       varTypes'
                       args'
-                      expectedType
+                      (termType varTypes' rhs)
                       rhs
                in map (first (ScopedAST (AnnBinder metavarBinder binderType))) result
 

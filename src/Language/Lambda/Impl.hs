@@ -110,6 +110,7 @@ import Data.SOAS (
   TypedSOAS,
   match,
   push,
+  renameNameMap,
   toNameMap,
   pattern MetaApp,
  )
@@ -667,6 +668,15 @@ matchMetaAbs
                 argTypes = toNameMap Foil.emptyNameMap lhsBinderList metavarArgTypes
                 rhsTerm' = Foil.liftRM scope (Foil.fromNameBinderRenaming rename) rhsTerm
              in match scope metavarBinders argTypes lhsTerm rhsTerm'
-      Foil.RenameBothBinders _commonBinders _rename1 _rename2 -> undefined
+      Foil.RenameBothBinders commonBinders renameLeft renameRight ->
+        case Foil.assertDistinct commonBinders of
+          Foil.Distinct ->
+            let scope = Foil.extendScopePattern commonBinders Foil.emptyScope
+                rename = Foil.fromNameBinderRenaming renameLeft
+                argTypes = renameNameMap rename
+                  (toNameMap Foil.emptyNameMap lhsBinderList metavarArgTypes)
+                lhsTerm' = Foil.liftRM scope rename lhsTerm
+                rhsTerm' = Foil.liftRM scope (Foil.fromNameBinderRenaming renameRight) rhsTerm
+             in match scope metavarBinders argTypes lhsTerm' rhsTerm'
       Foil.NotUnifiable ->
         trace "Binders cannot be unified" []

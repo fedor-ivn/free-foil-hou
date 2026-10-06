@@ -1,0 +1,60 @@
+# Two incomparable projections.
+[[problems]]
+metavars = ["M: [t, t] t"]
+constraints = ["∀ x: t. M[x, x] = x"]
+[[problems.solutions]]
+metavars = []
+substitutions = ["M[x, y] ↦ x"]
+[[problems.solutions]]
+metavars = []
+substitutions = ["M[x, y] ↦ y"]
+
+# Repeated metavariables must receive the same value in both children.
+[[problems]]
+metavars = ["M: [t] t"]
+constraints = ["∀ f: t -> t -> t, x: t, y: t. f M[x] M[y] = f x y"]
+[[problems.solutions]]
+metavars = []
+substitutions = ["M[z] ↦ z"]
+
+# The same syntactic shape with incompatible assignments.
+[[problems]]
+metavars = ["M: [t] t"]
+constraints = ["∀ f: t -> t -> t, x: t, y: t. f M[x] M[y] = f x x"]
+
+# A discarded argument leaves its metavariable unconstrained.
+[[problems]]
+metavars = ["M: [t, t] t", "N: [t] t"]
+constraints = ["∀ x: t. M[x, N[x]] = x"]
+[[problems.solutions]]
+metavars = ["N: [t] t"]
+substitutions = ["M[x, y] ↦ x"]
+[[problems.solutions]]
+metavars = []
+substitutions = ["M[x, y] ↦ y", "N[x] ↦ x"]
+
+# A metavariable cannot capture a binder absent from its parameters.
+[[problems]]
+metavars = ["M: [] t"]
+constraints = ["∀ . λx:t.M[] = λx:t.x"]
+
+# Nested occurrences cannot choose different bodies for the same name.
+[[problems]]
+metavars = ["M: [t -> t, t] t"]
+constraints = ["∀ f: t -> t, x: t. M[f, M[f, x]] = f x"]
+
+# Consistent nested occurrences produce one assignment, not duplicate entries.
+[[problems]]
+metavars = ["M: [t -> t, t] t"]
+constraints = ["∀ f: t -> t, x: t. M[f, M[f, x]] = x"]
+[[problems.solutions]]
+metavars = []
+substitutions = ["M[f, x] ↦ x"]
+
+# Imitation under a fresh binder with no original parameters.
+[[problems]]
+metavars = ["M: [] t -> t"]
+constraints = ["∀ . M[] = λx:t.x"]
+[[problems.solutions]]
+metavars = []
+substitutions = ["M[] ↦ λx:t.x"]
