@@ -1,0 +1,132 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE CPP #-}</span><span>
+</span><span id="line-2"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Info</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-3"></span><span>  </span><span class="annot"><a href="Info.html#versionInfo"><span class="hs-identifier">versionInfo</span></a></span><span>
+</span><span id="line-4"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Info.html#info"><span class="hs-identifier">info</span></a></span><span>
+</span><span id="line-5"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Info.html#version"><span class="hs-identifier">version</span></a></span><span class="hs-cpp">
+#ifdef TEST
+</span><span class="hs-special">,</span><span> </span><span class="hs-identifier">formatInfo</span><span class="hs-cpp">
+#endif
+</span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-10"></span><span>
+</span><span id="line-11"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Imports.html"><span class="hs-identifier">Imports</span></a></span><span>
+</span><span id="line-12"></span><span>
+</span><span id="line-13"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.List</span></span><span>
+</span><span id="line-14"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.Process</span></span><span>
+</span><span id="line-15"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.IO.Unsafe</span></span><span class="hs-cpp">
+
+#if __GLASGOW_HASKELL__ &lt; 900
+</span><span class="hs-keyword">import</span><span>           </span><span class="hs-identifier">Config</span><span> </span><span class="hs-keyword">as</span><span> </span><span class="hs-identifier">GHC</span><span class="hs-cpp">
+#else
+</span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">GHC.Settings.Config</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">GHC</span></span><span class="hs-cpp">
+#endif
+</span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Interpreter.html"><span class="hs-identifier">Interpreter</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">ghc</span></span><span class="hs-special">)</span><span class="hs-cpp">
+
+#ifdef TEST
+</span><span>
+</span><span id="line-27"></span><span class="hs-identifier">version</span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-identifier">String</span><span>
+</span><span id="line-28"></span><span class="hs-identifier">version</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-string">&quot;0.0.0&quot;</span><span class="hs-cpp">
+
+#else
+</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Version</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">showVersion</span></span><span class="hs-special">)</span><span>
+</span><span id="line-33"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="Paths_doctest.html"><span class="hs-identifier">Paths_doctest</span></a></span><span>
+</span><span id="line-34"></span><span>
+</span><span id="line-35"></span><span class="annot"><a href="Info.html#version"><span class="hs-identifier hs-type">version</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-36"></span><span id="version"><span class="annot"><span class="annottext">version :: String
+</span><a href="Info.html#version"><span class="hs-identifier hs-var hs-var">version</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Version -&gt; String
+</span><span class="hs-identifier hs-var">showVersion</span></span><span> </span><span class="annot"><span class="annottext">Version
+</span><a href="Paths_doctest.html#version"><span class="hs-identifier hs-var">Paths_doctest.version</span></a></span><span class="hs-cpp">
+
+#endif
+</span><span>
+</span><span id="line-40"></span><span class="annot"><a href="Info.html#ghcVersion"><span class="hs-identifier hs-type">ghcVersion</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-41"></span><span id="ghcVersion"><span class="annot"><span class="annottext">ghcVersion :: String
+</span><a href="Info.html#ghcVersion"><span class="hs-identifier hs-var hs-var">ghcVersion</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-identifier hs-var">GHC.cProjectVersion</span></span><span>
+</span><span id="line-42"></span><span>
+</span><span id="line-43"></span><span class="annot"><a href="Info.html#versionInfo"><span class="hs-identifier hs-type">versionInfo</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-44"></span><span id="versionInfo"><span class="annot"><span class="annottext">versionInfo :: String
+</span><a href="Info.html#versionInfo"><span class="hs-identifier hs-var hs-var">versionInfo</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[String] -&gt; String
+</span><span class="hs-identifier hs-var">unlines</span></span><span> </span><span class="hs-special">[</span><span>
+</span><span id="line-45"></span><span>    </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;doctest version &quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="Info.html#version"><span class="hs-identifier hs-var">version</span></a></span><span>
+</span><span id="line-46"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;using version &quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="Info.html#ghcVersion"><span class="hs-identifier hs-var">ghcVersion</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot; of the GHC API&quot;</span></span><span>
+</span><span id="line-47"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;using &quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-identifier hs-var">ghc</span></span><span>
+</span><span id="line-48"></span><span>  </span><span class="hs-special">]</span><span>
+</span><span id="line-49"></span><span>
+</span><span id="line-50"></span><span class="annot"><a href="Info.html#info"><span class="hs-identifier hs-type">info</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-51"></span><span id="info"><span class="annot"><span class="annottext">info :: String
+</span><a href="Info.html#info"><span class="hs-identifier hs-var hs-var">info</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Info -&gt; String
+</span><a href="Info.html#formatInfo"><span class="hs-identifier hs-var">formatInfo</span></a></span><span> </span><span class="annot"><span class="annottext">(Info -&gt; String) -&gt; Info -&gt; String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-52"></span><span>    </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;version&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="Info.html#version"><span class="hs-identifier hs-var">version</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-53"></span><span>  </span><span class="annot"><span class="annottext">(String, String) -&gt; Info -&gt; Info
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;ghc_version&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="Info.html#ghcVersion"><span class="hs-identifier hs-var">ghcVersion</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-54"></span><span>  </span><span class="annot"><span class="annottext">(String, String) -&gt; Info -&gt; Info
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;ghc&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-identifier hs-var">ghc</span></span><span class="hs-special">)</span><span>
+</span><span id="line-55"></span><span>  </span><span class="annot"><span class="annottext">(String, String) -&gt; Info -&gt; Info
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">Info
+</span><a href="Info.html#ghcInfo"><span class="hs-identifier hs-var">ghcInfo</span></a></span><span>
+</span><span id="line-56"></span><span>
+</span><span id="line-57"></span><span class="hs-keyword">type</span><span> </span><span id="Info"><span class="annot"><a href="Info.html#Info"><span class="hs-identifier hs-var">Info</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-58"></span><span>
+</span><span id="line-59"></span><span class="annot"><a href="Info.html#ghcInfo"><span class="hs-identifier hs-type">ghcInfo</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Info.html#Info"><span class="hs-identifier hs-type">Info</span></a></span><span>
+</span><span id="line-60"></span><span id="ghcInfo"><span class="annot"><span class="annottext">ghcInfo :: Info
+</span><a href="Info.html#ghcInfo"><span class="hs-identifier hs-var hs-var">ghcInfo</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; Info
+forall a. Read a =&gt; String -&gt; a
+</span><span class="hs-identifier hs-var">read</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; Info) -&gt; String -&gt; Info
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">IO String -&gt; String
+forall a. IO a -&gt; a
+</span><span class="hs-identifier hs-var">unsafePerformIO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; String -&gt; IO String
+</span><span class="hs-identifier hs-var">readProcess</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-identifier hs-var">ghc</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--info&quot;</span></span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span class="hs-special">)</span><span>
+</span><span id="line-61"></span><span>
+</span><span id="line-62"></span><span class="annot"><a href="Info.html#formatInfo"><span class="hs-identifier hs-type">formatInfo</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Info.html#Info"><span class="hs-identifier hs-type">Info</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-63"></span><span id="formatInfo"><span class="annot"><span class="annottext">formatInfo :: Info -&gt; String
+</span><a href="Info.html#formatInfo"><span class="hs-identifier hs-var hs-var">formatInfo</span></a></span></span><span> </span><span id="local-6989586621679236852"><span class="annot"><span class="annottext">Info
+</span><a href="#local-6989586621679236852"><span class="hs-identifier hs-var">xs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot; [&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; String
+forall a. [a] -&gt; [[a]] -&gt; [a]
+</span><span class="hs-identifier hs-var">intercalate</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;\n ,&quot;</span></span><span> </span><span class="annot"><span class="annottext">([String] -&gt; String) -&gt; [String] -&gt; String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">((String, String) -&gt; String) -&gt; Info -&gt; [String]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">(String, String) -&gt; String
+forall a. Show a =&gt; a -&gt; String
+</span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">Info
+</span><a href="#local-6989586621679236852"><span class="hs-identifier hs-var">xs</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;\n ]\n&quot;</span></span><span>
+</span><span id="line-64"></span></pre></body></html>

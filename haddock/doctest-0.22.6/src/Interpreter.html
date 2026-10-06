@@ -1,0 +1,315 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE CPP #-}</span><span>
+</span><span id="line-2"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Interpreter</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-3"></span><span>  </span><span class="annot"><a href="Language.Haskell.GhciWrapper.html#Interpreter"><span class="hs-identifier">Interpreter</span></a></span><span>
+</span><span id="line-4"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Interpreter.html#safeEval"><span class="hs-identifier">safeEval</span></a></span><span>
+</span><span id="line-5"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Interpreter.html#safeEvalIt"><span class="hs-identifier">safeEvalIt</span></a></span><span>
+</span><span id="line-6"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Interpreter.html#withInterpreter"><span class="hs-identifier">withInterpreter</span></a></span><span>
+</span><span id="line-7"></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">ghc</span></span><span>
+</span><span id="line-8"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Interpreter.html#interpreterSupported"><span class="hs-identifier">interpreterSupported</span></a></span><span>
+</span><span id="line-9"></span><span>
+</span><span id="line-10"></span><span class="hs-comment">-- exported for testing</span><span>
+</span><span id="line-11"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Interpreter.html#ghcInfo"><span class="hs-identifier">ghcInfo</span></a></span><span>
+</span><span id="line-12"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Interpreter.html#haveInterpreterKey"><span class="hs-identifier">haveInterpreterKey</span></a></span><span>
+</span><span id="line-13"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Interpreter.html#filterExpression"><span class="hs-identifier">filterExpression</span></a></span><span>
+</span><span id="line-14"></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-15"></span><span>
+</span><span id="line-16"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Imports.html"><span class="hs-identifier">Imports</span></a></span><span>
+</span><span id="line-17"></span><span>
+</span><span id="line-18"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.Process</span></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.Directory</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">getPermissions</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">executable</span></span><span class="hs-special">)</span><span>
+</span><span id="line-20"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Exception</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">handle</span></span><span class="hs-special">)</span><span>
+</span><span id="line-21"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Char</span></span><span>
+</span><span id="line-22"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">GHC.Paths</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">ghc</span></span><span class="hs-special">)</span><span>
+</span><span id="line-23"></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Language.Haskell.GhciWrapper.html"><span class="hs-identifier">Language.Haskell.GhciWrapper</span></a></span><span>
+</span><span id="line-25"></span><span>
+</span><span id="line-26"></span><span class="annot"><a href="Interpreter.html#haveInterpreterKey"><span class="hs-identifier hs-type">haveInterpreterKey</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-27"></span><span id="haveInterpreterKey"><span class="annot"><span class="annottext">haveInterpreterKey :: String
+</span><a href="Interpreter.html#haveInterpreterKey"><span class="hs-identifier hs-var hs-var">haveInterpreterKey</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Have interpreter&quot;</span></span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span class="annot"><a href="Interpreter.html#ghcInfo"><span class="hs-identifier hs-type">ghcInfo</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-30"></span><span id="ghcInfo"><span class="annot"><span class="annottext">ghcInfo :: IO [(String, String)]
+</span><a href="Interpreter.html#ghcInfo"><span class="hs-identifier hs-var hs-var">ghcInfo</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; [(String, String)]
+forall a. Read a =&gt; String -&gt; a
+</span><span class="hs-identifier hs-var">read</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; [(String, String)])
+-&gt; IO String -&gt; IO [(String, String)]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; String -&gt; IO String
+</span><span class="hs-identifier hs-var">readProcess</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-identifier hs-var">ghc</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--info&quot;</span></span><span class="hs-special">]</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-31"></span><span>
+</span><span id="line-32"></span><span class="annot"><a href="Interpreter.html#interpreterSupported"><span class="hs-identifier hs-type">interpreterSupported</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-33"></span><span id="interpreterSupported"><span class="annot"><span class="annottext">interpreterSupported :: IO Bool
+</span><a href="Interpreter.html#interpreterSupported"><span class="hs-identifier hs-var hs-var">interpreterSupported</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-34"></span><span>  </span><span class="hs-comment">-- in a perfect world this permission check should never fail, but I know of</span><span>
+</span><span id="line-35"></span><span>  </span><span class="hs-comment">-- at least one case where it did..</span><span>
+</span><span id="line-36"></span><span>  </span><span id="local-6989586621679236447"><span class="annot"><span class="annottext">Permissions
+</span><a href="#local-6989586621679236447"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; IO Permissions
+</span><span class="hs-identifier hs-var">getPermissions</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-identifier hs-var">ghc</span></span><span>
+</span><span id="line-37"></span><span>  </span><span class="annot"><span class="annottext">Bool -&gt; IO () -&gt; IO ()
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">unless</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Permissions -&gt; Bool
+</span><span class="hs-identifier hs-var">executable</span></span><span> </span><span class="annot"><span class="annottext">Permissions
+</span><a href="#local-6989586621679236447"><span class="hs-identifier hs-var">x</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; IO ()) -&gt; IO () -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-38"></span><span>    </span><span class="annot"><span class="annottext">String -&gt; IO ()
+forall a. String -&gt; IO a
+forall (m :: * -&gt; *) a. MonadFail m =&gt; String -&gt; m a
+</span><span class="hs-identifier hs-var">fail</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; IO ()) -&gt; String -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-identifier hs-var">ghc</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot; is not executable!&quot;</span></span><span>
+</span><span id="line-39"></span><span>
+</span><span id="line-40"></span><span>  </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Maybe String -&gt; Maybe String -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Maybe String
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;YES&quot;</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Maybe String -&gt; Bool)
+-&gt; ([(String, String)] -&gt; Maybe String)
+-&gt; [(String, String)]
+-&gt; Bool
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [(String, String)] -&gt; Maybe String
+forall a b. Eq a =&gt; a -&gt; [(a, b)] -&gt; Maybe b
+</span><span class="hs-identifier hs-var">lookup</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="Interpreter.html#haveInterpreterKey"><span class="hs-identifier hs-var">haveInterpreterKey</span></a></span><span> </span><span class="annot"><span class="annottext">([(String, String)] -&gt; Bool) -&gt; IO [(String, String)] -&gt; IO Bool
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">IO [(String, String)]
+</span><a href="Interpreter.html#ghcInfo"><span class="hs-identifier hs-var">ghcInfo</span></a></span><span>
+</span><span id="line-41"></span><span>
+</span><span id="line-42"></span><span id="local-6989586621679236375"><span class="annot"><a href="Interpreter.html#withInterpreter"><span class="hs-identifier hs-type">withInterpreter</span></a></span><span>
+</span><span id="line-43"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-44"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Language.Haskell.GhciWrapper.html#Interpreter"><span class="hs-identifier hs-type">Interpreter</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="#local-6989586621679236375"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span>  </span><span class="annot"><span class="hs-comment">-- ^ Action to run</span></span><span>
+</span><span id="line-45"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="#local-6989586621679236375"><span class="hs-identifier hs-type">a</span></a></span></span><span>                   </span><span class="annot"><span class="hs-comment">-- ^ Result of action</span></span><span>
+</span><span id="line-46"></span><span id="withInterpreter"><span class="annot"><span class="annottext">withInterpreter :: forall a. (String, [String]) -&gt; (Interpreter -&gt; IO a) -&gt; IO a
+</span><a href="Interpreter.html#withInterpreter"><span class="hs-identifier hs-var hs-var">withInterpreter</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679236451"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236451"><span class="hs-identifier hs-var">command</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679236452"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679236452"><span class="hs-identifier hs-var">flags</span></a></span></span><span class="hs-special">)</span><span> </span><span id="local-6989586621679236453"><span class="annot"><span class="annottext">Interpreter -&gt; IO a
+</span><a href="#local-6989586621679236453"><span class="hs-identifier hs-var">action</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-47"></span><span>  </span><span class="hs-keyword">let</span><span>
+</span><span id="line-48"></span><span>    </span><span id="local-6989586621679236454"><span class="annot"><span class="annottext">args :: [String]
+</span><a href="#local-6989586621679236454"><span class="hs-identifier hs-var hs-var">args</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679236452"><span class="hs-identifier hs-var">flags</span></a></span><span> </span><span class="annot"><span class="annottext">[String] -&gt; [String] -&gt; [String]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="hs-special">[</span><span>
+</span><span id="line-49"></span><span>        </span><span class="annot"><span class="annottext">String
+</span><a href="Interpreter.html#xTemplateHaskell"><span class="hs-identifier hs-var">xTemplateHaskell</span></a></span><span class="hs-cpp">
+#if __GLASGOW_HASKELL__ &gt;= 802
+</span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;-fdiagnostics-color=never&quot;</span></span><span>
+</span><span id="line-52"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;-fno-diagnostics-show-caret&quot;</span></span><span class="hs-cpp">
+#endif
+</span><span class="hs-cpp">#if __GLASGOW_HASKELL__ &gt;= 810 &amp;&amp; __GLASGOW_HASKELL__ &lt; 904
+</span><span>      </span><span class="hs-special">,</span><span> </span><span class="hs-string">&quot;-Wno-unused-packages&quot;</span><span class="hs-cpp">
+#endif
+</span><span>      </span><span class="hs-special">]</span><span>
+</span><span id="line-58"></span><span>  </span><span class="annot"><span class="annottext">IO Interpreter
+-&gt; (Interpreter -&gt; IO ()) -&gt; (Interpreter -&gt; IO a) -&gt; IO a
+forall a b c. IO a -&gt; (a -&gt; IO b) -&gt; (a -&gt; IO c) -&gt; IO c
+</span><span class="hs-identifier hs-var">bracket</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Config -&gt; [String] -&gt; IO Interpreter
+</span><a href="Language.Haskell.GhciWrapper.html#new"><span class="hs-identifier hs-var">new</span></a></span><span> </span><span class="annot"><span class="annottext">Config
+</span><a href="Language.Haskell.GhciWrapper.html#defaultConfig"><span class="hs-identifier hs-var">defaultConfig</span></a></span><span class="hs-special">{</span><span class="annot"><a href="Language.Haskell.GhciWrapper.html#configGhci"><span class="hs-identifier hs-var">configGhci</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="#local-6989586621679236451"><span class="hs-identifier hs-type">command</span></a></span><span class="hs-special">}</span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679236454"><span class="hs-identifier hs-var">args</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Interpreter -&gt; IO ()
+</span><a href="Language.Haskell.GhciWrapper.html#close"><span class="hs-identifier hs-var">close</span></a></span><span> </span><span class="annot"><span class="annottext">Interpreter -&gt; IO a
+</span><a href="#local-6989586621679236453"><span class="hs-identifier hs-var">action</span></a></span><span>
+</span><span id="line-59"></span><span>
+</span><span id="line-60"></span><span class="annot"><a href="Interpreter.html#xTemplateHaskell"><span class="hs-identifier hs-type">xTemplateHaskell</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-61"></span><span id="xTemplateHaskell"><span class="annot"><span class="annottext">xTemplateHaskell :: String
+</span><a href="Interpreter.html#xTemplateHaskell"><span class="hs-identifier hs-var hs-var">xTemplateHaskell</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;-XTemplateHaskell&quot;</span></span><span>
+</span><span id="line-62"></span><span>
+</span><span id="line-63"></span><span class="hs-comment">-- | Evaluate an expression; return a Left value on exceptions.</span><span>
+</span><span id="line-64"></span><span class="hs-comment">--</span><span>
+</span><span id="line-65"></span><span class="hs-comment">-- An exception may e.g. be caused on unterminated multiline expressions.</span><span>
+</span><span id="line-66"></span><span class="annot"><a href="Interpreter.html#safeEval"><span class="hs-identifier hs-type">safeEval</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Language.Haskell.GhciWrapper.html#Interpreter"><span class="hs-identifier hs-type">Interpreter</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">)</span><span>
+</span><span id="line-67"></span><span id="safeEval"><span class="annot"><span class="annottext">safeEval :: Interpreter -&gt; String -&gt; IO (Either String String)
+</span><a href="Interpreter.html#safeEval"><span class="hs-identifier hs-var hs-var">safeEval</span></a></span></span><span> </span><span id="local-6989586621679236461"><span class="annot"><span class="annottext">Interpreter
+</span><a href="#local-6989586621679236461"><span class="hs-identifier hs-var">repl</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(String -&gt; IO (Either String String))
+-&gt; (String -&gt; IO (Either String String))
+-&gt; Either String String
+-&gt; IO (Either String String)
+forall a c b. (a -&gt; c) -&gt; (b -&gt; c) -&gt; Either a b -&gt; c
+</span><span class="hs-identifier hs-var">either</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Either String String -&gt; IO (Either String String)
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Either String String -&gt; IO (Either String String))
+-&gt; (String -&gt; Either String String)
+-&gt; String
+-&gt; IO (Either String String)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Either String String
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(String -&gt; Either String String)
+-&gt; IO String -&gt; IO (Either String String)
+forall a b. (a -&gt; b) -&gt; IO a -&gt; IO b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Either String String
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="annot"><span class="annottext">(IO String -&gt; IO (Either String String))
+-&gt; (String -&gt; IO String) -&gt; String -&gt; IO (Either String String)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Interpreter -&gt; String -&gt; IO String
+</span><a href="Language.Haskell.GhciWrapper.html#eval"><span class="hs-identifier hs-var">eval</span></a></span><span> </span><span class="annot"><span class="annottext">Interpreter
+</span><a href="#local-6989586621679236461"><span class="hs-identifier hs-var">repl</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Either String String -&gt; IO (Either String String))
+-&gt; (String -&gt; Either String String)
+-&gt; String
+-&gt; IO (Either String String)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Either String String
+</span><a href="Interpreter.html#filterExpression"><span class="hs-identifier hs-var">filterExpression</span></a></span><span>
+</span><span id="line-68"></span><span>
+</span><span id="line-69"></span><span class="annot"><a href="Interpreter.html#safeEvalIt"><span class="hs-identifier hs-type">safeEvalIt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Language.Haskell.GhciWrapper.html#Interpreter"><span class="hs-identifier hs-type">Interpreter</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">)</span><span>
+</span><span id="line-70"></span><span id="safeEvalIt"><span class="annot"><span class="annottext">safeEvalIt :: Interpreter -&gt; String -&gt; IO (Either String String)
+</span><a href="Interpreter.html#safeEvalIt"><span class="hs-identifier hs-var hs-var">safeEvalIt</span></a></span></span><span> </span><span id="local-6989586621679236464"><span class="annot"><span class="annottext">Interpreter
+</span><a href="#local-6989586621679236464"><span class="hs-identifier hs-var">repl</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(String -&gt; IO (Either String String))
+-&gt; (String -&gt; IO (Either String String))
+-&gt; Either String String
+-&gt; IO (Either String String)
+forall a c b. (a -&gt; c) -&gt; (b -&gt; c) -&gt; Either a b -&gt; c
+</span><span class="hs-identifier hs-var">either</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Either String String -&gt; IO (Either String String)
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(Either String String -&gt; IO (Either String String))
+-&gt; (String -&gt; Either String String)
+-&gt; String
+-&gt; IO (Either String String)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Either String String
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(String -&gt; Either String String)
+-&gt; IO String -&gt; IO (Either String String)
+forall a b. (a -&gt; b) -&gt; IO a -&gt; IO b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Either String String
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="annot"><span class="annottext">(IO String -&gt; IO (Either String String))
+-&gt; (String -&gt; IO String) -&gt; String -&gt; IO (Either String String)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Interpreter -&gt; String -&gt; IO String
+</span><a href="Language.Haskell.GhciWrapper.html#evalIt"><span class="hs-identifier hs-var">evalIt</span></a></span><span> </span><span class="annot"><span class="annottext">Interpreter
+</span><a href="#local-6989586621679236464"><span class="hs-identifier hs-var">repl</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Either String String -&gt; IO (Either String String))
+-&gt; (String -&gt; Either String String)
+-&gt; String
+-&gt; IO (Either String String)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Either String String
+</span><a href="Interpreter.html#filterExpression"><span class="hs-identifier hs-var">filterExpression</span></a></span><span>
+</span><span id="line-71"></span><span>
+</span><span id="line-72"></span><span class="annot"><a href="Interpreter.html#filterExpression"><span class="hs-identifier hs-type">filterExpression</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-73"></span><span id="filterExpression"><span class="annot"><span class="annottext">filterExpression :: String -&gt; Either String String
+</span><a href="Interpreter.html#filterExpression"><span class="hs-identifier hs-var hs-var">filterExpression</span></a></span></span><span> </span><span id="local-6989586621679236466"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236466"><span class="hs-identifier hs-var">e</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-74"></span><span>  </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">String -&gt; [String]
+</span><span class="hs-identifier hs-var">lines</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236466"><span class="hs-identifier hs-var">e</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-75"></span><span>    </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; Either String String
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236466"><span class="hs-identifier hs-var">e</span></a></span><span>
+</span><span id="line-76"></span><span>    </span><span id="local-6989586621679236468"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679236468"><span class="hs-identifier hs-var">l</span></a></span></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">if</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236469"><span class="hs-identifier hs-var">firstLine</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;:{&quot;</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236471"><span class="hs-identifier hs-var">lastLine</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;:}&quot;</span></span><span> </span><span class="hs-keyword">then</span><span> </span><span class="annot"><span class="annottext">Either String String
+forall {b}. Either String b
+</span><a href="#local-6989586621679236473"><span class="hs-identifier hs-var">err</span></a></span><span> </span><span class="hs-keyword">else</span><span> </span><span class="annot"><span class="annottext">String -&gt; Either String String
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="Interpreter.html#filterXTemplateHaskell"><span class="hs-identifier hs-var">filterXTemplateHaskell</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236466"><span class="hs-identifier hs-var">e</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-77"></span><span>      </span><span class="hs-keyword">where</span><span>
+</span><span id="line-78"></span><span>        </span><span id="local-6989586621679236469"><span class="annot"><span class="annottext">firstLine :: String
+</span><a href="#local-6989586621679236469"><span class="hs-identifier hs-var hs-var">firstLine</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="#local-6989586621679236477"><span class="hs-identifier hs-var">strip</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; String -&gt; String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[String] -&gt; String
+forall a. HasCallStack =&gt; [a] -&gt; a
+</span><span class="hs-identifier hs-var">head</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679236468"><span class="hs-identifier hs-var">l</span></a></span><span>
+</span><span id="line-79"></span><span>        </span><span id="local-6989586621679236471"><span class="annot"><span class="annottext">lastLine :: String
+</span><a href="#local-6989586621679236471"><span class="hs-identifier hs-var hs-var">lastLine</span></a></span></span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+</span><a href="#local-6989586621679236477"><span class="hs-identifier hs-var">strip</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; String -&gt; String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[String] -&gt; String
+forall a. HasCallStack =&gt; [a] -&gt; a
+</span><span class="hs-identifier hs-var">last</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679236468"><span class="hs-identifier hs-var">l</span></a></span><span>
+</span><span id="line-80"></span><span>        </span><span id="local-6989586621679236473"><span class="annot"><span class="annottext">err :: Either String b
+</span><a href="#local-6989586621679236473"><span class="hs-identifier hs-var hs-var">err</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; Either String b
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;unterminated multi-line command&quot;</span></span><span>
+</span><span id="line-81"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-82"></span><span>    </span><span class="annot"><a href="#local-6989586621679236477"><span class="hs-identifier hs-type">strip</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-83"></span><span>    </span><span id="local-6989586621679236477"><span class="annot"><span class="annottext">strip :: String -&gt; String
+</span><a href="#local-6989586621679236477"><span class="hs-identifier hs-var hs-var">strip</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; String -&gt; String
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">dropWhile</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; Bool
+</span><span class="hs-identifier hs-var">isSpace</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; (String -&gt; String) -&gt; String -&gt; String
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; (String -&gt; String) -&gt; String -&gt; String
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; String -&gt; String
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">dropWhile</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; Bool
+</span><span class="hs-identifier hs-var">isSpace</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; (String -&gt; String) -&gt; String -&gt; String
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span>
+</span><span id="line-84"></span><span>
+</span><span id="line-85"></span><span class="annot"><a href="Interpreter.html#filterXTemplateHaskell"><span class="hs-identifier hs-type">filterXTemplateHaskell</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-86"></span><span id="filterXTemplateHaskell"><span class="annot"><span class="annottext">filterXTemplateHaskell :: String -&gt; String
+</span><a href="Interpreter.html#filterXTemplateHaskell"><span class="hs-identifier hs-var hs-var">filterXTemplateHaskell</span></a></span></span><span> </span><span id="local-6989586621679236485"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236485"><span class="hs-identifier hs-var">input</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">String -&gt; [String]
+</span><span class="hs-identifier hs-var">words</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236485"><span class="hs-identifier hs-var">input</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-87"></span><span>  </span><span class="hs-special">[</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;:set&quot;</span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679236487"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236487"><span class="hs-identifier hs-var">setting</span></a></span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236487"><span class="hs-identifier hs-var">setting</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="Interpreter.html#xTemplateHaskell"><span class="hs-identifier hs-var">xTemplateHaskell</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span>
+</span><span id="line-88"></span><span>  </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;:set&quot;</span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span id="local-6989586621679236488"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679236488"><span class="hs-identifier hs-var">xs</span></a></span></span><span> </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="Interpreter.html#xTemplateHaskell"><span class="hs-identifier hs-var">xTemplateHaskell</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; Bool
+forall a. Eq a =&gt; a -&gt; [a] -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679236488"><span class="hs-identifier hs-var">xs</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[String] -&gt; String
+</span><span class="hs-identifier hs-var">unwords</span></span><span> </span><span class="annot"><span class="annottext">([String] -&gt; String) -&gt; [String] -&gt; String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;:set&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; Bool) -&gt; [String] -&gt; [String]
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">filter</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; String -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="Interpreter.html#xTemplateHaskell"><span class="hs-identifier hs-var">xTemplateHaskell</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679236488"><span class="hs-identifier hs-var">xs</span></a></span><span>
+</span><span id="line-89"></span><span>  </span><span class="annot"><span class="annottext">[String]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236485"><span class="hs-identifier hs-var">input</span></a></span><span>
+</span><span id="line-90"></span></pre></body></html>

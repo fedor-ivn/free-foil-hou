@@ -1,0 +1,538 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE CPP #-}</span><span>
+</span><span id="line-2"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Options</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-3"></span><span>  </span><span class="annot"><a href="Options.html#Result"><span class="hs-identifier">Result</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-4"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier">Run</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-5"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Options.html#Config"><span class="hs-identifier">Config</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-6"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Options.html#defaultConfig"><span class="hs-identifier">defaultConfig</span></a></span><span>
+</span><span id="line-7"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Options.html#parseOptions"><span class="hs-identifier">parseOptions</span></a></span><span class="hs-cpp">
+#ifdef TEST
+</span><span class="hs-special">,</span><span> </span><span class="hs-identifier">defaultRun</span><span>
+</span><span id="line-10"></span><span class="hs-special">,</span><span> </span><span class="hs-identifier">usage</span><span>
+</span><span id="line-11"></span><span class="hs-special">,</span><span> </span><span class="hs-identifier">info</span><span>
+</span><span id="line-12"></span><span class="hs-special">,</span><span> </span><span class="hs-identifier">versionInfo</span><span>
+</span><span id="line-13"></span><span class="hs-special">,</span><span> </span><span class="hs-identifier">nonInteractiveGhcOptions</span><span class="hs-cpp">
+#endif
+</span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-16"></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Imports.html"><span class="hs-identifier">Imports</span></a></span><span>
+</span><span id="line-18"></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.Monad.Trans.RWS</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">RWS</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">execRWS</span></span><span class="hs-special">)</span><span>
+</span><span id="line-20"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.Trans.RWS</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">RWS</span></span><span>
+</span><span id="line-21"></span><span>
+</span><span id="line-22"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.List</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">stripPrefix</span></span><span class="hs-special">)</span><span>
+</span><span id="line-23"></span><span>
+</span><span id="line-24"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">GHC.Paths</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">ghc</span></span><span class="hs-special">)</span><span>
+</span><span id="line-25"></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Info.html"><span class="hs-identifier">Info</span></a></span><span>
+</span><span id="line-27"></span><span>
+</span><span id="line-28"></span><span class="annot"><a href="Options.html#usage"><span class="hs-identifier hs-type">usage</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-29"></span><span id="usage"><span class="annot"><span class="annottext">usage :: String
+</span><a href="Options.html#usage"><span class="hs-identifier hs-var hs-var">usage</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[String] -&gt; String
+</span><span class="hs-identifier hs-var">unlines</span></span><span> </span><span class="hs-special">[</span><span>
+</span><span id="line-30"></span><span>    </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Usage:&quot;</span></span><span>
+</span><span id="line-31"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;  doctest [ --fast | --preserve-it | --no-magic | --verbose | GHC OPTION | MODULE ]...&quot;</span></span><span>
+</span><span id="line-32"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;  doctest --help&quot;</span></span><span>
+</span><span id="line-33"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;  doctest --version&quot;</span></span><span>
+</span><span id="line-34"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;  doctest --info&quot;</span></span><span>
+</span><span id="line-35"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span>
+</span><span id="line-36"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Options:&quot;</span></span><span>
+</span><span id="line-37"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;  --fast         disable :reload between example groups&quot;</span></span><span>
+</span><span id="line-38"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;  --preserve-it  preserve the `it` variable between examples&quot;</span></span><span>
+</span><span id="line-39"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;  --verbose      print each test as it is run&quot;</span></span><span>
+</span><span id="line-40"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;  --help         display this help and exit&quot;</span></span><span>
+</span><span id="line-41"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;  --version      output version information and exit&quot;</span></span><span>
+</span><span id="line-42"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;  --info         output machine-readable version information and exit&quot;</span></span><span>
+</span><span id="line-43"></span><span>  </span><span class="hs-special">]</span><span>
+</span><span id="line-44"></span><span>
+</span><span id="line-45"></span><span class="hs-keyword">data</span><span> </span><span id="Result"><span class="annot"><a href="Options.html#Result"><span class="hs-identifier hs-var">Result</span></a></span></span><span> </span><span id="local-6989586621679236889"><span class="annot"><a href="#local-6989586621679236889"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="ProxyToGhc"><span class="annot"><a href="Options.html#ProxyToGhc"><span class="hs-identifier hs-var">ProxyToGhc</span></a></span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">|</span><span> </span><span id="Output"><span class="annot"><a href="Options.html#Output"><span class="hs-identifier hs-var">Output</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="Result"><span class="annot"><a href="Options.html#Result"><span class="hs-identifier hs-var">Result</span></a></span></span><span> </span><span class="annot"><a href="#local-6989586621679236889"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-46"></span><span>  </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679236976"><span id="local-6989586621679236981"><span class="annot"><span class="annottext">Result a -&gt; Result a -&gt; Bool
+(Result a -&gt; Result a -&gt; Bool)
+-&gt; (Result a -&gt; Result a -&gt; Bool) -&gt; Eq (Result a)
+forall a. Eq a =&gt; Result a -&gt; Result a -&gt; Bool
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: forall a. Eq a =&gt; Result a -&gt; Result a -&gt; Bool
+== :: Result a -&gt; Result a -&gt; Bool
+$c/= :: forall a. Eq a =&gt; Result a -&gt; Result a -&gt; Bool
+/= :: Result a -&gt; Result a -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679236987"><span id="local-6989586621679236998"><span id="local-6989586621679237002"><span class="annot"><span class="annottext">Int -&gt; Result a -&gt; ShowS
+[Result a] -&gt; ShowS
+Result a -&gt; String
+(Int -&gt; Result a -&gt; ShowS)
+-&gt; (Result a -&gt; String) -&gt; ([Result a] -&gt; ShowS) -&gt; Show (Result a)
+forall a. Show a =&gt; Int -&gt; Result a -&gt; ShowS
+forall a. Show a =&gt; [Result a] -&gt; ShowS
+forall a. Show a =&gt; Result a -&gt; String
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: forall a. Show a =&gt; Int -&gt; Result a -&gt; ShowS
+showsPrec :: Int -&gt; Result a -&gt; ShowS
+$cshow :: forall a. Show a =&gt; Result a -&gt; String
+show :: Result a -&gt; String
+$cshowList :: forall a. Show a =&gt; [Result a] -&gt; ShowS
+showList :: [Result a] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679237008"><span id="local-6989586621679237010"><span class="annot"><span class="annottext">(forall a b. (a -&gt; b) -&gt; Result a -&gt; Result b)
+-&gt; (forall a b. a -&gt; Result b -&gt; Result a) -&gt; Functor Result
+forall a b. a -&gt; Result b -&gt; Result a
+forall a b. (a -&gt; b) -&gt; Result a -&gt; Result b
+forall (f :: * -&gt; *).
+(forall a b. (a -&gt; b) -&gt; f a -&gt; f b)
+-&gt; (forall a b. a -&gt; f b -&gt; f a) -&gt; Functor f
+$cfmap :: forall a b. (a -&gt; b) -&gt; Result a -&gt; Result b
+fmap :: forall a b. (a -&gt; b) -&gt; Result a -&gt; Result b
+$c&lt;$ :: forall a b. a -&gt; Result b -&gt; Result a
+&lt;$ :: forall a b. a -&gt; Result b -&gt; Result a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Functor</span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-keyword">type</span><span> </span><span id="Warning"><span class="annot"><a href="Options.html#Warning"><span class="hs-identifier hs-var">Warning</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-49"></span><span>
+</span><span id="line-50"></span><span class="hs-keyword">data</span><span> </span><span id="Run"><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-var">Run</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Run"><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-var">Run</span></a></span></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-51"></span><span>  </span><span id="runWarnings"><span class="annot"><span class="annottext">Run -&gt; [String]
+</span><a href="Options.html#runWarnings"><span class="hs-identifier hs-var hs-var">runWarnings</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Options.html#Warning"><span class="hs-identifier hs-type">Warning</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-52"></span><span class="hs-special">,</span><span> </span><span id="runMagicMode"><span class="annot"><span class="annottext">Run -&gt; Bool
+</span><a href="Options.html#runMagicMode"><span class="hs-identifier hs-var hs-var">runMagicMode</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-53"></span><span class="hs-special">,</span><span> </span><span id="runConfig"><span class="annot"><span class="annottext">Run -&gt; Config
+</span><a href="Options.html#runConfig"><span class="hs-identifier hs-var hs-var">runConfig</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Options.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span>
+</span><span id="line-54"></span><span class="hs-special">}</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679237019"><span id="local-6989586621679237026"><span class="annot"><span class="annottext">Run -&gt; Run -&gt; Bool
+(Run -&gt; Run -&gt; Bool) -&gt; (Run -&gt; Run -&gt; Bool) -&gt; Eq Run
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: Run -&gt; Run -&gt; Bool
+== :: Run -&gt; Run -&gt; Bool
+$c/= :: Run -&gt; Run -&gt; Bool
+/= :: Run -&gt; Run -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679237030"><span id="local-6989586621679237039"><span id="local-6989586621679237043"><span class="annot"><span class="annottext">Int -&gt; Run -&gt; ShowS
+[Run] -&gt; ShowS
+Run -&gt; String
+(Int -&gt; Run -&gt; ShowS)
+-&gt; (Run -&gt; String) -&gt; ([Run] -&gt; ShowS) -&gt; Show Run
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; Run -&gt; ShowS
+showsPrec :: Int -&gt; Run -&gt; ShowS
+$cshow :: Run -&gt; String
+show :: Run -&gt; String
+$cshowList :: [Run] -&gt; ShowS
+showList :: [Run] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-55"></span><span>
+</span><span id="line-56"></span><span class="hs-keyword">data</span><span> </span><span id="Config"><span class="annot"><a href="Options.html#Config"><span class="hs-identifier hs-var">Config</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Config"><span class="annot"><a href="Options.html#Config"><span class="hs-identifier hs-var">Config</span></a></span></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-57"></span><span>  </span><span id="ghcOptions"><span class="annot"><span class="annottext">Config -&gt; [String]
+</span><a href="Options.html#ghcOptions"><span class="hs-identifier hs-var hs-var">ghcOptions</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>
+</span><span id="line-58"></span><span class="hs-special">,</span><span> </span><span id="fastMode"><span class="annot"><span class="annottext">Config -&gt; Bool
+</span><a href="Options.html#fastMode"><span class="hs-identifier hs-var hs-var">fastMode</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-59"></span><span class="hs-special">,</span><span> </span><span id="preserveIt"><span class="annot"><span class="annottext">Config -&gt; Bool
+</span><a href="Options.html#preserveIt"><span class="hs-identifier hs-var hs-var">preserveIt</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-60"></span><span class="hs-special">,</span><span> </span><span id="verbose"><span class="annot"><span class="annottext">Config -&gt; Bool
+</span><a href="Options.html#verbose"><span class="hs-identifier hs-var hs-var">verbose</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-61"></span><span class="hs-special">,</span><span> </span><span id="repl"><span class="annot"><span class="annottext">Config -&gt; (String, [String])
+</span><a href="Options.html#repl"><span class="hs-identifier hs-var hs-var">repl</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-62"></span><span class="hs-special">}</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679237053"><span id="local-6989586621679237061"><span class="annot"><span class="annottext">Config -&gt; Config -&gt; Bool
+(Config -&gt; Config -&gt; Bool)
+-&gt; (Config -&gt; Config -&gt; Bool) -&gt; Eq Config
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: Config -&gt; Config -&gt; Bool
+== :: Config -&gt; Config -&gt; Bool
+$c/= :: Config -&gt; Config -&gt; Bool
+/= :: Config -&gt; Config -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679237064"><span id="local-6989586621679237074"><span id="local-6989586621679237077"><span class="annot"><span class="annottext">Int -&gt; Config -&gt; ShowS
+[Config] -&gt; ShowS
+Config -&gt; String
+(Int -&gt; Config -&gt; ShowS)
+-&gt; (Config -&gt; String) -&gt; ([Config] -&gt; ShowS) -&gt; Show Config
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; Config -&gt; ShowS
+showsPrec :: Int -&gt; Config -&gt; ShowS
+$cshow :: Config -&gt; String
+show :: Config -&gt; String
+$cshowList :: [Config] -&gt; ShowS
+showList :: [Config] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-63"></span><span>
+</span><span id="line-64"></span><span class="annot"><a href="Options.html#defaultConfig"><span class="hs-identifier hs-type">defaultConfig</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Options.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span>
+</span><span id="line-65"></span><span id="defaultConfig"><span class="annot"><span class="annottext">defaultConfig :: Config
+</span><a href="Options.html#defaultConfig"><span class="hs-identifier hs-var hs-var">defaultConfig</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Options.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-66"></span><span>  </span><span class="annot"><span class="annottext">ghcOptions :: [String]
+</span><a href="Options.html#ghcOptions"><span class="hs-identifier hs-var">ghcOptions</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-67"></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">fastMode :: Bool
+</span><a href="Options.html#fastMode"><span class="hs-identifier hs-var">fastMode</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-68"></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">preserveIt :: Bool
+</span><a href="Options.html#preserveIt"><span class="hs-identifier hs-var">preserveIt</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-69"></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">verbose :: Bool
+</span><a href="Options.html#verbose"><span class="hs-identifier hs-var">verbose</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-70"></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">repl :: (String, [String])
+</span><a href="Options.html#repl"><span class="hs-identifier hs-var">repl</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><span class="hs-identifier hs-var">ghc</span></span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--interactive&quot;</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-71"></span><span class="hs-special">}</span><span>
+</span><span id="line-72"></span><span>
+</span><span id="line-73"></span><span class="annot"><a href="Options.html#nonInteractiveGhcOptions"><span class="hs-identifier hs-type">nonInteractiveGhcOptions</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>
+</span><span id="line-74"></span><span id="nonInteractiveGhcOptions"><span class="annot"><span class="annottext">nonInteractiveGhcOptions :: [String]
+</span><a href="Options.html#nonInteractiveGhcOptions"><span class="hs-identifier hs-var hs-var">nonInteractiveGhcOptions</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span>
+</span><span id="line-75"></span><span>    </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--numeric-version&quot;</span></span><span>
+</span><span id="line-76"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--supported-languages&quot;</span></span><span>
+</span><span id="line-77"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--info&quot;</span></span><span>
+</span><span id="line-78"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--print-global-package-db&quot;</span></span><span>
+</span><span id="line-79"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--print-libdir&quot;</span></span><span>
+</span><span id="line-80"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;-c&quot;</span></span><span>
+</span><span id="line-81"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;-o&quot;</span></span><span>
+</span><span id="line-82"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--make&quot;</span></span><span>
+</span><span id="line-83"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--abi-hash&quot;</span></span><span>
+</span><span id="line-84"></span><span>  </span><span class="hs-special">]</span><span>
+</span><span id="line-85"></span><span>
+</span><span id="line-86"></span><span class="annot"><a href="Options.html#defaultRun"><span class="hs-identifier hs-type">defaultRun</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span>
+</span><span id="line-87"></span><span id="defaultRun"><span class="annot"><span class="annottext">defaultRun :: Run
+</span><a href="Options.html#defaultRun"><span class="hs-identifier hs-var hs-var">defaultRun</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-88"></span><span>  </span><span class="annot"><span class="annottext">runWarnings :: [String]
+</span><a href="Options.html#runWarnings"><span class="hs-identifier hs-var">runWarnings</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-89"></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">runMagicMode :: Bool
+</span><a href="Options.html#runMagicMode"><span class="hs-identifier hs-var">runMagicMode</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-90"></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">runConfig :: Config
+</span><a href="Options.html#runConfig"><span class="hs-identifier hs-var">runConfig</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Config
+</span><a href="Options.html#defaultConfig"><span class="hs-identifier hs-var">defaultConfig</span></a></span><span>
+</span><span id="line-91"></span><span class="hs-special">}</span><span>
+</span><span id="line-92"></span><span>
+</span><span id="line-93"></span><span class="annot"><a href="Options.html#modifyWarnings"><span class="hs-identifier hs-type">modifyWarnings</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span>
+</span><span id="line-94"></span><span id="modifyWarnings"><span class="annot"><span class="annottext">modifyWarnings :: ([String] -&gt; [String]) -&gt; Run -&gt; Run
+</span><a href="Options.html#modifyWarnings"><span class="hs-identifier hs-var hs-var">modifyWarnings</span></a></span></span><span> </span><span id="local-6989586621679237083"><span class="annot"><span class="annottext">[String] -&gt; [String]
+</span><a href="#local-6989586621679237083"><span class="hs-identifier hs-var">f</span></a></span></span><span> </span><span id="local-6989586621679237084"><span class="annot"><span class="annottext">Run
+</span><a href="#local-6989586621679237084"><span class="hs-identifier hs-var">run</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Run
+</span><a href="#local-6989586621679237084"><span class="hs-identifier hs-var">run</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><a href="Options.html#runWarnings"><span class="hs-identifier hs-var">runWarnings</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="#local-6989586621679237083"><span class="hs-identifier hs-type">f</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Options.html#runWarnings"><span class="hs-identifier hs-var">runWarnings</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679237084"><span class="hs-identifier hs-type">run</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-95"></span><span>
+</span><span id="line-96"></span><span class="annot"><a href="Options.html#setOptions"><span class="hs-identifier hs-type">setOptions</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span>
+</span><span id="line-97"></span><span id="setOptions"><span class="annot"><span class="annottext">setOptions :: [String] -&gt; Run -&gt; Run
+</span><a href="Options.html#setOptions"><span class="hs-identifier hs-var hs-var">setOptions</span></a></span></span><span> </span><span id="local-6989586621679237086"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237086"><span class="hs-identifier hs-var">ghcOptions</span></a></span></span><span> </span><span id="local-6989586621679237087"><span class="annot"><span class="annottext">run :: Run
+</span><a href="#local-6989586621679237087"><span class="hs-identifier hs-var">run</span></a></span></span><span class="hs-glyph">@</span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span class="hs-special">{</span><span id="local-6989586621679237088"><span id="local-6989586621679237089"><span id="local-6989586621679237090"><span class="annot"><span class="annottext">Bool
+[String]
+Config
+runWarnings :: Run -&gt; [String]
+runMagicMode :: Run -&gt; Bool
+runConfig :: Run -&gt; Config
+runWarnings :: [String]
+runMagicMode :: Bool
+runConfig :: Config
+</span><a href="Options.html#runWarnings"><span class="hs-glyph hs-var hs-var hs-var hs-var hs-var hs-var">..</span></a></span></span></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Run
+</span><a href="#local-6989586621679237087"><span class="hs-identifier hs-var">run</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><a href="Options.html#runConfig"><span class="hs-identifier hs-var">runConfig</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="#local-6989586621679237090"><span class="hs-identifier hs-type">runConfig</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><a href="Options.html#ghcOptions"><span class="hs-identifier hs-var hs-type">ghcOptions</span></a></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-98"></span><span>
+</span><span id="line-99"></span><span class="annot"><a href="Options.html#setMagicMode"><span class="hs-identifier hs-type">setMagicMode</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span>
+</span><span id="line-100"></span><span id="setMagicMode"><span class="annot"><span class="annottext">setMagicMode :: Bool -&gt; Run -&gt; Run
+</span><a href="Options.html#setMagicMode"><span class="hs-identifier hs-var hs-var">setMagicMode</span></a></span></span><span> </span><span id="local-6989586621679237092"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679237092"><span class="hs-identifier hs-var">magic</span></a></span></span><span> </span><span id="local-6989586621679237093"><span class="annot"><span class="annottext">Run
+</span><a href="#local-6989586621679237093"><span class="hs-identifier hs-var">run</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Run
+</span><a href="#local-6989586621679237093"><span class="hs-identifier hs-var">run</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><a href="Options.html#runMagicMode"><span class="hs-identifier hs-var">runMagicMode</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="#local-6989586621679237092"><span class="hs-identifier hs-type">magic</span></a></span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-101"></span><span>
+</span><span id="line-102"></span><span class="annot"><a href="Options.html#setFastMode"><span class="hs-identifier hs-type">setFastMode</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span>
+</span><span id="line-103"></span><span id="setFastMode"><span class="annot"><span class="annottext">setFastMode :: Bool -&gt; Run -&gt; Run
+</span><a href="Options.html#setFastMode"><span class="hs-identifier hs-var hs-var">setFastMode</span></a></span></span><span> </span><span id="local-6989586621679237095"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679237095"><span class="hs-identifier hs-var">fastMode</span></a></span></span><span> </span><span id="local-6989586621679237096"><span class="annot"><span class="annottext">run :: Run
+</span><a href="#local-6989586621679237096"><span class="hs-identifier hs-var">run</span></a></span></span><span class="hs-glyph">@</span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span class="hs-special">{</span><span id="local-6989586621679237097"><span id="local-6989586621679237098"><span id="local-6989586621679237099"><span class="annot"><span class="annottext">Bool
+[String]
+Config
+runWarnings :: Run -&gt; [String]
+runMagicMode :: Run -&gt; Bool
+runConfig :: Run -&gt; Config
+runWarnings :: [String]
+runMagicMode :: Bool
+runConfig :: Config
+</span><a href="Options.html#runWarnings"><span class="hs-glyph hs-var hs-var hs-var hs-var hs-var hs-var">..</span></a></span></span></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Run
+</span><a href="#local-6989586621679237096"><span class="hs-identifier hs-var">run</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><a href="Options.html#runConfig"><span class="hs-identifier hs-var">runConfig</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="#local-6989586621679237099"><span class="hs-identifier hs-type">runConfig</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><a href="Options.html#fastMode"><span class="hs-identifier hs-var hs-type">fastMode</span></a></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-104"></span><span>
+</span><span id="line-105"></span><span class="annot"><a href="Options.html#setPreserveIt"><span class="hs-identifier hs-type">setPreserveIt</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span>
+</span><span id="line-106"></span><span id="setPreserveIt"><span class="annot"><span class="annottext">setPreserveIt :: Bool -&gt; Run -&gt; Run
+</span><a href="Options.html#setPreserveIt"><span class="hs-identifier hs-var hs-var">setPreserveIt</span></a></span></span><span> </span><span id="local-6989586621679237101"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679237101"><span class="hs-identifier hs-var">preserveIt</span></a></span></span><span> </span><span id="local-6989586621679237102"><span class="annot"><span class="annottext">run :: Run
+</span><a href="#local-6989586621679237102"><span class="hs-identifier hs-var">run</span></a></span></span><span class="hs-glyph">@</span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span class="hs-special">{</span><span id="local-6989586621679237103"><span id="local-6989586621679237104"><span id="local-6989586621679237105"><span class="annot"><span class="annottext">Bool
+[String]
+Config
+runWarnings :: Run -&gt; [String]
+runMagicMode :: Run -&gt; Bool
+runConfig :: Run -&gt; Config
+runWarnings :: [String]
+runMagicMode :: Bool
+runConfig :: Config
+</span><a href="Options.html#runWarnings"><span class="hs-glyph hs-var hs-var hs-var hs-var hs-var hs-var">..</span></a></span></span></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Run
+</span><a href="#local-6989586621679237102"><span class="hs-identifier hs-var">run</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><a href="Options.html#runConfig"><span class="hs-identifier hs-var">runConfig</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="#local-6989586621679237105"><span class="hs-identifier hs-type">runConfig</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><a href="Options.html#preserveIt"><span class="hs-identifier hs-var hs-type">preserveIt</span></a></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-107"></span><span>
+</span><span id="line-108"></span><span class="annot"><a href="Options.html#setVerbose"><span class="hs-identifier hs-type">setVerbose</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span>
+</span><span id="line-109"></span><span id="setVerbose"><span class="annot"><span class="annottext">setVerbose :: Bool -&gt; Run -&gt; Run
+</span><a href="Options.html#setVerbose"><span class="hs-identifier hs-var hs-var">setVerbose</span></a></span></span><span> </span><span id="local-6989586621679237107"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679237107"><span class="hs-identifier hs-var">verbose</span></a></span></span><span> </span><span id="local-6989586621679237108"><span class="annot"><span class="annottext">run :: Run
+</span><a href="#local-6989586621679237108"><span class="hs-identifier hs-var">run</span></a></span></span><span class="hs-glyph">@</span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span class="hs-special">{</span><span id="local-6989586621679237109"><span id="local-6989586621679237110"><span id="local-6989586621679237111"><span class="annot"><span class="annottext">Bool
+[String]
+Config
+runWarnings :: Run -&gt; [String]
+runMagicMode :: Run -&gt; Bool
+runConfig :: Run -&gt; Config
+runWarnings :: [String]
+runMagicMode :: Bool
+runConfig :: Config
+</span><a href="Options.html#runWarnings"><span class="hs-glyph hs-var hs-var hs-var hs-var hs-var hs-var">..</span></a></span></span></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Run
+</span><a href="#local-6989586621679237108"><span class="hs-identifier hs-var">run</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><a href="Options.html#runConfig"><span class="hs-identifier hs-var">runConfig</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="#local-6989586621679237111"><span class="hs-identifier hs-type">runConfig</span></a></span><span> </span><span class="hs-special">{</span><span> </span><span class="annot"><a href="Options.html#verbose"><span class="hs-identifier hs-var hs-type">verbose</span></a></span><span> </span><span class="hs-special">}</span><span> </span><span class="hs-special">}</span><span>
+</span><span id="line-110"></span><span>
+</span><span id="line-111"></span><span class="annot"><a href="Options.html#parseOptions"><span class="hs-identifier hs-type">parseOptions</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span>
+</span><span id="line-112"></span><span id="parseOptions"><span class="annot"><span class="annottext">parseOptions :: [String] -&gt; Result Run
+</span><a href="Options.html#parseOptions"><span class="hs-identifier hs-var hs-var">parseOptions</span></a></span></span><span> </span><span id="local-6989586621679237112"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237112"><span class="hs-identifier hs-var">args</span></a></span></span><span>
+</span><span id="line-113"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">String -&gt; Bool
+</span><a href="#local-6989586621679237113"><span class="hs-identifier hs-var">on</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--info&quot;</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; Result Run
+forall a. String -&gt; Result a
+</span><a href="Options.html#Output"><span class="hs-identifier hs-var">Output</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="Info.html#info"><span class="hs-identifier hs-var">info</span></a></span><span>
+</span><span id="line-114"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">String -&gt; Bool
+</span><a href="#local-6989586621679237113"><span class="hs-identifier hs-var">on</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--interactive&quot;</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[String] -&gt; Run -&gt; RunOptionsParser -&gt; Result Run
+</span><a href="Options.html#runRunOptionsParser"><span class="hs-identifier hs-var">runRunOptionsParser</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+</span><a href="Options.html#discard"><span class="hs-identifier hs-var">discard</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--interactive&quot;</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237112"><span class="hs-identifier hs-var">args</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">Run
+</span><a href="Options.html#defaultRun"><span class="hs-identifier hs-var">defaultRun</span></a></span><span> </span><span class="annot"><span class="annottext">(RunOptionsParser -&gt; Result Run) -&gt; RunOptionsParser -&gt; Result Run
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-115"></span><span>      </span><span class="annot"><span class="annottext">RunOptionsParser
+</span><a href="Options.html#commonRunOptions"><span class="hs-identifier hs-var">commonRunOptions</span></a></span><span>
+</span><span id="line-116"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">String -&gt; Bool
+</span><a href="#local-6989586621679237113"><span class="hs-identifier hs-var">on</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; Bool) -&gt; [String] -&gt; Bool
+forall (t :: * -&gt; *) a. Foldable t =&gt; (a -&gt; Bool) -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`any`</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="Options.html#nonInteractiveGhcOptions"><span class="hs-identifier hs-var">nonInteractiveGhcOptions</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[String] -&gt; Result Run
+forall a. [String] -&gt; Result a
+</span><a href="Options.html#ProxyToGhc"><span class="hs-identifier hs-var">ProxyToGhc</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237112"><span class="hs-identifier hs-var">args</span></a></span><span>
+</span><span id="line-117"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">String -&gt; Bool
+</span><a href="#local-6989586621679237113"><span class="hs-identifier hs-var">on</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--help&quot;</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; Result Run
+forall a. String -&gt; Result a
+</span><a href="Options.html#Output"><span class="hs-identifier hs-var">Output</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="Options.html#usage"><span class="hs-identifier hs-var">usage</span></a></span><span>
+</span><span id="line-118"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">String -&gt; Bool
+</span><a href="#local-6989586621679237113"><span class="hs-identifier hs-var">on</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--version&quot;</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; Result Run
+forall a. String -&gt; Result a
+</span><a href="Options.html#Output"><span class="hs-identifier hs-var">Output</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="Info.html#versionInfo"><span class="hs-identifier hs-var">versionInfo</span></a></span><span>
+</span><span id="line-119"></span><span>  </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[String] -&gt; Run -&gt; RunOptionsParser -&gt; Result Run
+</span><a href="Options.html#runRunOptionsParser"><span class="hs-identifier hs-var">runRunOptionsParser</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237112"><span class="hs-identifier hs-var">args</span></a></span><span> </span><span class="annot"><span class="annottext">Run
+</span><a href="Options.html#defaultRun"><span class="hs-identifier hs-var">defaultRun</span></a></span><span> </span><span class="hs-special">{</span><span class="annot"><a href="Options.html#runMagicMode"><span class="hs-identifier hs-var">runMagicMode</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">True</span></span><span class="hs-special">}</span><span> </span><span class="annot"><span class="annottext">(RunOptionsParser -&gt; Result Run) -&gt; RunOptionsParser -&gt; Result Run
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-120"></span><span>      </span><span class="annot"><span class="annottext">RunOptionsParser
+</span><a href="Options.html#commonRunOptions"><span class="hs-identifier hs-var">commonRunOptions</span></a></span><span>
+</span><span id="line-121"></span><span>      </span><span class="annot"><span class="annottext">String -&gt; (Run -&gt; Run) -&gt; RunOptionsParser
+</span><a href="Options.html#parseFlag"><span class="hs-identifier hs-var">parseFlag</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--no-magic&quot;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; Run -&gt; Run
+</span><a href="Options.html#setMagicMode"><span class="hs-identifier hs-var">setMagicMode</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span class="hs-special">)</span><span>
+</span><span id="line-122"></span><span>      </span><span class="annot"><span class="annottext">RunOptionsParser
+</span><a href="Options.html#parseOptGhc"><span class="hs-identifier hs-var">parseOptGhc</span></a></span><span>
+</span><span id="line-123"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-124"></span><span>    </span><span id="local-6989586621679237113"><span class="annot"><span class="annottext">on :: String -&gt; Bool
+</span><a href="#local-6989586621679237113"><span class="hs-identifier hs-var hs-var">on</span></a></span></span><span> </span><span id="local-6989586621679237125"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237125"><span class="hs-identifier hs-var">option</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237125"><span class="hs-identifier hs-var">option</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; Bool
+forall a. Eq a =&gt; a -&gt; [a] -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237112"><span class="hs-identifier hs-var">args</span></a></span><span>
+</span><span id="line-125"></span><span>
+</span><span id="line-126"></span><span class="hs-keyword">type</span><span> </span><span id="RunOptionsParser"><span class="annot"><a href="Options.html#RunOptionsParser"><span class="hs-identifier hs-var">RunOptionsParser</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">RWS</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Endo</span></span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-127"></span><span>
+</span><span id="line-128"></span><span class="annot"><a href="Options.html#runRunOptionsParser"><span class="hs-identifier hs-type">runRunOptionsParser</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#RunOptionsParser"><span class="hs-identifier hs-type">RunOptionsParser</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span>
+</span><span id="line-129"></span><span id="runRunOptionsParser"><span class="annot"><span class="annottext">runRunOptionsParser :: [String] -&gt; Run -&gt; RunOptionsParser -&gt; Result Run
+</span><a href="Options.html#runRunOptionsParser"><span class="hs-identifier hs-var hs-var">runRunOptionsParser</span></a></span></span><span> </span><span id="local-6989586621679237127"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237127"><span class="hs-identifier hs-var">args</span></a></span></span><span> </span><span id="local-6989586621679237128"><span class="annot"><span class="annottext">Run
+</span><a href="#local-6989586621679237128"><span class="hs-identifier hs-var">def</span></a></span></span><span> </span><span id="local-6989586621679237129"><span class="annot"><span class="annottext">RunOptionsParser
+</span><a href="#local-6989586621679237129"><span class="hs-identifier hs-var">parse</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">RunOptionsParser -&gt; () -&gt; [String] -&gt; ([String], Endo Run)
+forall r w s a. RWS r w s a -&gt; r -&gt; s -&gt; (s, w)
+</span><span class="hs-identifier hs-var">execRWS</span></span><span> </span><span class="annot"><span class="annottext">RunOptionsParser
+</span><a href="#local-6989586621679237129"><span class="hs-identifier hs-var">parse</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237127"><span class="hs-identifier hs-var">args</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-130"></span><span>  </span><span class="hs-special">(</span><span id="local-6989586621679237130"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237130"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Endo</span></span><span> </span><span id="local-6989586621679237132"><span class="annot"><span class="annottext">Run -&gt; Run
+</span><a href="#local-6989586621679237132"><span class="hs-identifier hs-var">setter</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-131"></span><span>    </span><span class="annot"><span class="annottext">Run -&gt; Result Run
+forall a. a -&gt; Result a
+</span><a href="Options.html#Result"><span class="hs-identifier hs-var">Result</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[String] -&gt; Run -&gt; Run
+</span><a href="Options.html#setOptions"><span class="hs-identifier hs-var">setOptions</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237130"><span class="hs-identifier hs-var">xs</span></a></span><span> </span><span class="annot"><span class="annottext">(Run -&gt; Run) -&gt; Run -&gt; Run
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Run -&gt; Run
+</span><a href="#local-6989586621679237132"><span class="hs-identifier hs-var">setter</span></a></span><span> </span><span class="annot"><span class="annottext">Run
+</span><a href="#local-6989586621679237128"><span class="hs-identifier hs-var">def</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-132"></span><span>
+</span><span id="line-133"></span><span class="annot"><a href="Options.html#commonRunOptions"><span class="hs-identifier hs-type">commonRunOptions</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Options.html#RunOptionsParser"><span class="hs-identifier hs-type">RunOptionsParser</span></a></span><span>
+</span><span id="line-134"></span><span id="commonRunOptions"><span class="annot"><span class="annottext">commonRunOptions :: RunOptionsParser
+</span><a href="Options.html#commonRunOptions"><span class="hs-identifier hs-var hs-var">commonRunOptions</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-135"></span><span>  </span><span class="annot"><span class="annottext">String -&gt; (Run -&gt; Run) -&gt; RunOptionsParser
+</span><a href="Options.html#parseFlag"><span class="hs-identifier hs-var">parseFlag</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--fast&quot;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; Run -&gt; Run
+</span><a href="Options.html#setFastMode"><span class="hs-identifier hs-var">setFastMode</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">)</span><span>
+</span><span id="line-136"></span><span>  </span><span class="annot"><span class="annottext">String -&gt; (Run -&gt; Run) -&gt; RunOptionsParser
+</span><a href="Options.html#parseFlag"><span class="hs-identifier hs-var">parseFlag</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--preserve-it&quot;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; Run -&gt; Run
+</span><a href="Options.html#setPreserveIt"><span class="hs-identifier hs-var">setPreserveIt</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">)</span><span>
+</span><span id="line-137"></span><span>  </span><span class="annot"><span class="annottext">String -&gt; (Run -&gt; Run) -&gt; RunOptionsParser
+</span><a href="Options.html#parseFlag"><span class="hs-identifier hs-var">parseFlag</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--verbose&quot;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool -&gt; Run -&gt; Run
+</span><a href="Options.html#setVerbose"><span class="hs-identifier hs-var">setVerbose</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">)</span><span>
+</span><span id="line-138"></span><span>
+</span><span id="line-139"></span><span class="annot"><a href="Options.html#parseFlag"><span class="hs-identifier hs-type">parseFlag</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#Run"><span class="hs-identifier hs-type">Run</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Options.html#RunOptionsParser"><span class="hs-identifier hs-type">RunOptionsParser</span></a></span><span>
+</span><span id="line-140"></span><span id="parseFlag"><span class="annot"><span class="annottext">parseFlag :: String -&gt; (Run -&gt; Run) -&gt; RunOptionsParser
+</span><a href="Options.html#parseFlag"><span class="hs-identifier hs-var hs-var">parseFlag</span></a></span></span><span> </span><span id="local-6989586621679237133"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237133"><span class="hs-identifier hs-var">flag</span></a></span></span><span> </span><span id="local-6989586621679237134"><span class="annot"><span class="annottext">Run -&gt; Run
+</span><a href="#local-6989586621679237134"><span class="hs-identifier hs-var">setter</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-141"></span><span>  </span><span id="local-6989586621679237135"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237135"><span class="hs-identifier hs-var">args</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">RWST () (Endo Run) [String] Identity [String]
+forall w (m :: * -&gt; *) r s. (Monoid w, Monad m) =&gt; RWST r w s m s
+</span><span class="hs-identifier hs-var">RWS.get</span></span><span>
+</span><span id="line-142"></span><span>  </span><span class="annot"><span class="annottext">Bool -&gt; RunOptionsParser -&gt; RunOptionsParser
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237133"><span class="hs-identifier hs-var">flag</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; Bool
+forall a. Eq a =&gt; a -&gt; [a] -&gt; Bool
+forall (t :: * -&gt; *) a. (Foldable t, Eq a) =&gt; a -&gt; t a -&gt; Bool
+</span><span class="hs-operator hs-var">`elem`</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237135"><span class="hs-identifier hs-var">args</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(RunOptionsParser -&gt; RunOptionsParser)
+-&gt; RunOptionsParser -&gt; RunOptionsParser
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-143"></span><span>    </span><span class="annot"><span class="annottext">Endo Run -&gt; RunOptionsParser
+forall (m :: * -&gt; *) w r s. Monad m =&gt; w -&gt; RWST r w s m ()
+</span><span class="hs-identifier hs-var">RWS.tell</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(Run -&gt; Run) -&gt; Endo Run
+forall a. (a -&gt; a) -&gt; Endo a
+</span><span class="hs-identifier hs-var">Endo</span></span><span> </span><span class="annot"><span class="annottext">Run -&gt; Run
+</span><a href="#local-6989586621679237134"><span class="hs-identifier hs-var">setter</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-144"></span><span>  </span><span class="annot"><span class="annottext">[String] -&gt; RunOptionsParser
+forall w (m :: * -&gt; *) s r.
+(Monoid w, Monad m) =&gt;
+s -&gt; RWST r w s m ()
+</span><span class="hs-identifier hs-var">RWS.put</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+</span><a href="Options.html#discard"><span class="hs-identifier hs-var">discard</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237133"><span class="hs-identifier hs-var">flag</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237135"><span class="hs-identifier hs-var">args</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-145"></span><span>
+</span><span id="line-146"></span><span class="annot"><a href="Options.html#parseOptGhc"><span class="hs-identifier hs-type">parseOptGhc</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Options.html#RunOptionsParser"><span class="hs-identifier hs-type">RunOptionsParser</span></a></span><span>
+</span><span id="line-147"></span><span id="parseOptGhc"><span class="annot"><span class="annottext">parseOptGhc :: RunOptionsParser
+</span><a href="Options.html#parseOptGhc"><span class="hs-identifier hs-var hs-var">parseOptGhc</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-148"></span><span>  </span><span id="local-6989586621679237140"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679237140"><span class="hs-identifier hs-var">issueWarning</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">([String] -&gt; (Bool, [String]))
+-&gt; RWST () (Endo Run) [String] Identity Bool
+forall w (m :: * -&gt; *) s a r.
+(Monoid w, Monad m) =&gt;
+(s -&gt; (a, s)) -&gt; RWST r w s m a
+</span><span class="hs-identifier hs-var">RWS.state</span></span><span> </span><span class="annot"><span class="annottext">[String] -&gt; (Bool, [String])
+</span><a href="#local-6989586621679237142"><span class="hs-identifier hs-var">go</span></a></span><span>
+</span><span id="line-149"></span><span>  </span><span class="annot"><span class="annottext">Bool -&gt; RunOptionsParser -&gt; RunOptionsParser
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679237140"><span class="hs-identifier hs-var">issueWarning</span></a></span><span> </span><span class="annot"><span class="annottext">(RunOptionsParser -&gt; RunOptionsParser)
+-&gt; RunOptionsParser -&gt; RunOptionsParser
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span>
+</span><span id="line-150"></span><span>    </span><span class="annot"><span class="annottext">Endo Run -&gt; RunOptionsParser
+forall (m :: * -&gt; *) w r s. Monad m =&gt; w -&gt; RWST r w s m ()
+</span><span class="hs-identifier hs-var">RWS.tell</span></span><span> </span><span class="annot"><span class="annottext">(Endo Run -&gt; RunOptionsParser) -&gt; Endo Run -&gt; RunOptionsParser
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Run -&gt; Run) -&gt; Endo Run
+forall a. (a -&gt; a) -&gt; Endo a
+</span><span class="hs-identifier hs-var">Endo</span></span><span> </span><span class="annot"><span class="annottext">((Run -&gt; Run) -&gt; Endo Run) -&gt; (Run -&gt; Run) -&gt; Endo Run
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">([String] -&gt; [String]) -&gt; Run -&gt; Run
+</span><a href="Options.html#modifyWarnings"><span class="hs-identifier hs-var">modifyWarnings</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[String] -&gt; [String] -&gt; [String]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237143"><span class="hs-identifier hs-var">warning</span></a></span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-151"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-152"></span><span>    </span><span id="local-6989586621679237142"><span class="annot"><span class="annottext">go :: [String] -&gt; (Bool, [String])
+</span><a href="#local-6989586621679237142"><span class="hs-identifier hs-var hs-var">go</span></a></span></span><span> </span><span id="local-6989586621679237147"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237147"><span class="hs-identifier hs-var">args</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237147"><span class="hs-identifier hs-var">args</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-153"></span><span>      </span><span class="hs-special">[</span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span class="hs-special">,</span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span class="hs-special">)</span><span>
+</span><span id="line-154"></span><span>      </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--optghc&quot;</span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span id="local-6989586621679237148"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237148"><span class="hs-identifier hs-var">opt</span></a></span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span id="local-6989586621679237149"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237149"><span class="hs-identifier hs-var">rest</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237148"><span class="hs-identifier hs-var">opt</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">(Bool, [String]) -&gt; [String]
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[String] -&gt; (Bool, [String])
+</span><a href="#local-6989586621679237142"><span class="hs-identifier hs-var">go</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237149"><span class="hs-identifier hs-var">rest</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-155"></span><span>      </span><span id="local-6989586621679237151"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237151"><span class="hs-identifier hs-var">opt</span></a></span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span id="local-6989586621679237152"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237152"><span class="hs-identifier hs-var">rest</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">((Bool, [String]) -&gt; (Bool, [String]))
+-&gt; (String -&gt; (Bool, [String]) -&gt; (Bool, [String]))
+-&gt; Maybe String
+-&gt; (Bool, [String])
+-&gt; (Bool, [String])
+forall b a. b -&gt; (a -&gt; b) -&gt; Maybe a -&gt; b
+</span><span class="hs-identifier hs-var">maybe</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">([String] -&gt; [String]) -&gt; (Bool, [String]) -&gt; (Bool, [String])
+forall a b. (a -&gt; b) -&gt; (Bool, a) -&gt; (Bool, b)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237151"><span class="hs-identifier hs-var">opt</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span id="local-6989586621679237154"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237154"><span class="hs-identifier hs-var">x</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679237155"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237155"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237154"><span class="hs-identifier hs-var">x</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237155"><span class="hs-identifier hs-var">xs</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; String -&gt; Maybe String
+forall a. Eq a =&gt; [a] -&gt; [a] -&gt; Maybe [a]
+</span><span class="hs-identifier hs-var">stripPrefix</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--optghc=&quot;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237151"><span class="hs-identifier hs-var">opt</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[String] -&gt; (Bool, [String])
+</span><a href="#local-6989586621679237142"><span class="hs-identifier hs-var">go</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237152"><span class="hs-identifier hs-var">rest</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-156"></span><span>
+</span><span id="line-157"></span><span>    </span><span id="local-6989586621679237143"><span class="annot"><span class="annottext">warning :: String
+</span><a href="#local-6989586621679237143"><span class="hs-identifier hs-var hs-var">warning</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;WARNING: --optghc is deprecated, doctest now accepts arbitrary GHC options\ndirectly.&quot;</span></span><span>
+</span><span id="line-158"></span><span>
+</span><span id="line-159"></span><span class="annot"><a href="Options.html#discard"><span class="hs-identifier hs-type">discard</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>
+</span><span id="line-160"></span><span id="discard"><span class="annot"><span class="annottext">discard :: String -&gt; [String] -&gt; [String]
+</span><a href="Options.html#discard"><span class="hs-identifier hs-var hs-var">discard</span></a></span></span><span> </span><span id="local-6989586621679237156"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237156"><span class="hs-identifier hs-var">flag</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(String -&gt; Bool) -&gt; [String] -&gt; [String]
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">filter</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; String -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">/=</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237156"><span class="hs-identifier hs-var">flag</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-161"></span></pre></body></html>

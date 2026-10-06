@@ -1,0 +1,568 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE GADTs #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE InstanceSigs #-}</span><span>
+</span><span id="line-3"></span><span class="hs-pragma">{-# LANGUAGE OverloadedStrings #-}</span><span>
+</span><span id="line-4"></span><span>
+</span><span id="line-5"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Language.Lambda.RawConfig</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-6"></span><span>  </span><span class="annot"><a href="Language.Lambda.RawConfig.html#decodeConfigFile"><span class="hs-identifier">decodeConfigFile</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-7"></span><span class="hs-special">)</span><span>
+</span><span id="line-8"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-9"></span><span>
+</span><span id="line-10"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Map</span></span><span>
+</span><span id="line-11"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Data.SOAS.html"><span class="hs-identifier">Data.SOAS</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Data.SOAS.html#MetaAbs"><span class="hs-identifier">MetaAbs</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Data.SOAS.html#MetaSubst"><span class="hs-identifier">MetaSubst</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Data.SOAS.html#MetaSubsts"><span class="hs-identifier">MetaSubsts</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-12"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">TIO</span></span><span>
+</span><span id="line-13"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html"><span class="hs-identifier">Language.Lambda.Config</span></a></span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-14"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConfig"><span class="hs-identifier">CanonicalConfig</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-15"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#Config"><span class="hs-identifier">Config</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-16"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalConstraint"><span class="hs-identifier">IsCanonicalConstraint</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-17"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalMetavarBinders"><span class="hs-identifier">IsCanonicalMetavarBinders</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-18"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalSubstitutions"><span class="hs-identifier">IsCanonicalSubstitutions</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-19"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#Problem"><span class="hs-identifier">Problem</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-20"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier">Result</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-21"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#Solution"><span class="hs-identifier">Solution</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-22"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#fromUnificationConstraint"><span class="hs-identifier">fromUnificationConstraint</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-23"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#toCanonicalConfig"><span class="hs-identifier">toCanonicalConfig</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-24"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#toUnificationConstraint"><span class="hs-identifier">toUnificationConstraint</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-25"></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html"><span class="hs-identifier">Language.Lambda.Impl</span></a></span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-27"></span><span>  </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier">MetavarBinders</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-28"></span><span>  </span><span class="annot"><a href="Language.Lambda.Impl.html#fromMetaTerm"><span class="hs-identifier">fromMetaTerm</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-29"></span><span>  </span><span class="annot"><a href="Language.Lambda.Impl.html#fromTerm"><span class="hs-identifier">fromTerm</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-30"></span><span>  </span><span class="annot"><a href="Language.Lambda.Impl.html#toIdents"><span class="hs-identifier">toIdents</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-31"></span><span>  </span><span class="annot"><a href="Language.Lambda.Impl.html#toMetaSubst"><span class="hs-identifier">toMetaSubst</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-32"></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-33"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="Language.Lambda.Syntax.Abs.html"><span class="hs-identifier">Language.Lambda.Syntax.Abs</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Raw</span></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="Language.Lambda.Syntax.Layout.html"><span class="hs-identifier">Language.Lambda.Syntax.Layout</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Raw</span></span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="Language.Lambda.Syntax.Par.html"><span class="hs-identifier">Language.Lambda.Syntax.Par</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Raw</span></span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="Language.Lambda.Syntax.Print.html"><span class="hs-identifier">Language.Lambda.Syntax.Print</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Raw</span></span><span>
+</span><span id="line-37"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Toml</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">TomlCodec</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-operator">(.=)</span></span><span class="hs-special">)</span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Toml</span></span><span>
+</span><span id="line-39"></span><span>
+</span><span id="line-40"></span><span class="hs-keyword">newtype</span><span> </span><span id="RawBinders"><span class="annot"><a href="Language.Lambda.RawConfig.html#RawBinders"><span class="hs-identifier hs-var">RawBinders</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="RawBinders"><span class="annot"><a href="Language.Lambda.RawConfig.html#RawBinders"><span class="hs-identifier hs-var">RawBinders</span></a></span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>
+</span><span id="line-41"></span><span class="hs-keyword">newtype</span><span> </span><span id="RawSubstitutions"><span class="annot"><a href="Language.Lambda.RawConfig.html#RawSubstitutions"><span class="hs-identifier hs-var">RawSubstitutions</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="RawSubstitutions"><span class="annot"><a href="Language.Lambda.RawConfig.html#RawSubstitutions"><span class="hs-identifier hs-var">RawSubstitutions</span></a></span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span>
+</span><span id="line-42"></span><span class="hs-keyword">newtype</span><span> </span><span id="RawConstraint"><span class="annot"><a href="Language.Lambda.RawConfig.html#RawConstraint"><span class="hs-identifier hs-var">RawConstraint</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="RawConstraint"><span class="annot"><a href="Language.Lambda.RawConfig.html#RawConstraint"><span class="hs-identifier hs-var">RawConstraint</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-43"></span><span>
+</span><span id="line-44"></span><span class="hs-keyword">type</span><span> </span><span id="RawConfig"><span class="annot"><a href="Language.Lambda.RawConfig.html#RawConfig"><span class="hs-identifier hs-var">RawConfig</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawBinders"><span class="hs-identifier hs-type">RawBinders</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawConstraint"><span class="hs-identifier hs-type">RawConstraint</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawSolution"><span class="hs-identifier hs-type">RawSolution</span></a></span><span>
+</span><span id="line-45"></span><span>
+</span><span id="line-46"></span><span class="hs-keyword">type</span><span> </span><span id="RawProblem"><span class="annot"><a href="Language.Lambda.RawConfig.html#RawProblem"><span class="hs-identifier hs-var">RawProblem</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Problem"><span class="hs-identifier hs-type">Problem</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawBinders"><span class="hs-identifier hs-type">RawBinders</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawConstraint"><span class="hs-identifier hs-type">RawConstraint</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawSolution"><span class="hs-identifier hs-type">RawSolution</span></a></span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-keyword">type</span><span> </span><span id="RawSolution"><span class="annot"><a href="Language.Lambda.RawConfig.html#RawSolution"><span class="hs-identifier hs-var">RawSolution</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Solution"><span class="hs-identifier hs-type">Solution</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawBinders"><span class="hs-identifier hs-type">RawBinders</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawSubstitutions"><span class="hs-identifier hs-type">RawSubstitutions</span></a></span><span>
+</span><span id="line-49"></span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- TomlCodecs</span><span>
+</span><span id="line-51"></span><span class="annot"><a href="Language.Lambda.RawConfig.html#configCodec"><span class="hs-identifier hs-type">configCodec</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">TomlCodec</span></span><span> </span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawConfig"><span class="hs-identifier hs-type">RawConfig</span></a></span><span>
+</span><span id="line-52"></span><span id="configCodec"><span class="annot"><span class="annottext">configCodec :: TomlCodec RawConfig
+</span><a href="Language.Lambda.RawConfig.html#configCodec"><span class="hs-identifier hs-var hs-var">configCodec</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-53"></span><span>  </span><span class="annot"><span class="annottext">[RawProblem] -&gt; RawConfig
+forall binders constraint solution.
+[Problem binders constraint solution]
+-&gt; Config binders constraint solution
+</span><a href="Language.Lambda.Config.html#Config"><span class="hs-identifier hs-var">Config</span></a></span><span>
+</span><span id="line-54"></span><span>    </span><span class="annot"><span class="annottext">([RawProblem] -&gt; RawConfig)
+-&gt; Codec RawConfig [RawProblem] -&gt; TomlCodec RawConfig
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec RawProblem -&gt; Key -&gt; TomlCodec [RawProblem]
+forall a. TomlCodec a -&gt; Key -&gt; TomlCodec [a]
+</span><span class="hs-identifier hs-var">Toml.list</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec RawProblem
+</span><a href="Language.Lambda.RawConfig.html#problemCodec"><span class="hs-identifier hs-var">problemCodec</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-string">&quot;problems&quot;</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec [RawProblem]
+-&gt; (RawConfig -&gt; [RawProblem]) -&gt; Codec RawConfig [RawProblem]
+forall field a object.
+Codec field a -&gt; (object -&gt; field) -&gt; Codec object a
+</span><span class="hs-operator hs-var">.=</span></span><span> </span><span class="annot"><span class="annottext">RawConfig -&gt; [RawProblem]
+forall binders constraint solution.
+Config binders constraint solution
+-&gt; [Problem binders constraint solution]
+</span><a href="Language.Lambda.Config.html#configProblems"><span class="hs-identifier hs-var">configProblems</span></a></span><span>
+</span><span id="line-55"></span><span>
+</span><span id="line-56"></span><span class="annot"><a href="Language.Lambda.RawConfig.html#problemCodec"><span class="hs-identifier hs-type">problemCodec</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">TomlCodec</span></span><span> </span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawProblem"><span class="hs-identifier hs-type">RawProblem</span></a></span><span>
+</span><span id="line-57"></span><span id="problemCodec"><span class="annot"><span class="annottext">problemCodec :: TomlCodec RawProblem
+</span><a href="Language.Lambda.RawConfig.html#problemCodec"><span class="hs-identifier hs-var hs-var">problemCodec</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-58"></span><span>  </span><span class="hs-special">(</span><span class="annot"><span class="annottext">RawBinders -&gt; [RawConstraint] -&gt; [RawSolution] -&gt; RawProblem
+forall binders constraint solution.
+binders
+-&gt; [constraint]
+-&gt; [solution]
+-&gt; Problem binders constraint solution
+</span><a href="Language.Lambda.Config.html#Problem"><span class="hs-identifier hs-var">Problem</span></a></span><span> </span><span class="annot"><span class="annottext">(RawBinders -&gt; [RawConstraint] -&gt; [RawSolution] -&gt; RawProblem)
+-&gt; ([String] -&gt; RawBinders)
+-&gt; [String]
+-&gt; [RawConstraint]
+-&gt; [RawSolution]
+-&gt; RawProblem
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[String] -&gt; RawBinders
+</span><a href="Language.Lambda.RawConfig.html#RawBinders"><span class="hs-identifier hs-var">RawBinders</span></a></span><span> </span><span class="annot"><span class="annottext">([String] -&gt; [RawConstraint] -&gt; [RawSolution] -&gt; RawProblem)
+-&gt; Codec RawProblem [String]
+-&gt; Codec
+     RawProblem ([RawConstraint] -&gt; [RawSolution] -&gt; RawProblem)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; Codec RawProblem [String]
+forall object. Key -&gt; Codec object [String]
+</span><a href="Language.Lambda.RawConfig.html#stringsCodec"><span class="hs-identifier hs-var">stringsCodec</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-string">&quot;metavars&quot;</span></span><span class="hs-special">)</span><span>
+</span><span id="line-59"></span><span>    </span><span class="annot"><span class="annottext">Codec RawProblem ([RawConstraint] -&gt; [RawSolution] -&gt; RawProblem)
+-&gt; Codec RawProblem [RawConstraint]
+-&gt; Codec RawProblem ([RawSolution] -&gt; RawProblem)
+forall a b.
+Codec RawProblem (a -&gt; b)
+-&gt; Codec RawProblem a -&gt; Codec RawProblem b
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;*&gt;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(String -&gt; RawConstraint) -&gt; [String] -&gt; [RawConstraint]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; RawConstraint
+</span><a href="Language.Lambda.RawConfig.html#RawConstraint"><span class="hs-identifier hs-var">RawConstraint</span></a></span><span> </span><span class="annot"><span class="annottext">([String] -&gt; [RawConstraint])
+-&gt; Codec RawProblem [String] -&gt; Codec RawProblem [RawConstraint]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; Codec RawProblem [String]
+forall object. Key -&gt; Codec object [String]
+</span><a href="Language.Lambda.RawConfig.html#stringsCodec"><span class="hs-identifier hs-var">stringsCodec</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-string">&quot;constraints&quot;</span></span><span class="hs-special">)</span><span>
+</span><span id="line-60"></span><span>    </span><span class="annot"><span class="annottext">Codec RawProblem ([RawSolution] -&gt; RawProblem)
+-&gt; Codec RawProblem [RawSolution] -&gt; TomlCodec RawProblem
+forall a b.
+Codec RawProblem (a -&gt; b)
+-&gt; Codec RawProblem a -&gt; Codec RawProblem b
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;*&gt;</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec RawSolution -&gt; Key -&gt; TomlCodec [RawSolution]
+forall a. TomlCodec a -&gt; Key -&gt; TomlCodec [a]
+</span><span class="hs-identifier hs-var">Toml.list</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec RawSolution
+</span><a href="Language.Lambda.RawConfig.html#solutionCodec"><span class="hs-identifier hs-var">solutionCodec</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-string">&quot;solutions&quot;</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec [RawSolution]
+-&gt; (RawProblem -&gt; [RawSolution]) -&gt; Codec RawProblem [RawSolution]
+forall field a object.
+Codec field a -&gt; (object -&gt; field) -&gt; Codec object a
+</span><span class="hs-operator hs-var">.=</span></span><span> </span><span class="annot"><span class="annottext">RawProblem -&gt; [RawSolution]
+forall binders constraint solution.
+Problem binders constraint solution -&gt; [solution]
+</span><a href="Language.Lambda.Config.html#problemSolutions"><span class="hs-identifier hs-var">problemSolutions</span></a></span><span>
+</span><span id="line-61"></span><span>
+</span><span id="line-62"></span><span id="local-6989586621679308371"><span class="annot"><a href="Language.Lambda.RawConfig.html#stringsCodec"><span class="hs-identifier hs-type">stringsCodec</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Toml.Key</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Toml.Codec</span></span><span> </span><span class="annot"><a href="#local-6989586621679308371"><span class="hs-identifier hs-type">object</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span></span><span>
+</span><span id="line-63"></span><span id="stringsCodec"><span class="annot"><span class="annottext">stringsCodec :: forall object. Key -&gt; Codec object [String]
+</span><a href="Language.Lambda.RawConfig.html#stringsCodec"><span class="hs-identifier hs-var hs-var">stringsCodec</span></a></span></span><span> </span><span id="local-6989586621679308537"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679308537"><span class="hs-identifier hs-var">field</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-64"></span><span>  </span><span class="annot"><span class="annottext">(Text -&gt; String) -&gt; [Text] -&gt; [String]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; String
+</span><span class="hs-identifier hs-var">TIO.unpack</span></span><span>
+</span><span id="line-65"></span><span>    </span><span class="annot"><span class="annottext">([Text] -&gt; [String])
+-&gt; Codec object [Text] -&gt; Codec object [String]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">TomlBiMap Text AnyValue -&gt; Key -&gt; TomlCodec [Text]
+forall a. TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec [a]
+</span><span class="hs-identifier hs-var">Toml.arrayOf</span></span><span> </span><span class="annot"><span class="annottext">TomlBiMap Text AnyValue
+</span><span class="hs-identifier hs-var">Toml._Text</span></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679308537"><span class="hs-identifier hs-var">field</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec [Text] -&gt; (object -&gt; [Text]) -&gt; Codec object [Text]
+forall field a object.
+Codec field a -&gt; (object -&gt; field) -&gt; Codec object a
+</span><span class="hs-operator hs-var">.=</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; object -&gt; [Text]
+forall a. HasCallStack =&gt; String -&gt; a
+</span><span class="hs-identifier hs-var">error</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;no encode needed&quot;</span></span><span>
+</span><span id="line-66"></span><span>
+</span><span id="line-67"></span><span class="annot"><a href="Language.Lambda.RawConfig.html#solutionCodec"><span class="hs-identifier hs-type">solutionCodec</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">TomlCodec</span></span><span> </span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawSolution"><span class="hs-identifier hs-type">RawSolution</span></a></span><span>
+</span><span id="line-68"></span><span id="solutionCodec"><span class="annot"><span class="annottext">solutionCodec :: TomlCodec RawSolution
+</span><a href="Language.Lambda.RawConfig.html#solutionCodec"><span class="hs-identifier hs-var hs-var">solutionCodec</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-69"></span><span>  </span><span class="annot"><span class="annottext">Maybe Text -&gt; RawBinders -&gt; RawSubstitutions -&gt; RawSolution
+forall binders substitutions.
+Maybe Text
+-&gt; binders -&gt; substitutions -&gt; Solution binders substitutions
+</span><a href="Language.Lambda.Config.html#Solution"><span class="hs-identifier hs-var">Solution</span></a></span><span>
+</span><span id="line-70"></span><span>    </span><span class="annot"><span class="annottext">(Maybe Text -&gt; RawBinders -&gt; RawSubstitutions -&gt; RawSolution)
+-&gt; Codec RawSolution (Maybe Text)
+-&gt; Codec
+     RawSolution (RawBinders -&gt; RawSubstitutions -&gt; RawSolution)
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec Text -&gt; TomlCodec (Maybe Text)
+forall a. TomlCodec a -&gt; TomlCodec (Maybe a)
+</span><span class="hs-identifier hs-var">Toml.dioptional</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Key -&gt; TomlCodec Text
+</span><span class="hs-identifier hs-var">Toml.text</span></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-string">&quot;name&quot;</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">TomlCodec (Maybe Text)
+-&gt; (RawSolution -&gt; Maybe Text) -&gt; Codec RawSolution (Maybe Text)
+forall field a object.
+Codec field a -&gt; (object -&gt; field) -&gt; Codec object a
+</span><span class="hs-operator hs-var">.=</span></span><span> </span><span class="annot"><span class="annottext">RawSolution -&gt; Maybe Text
+forall binders substitutions.
+Solution binders substitutions -&gt; Maybe Text
+</span><a href="Language.Lambda.Config.html#solutionName"><span class="hs-identifier hs-var">solutionName</span></a></span><span>
+</span><span id="line-71"></span><span>    </span><span class="annot"><span class="annottext">Codec RawSolution (RawBinders -&gt; RawSubstitutions -&gt; RawSolution)
+-&gt; Codec RawSolution RawBinders
+-&gt; Codec RawSolution (RawSubstitutions -&gt; RawSolution)
+forall a b.
+Codec RawSolution (a -&gt; b)
+-&gt; Codec RawSolution a -&gt; Codec RawSolution b
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;*&gt;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[String] -&gt; RawBinders
+</span><a href="Language.Lambda.RawConfig.html#RawBinders"><span class="hs-identifier hs-var">RawBinders</span></a></span><span> </span><span class="annot"><span class="annottext">([String] -&gt; RawBinders)
+-&gt; Codec RawBinders [String] -&gt; Codec RawBinders RawBinders
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; Codec RawBinders [String]
+forall object. Key -&gt; Codec object [String]
+</span><a href="Language.Lambda.RawConfig.html#stringsCodec"><span class="hs-identifier hs-var">stringsCodec</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-string">&quot;metavars&quot;</span></span><span class="hs-special">)</span><span>
+</span><span id="line-72"></span><span>      </span><span class="annot"><span class="annottext">Codec RawBinders RawBinders
+-&gt; (RawSolution -&gt; RawBinders) -&gt; Codec RawSolution RawBinders
+forall field a object.
+Codec field a -&gt; (object -&gt; field) -&gt; Codec object a
+</span><span class="hs-operator hs-var">.=</span></span><span> </span><span class="annot"><span class="annottext">RawSolution -&gt; RawBinders
+forall binders substitutions.
+Solution binders substitutions -&gt; binders
+</span><a href="Language.Lambda.Config.html#solutionMetavarBinders"><span class="hs-identifier hs-var">solutionMetavarBinders</span></a></span><span>
+</span><span id="line-73"></span><span>    </span><span class="annot"><span class="annottext">Codec RawSolution (RawSubstitutions -&gt; RawSolution)
+-&gt; Codec RawSolution RawSubstitutions -&gt; TomlCodec RawSolution
+forall a b.
+Codec RawSolution (a -&gt; b)
+-&gt; Codec RawSolution a -&gt; Codec RawSolution b
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;*&gt;</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[String] -&gt; RawSubstitutions
+</span><a href="Language.Lambda.RawConfig.html#RawSubstitutions"><span class="hs-identifier hs-var">RawSubstitutions</span></a></span><span> </span><span class="annot"><span class="annottext">([String] -&gt; RawSubstitutions)
+-&gt; Codec RawSubstitutions [String]
+-&gt; Codec RawSubstitutions RawSubstitutions
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; Codec RawSubstitutions [String]
+forall object. Key -&gt; Codec object [String]
+</span><a href="Language.Lambda.RawConfig.html#stringsCodec"><span class="hs-identifier hs-var">stringsCodec</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-string">&quot;substitutions&quot;</span></span><span class="hs-special">)</span><span>
+</span><span id="line-74"></span><span>      </span><span class="annot"><span class="annottext">Codec RawSubstitutions RawSubstitutions
+-&gt; (RawSolution -&gt; RawSubstitutions)
+-&gt; Codec RawSolution RawSubstitutions
+forall field a object.
+Codec field a -&gt; (object -&gt; field) -&gt; Codec object a
+</span><span class="hs-operator hs-var">.=</span></span><span> </span><span class="annot"><span class="annottext">RawSolution -&gt; RawSubstitutions
+forall binders substitutions.
+Solution binders substitutions -&gt; substitutions
+</span><a href="Language.Lambda.Config.html#solutionSubstitutions"><span class="hs-identifier hs-var">solutionSubstitutions</span></a></span><span>
+</span><span id="line-75"></span><span>
+</span><span id="line-76"></span><span class="annot"><a href="Language.Lambda.RawConfig.html#decodeConfigFile"><span class="hs-identifier hs-type">decodeConfigFile</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConfig"><span class="hs-identifier hs-type">CanonicalConfig</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-77"></span><span id="decodeConfigFile"><span class="annot"><span class="annottext">decodeConfigFile :: String -&gt; IO (Result CanonicalConfig)
+</span><a href="Language.Lambda.RawConfig.html#decodeConfigFile"><span class="hs-identifier hs-var hs-var">decodeConfigFile</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-78"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679308559"><span class="annot"><span class="annottext">convert :: Either [TomlDecodeError] RawConfig -&gt; Result CanonicalConfig
+</span><a href="#local-6989586621679308559"><span class="hs-identifier hs-var hs-var">convert</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">([TomlDecodeError] -&gt; Result CanonicalConfig)
+-&gt; (RawConfig -&gt; Result CanonicalConfig)
+-&gt; Either [TomlDecodeError] RawConfig
+-&gt; Result CanonicalConfig
+forall a c b. (a -&gt; c) -&gt; (b -&gt; c) -&gt; Either a b -&gt; c
+</span><span class="hs-identifier hs-var">either</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Result CanonicalConfig
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; Result CanonicalConfig)
+-&gt; ([TomlDecodeError] -&gt; String)
+-&gt; [TomlDecodeError]
+-&gt; Result CanonicalConfig
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[TomlDecodeError] -&gt; String
+forall a. Show a =&gt; a -&gt; String
+</span><span class="hs-identifier hs-var">show</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">RawConfig -&gt; Result CanonicalConfig
+forall b c s.
+(IsCanonicalMetavarBinders b, IsCanonicalConstraint c,
+ IsCanonicalSubstitutions s) =&gt;
+Config b c (Solution b s) -&gt; Result CanonicalConfig
+</span><a href="Language.Lambda.Config.html#toCanonicalConfig"><span class="hs-identifier hs-var">toCanonicalConfig</span></a></span><span>
+</span><span id="line-79"></span><span>   </span><span class="hs-keyword">in</span><span> </span><span class="annot"><span class="annottext">(Either [TomlDecodeError] RawConfig -&gt; Result CanonicalConfig)
+-&gt; IO (Either [TomlDecodeError] RawConfig)
+-&gt; IO (Result CanonicalConfig)
+forall a b. (a -&gt; b) -&gt; IO a -&gt; IO b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">Either [TomlDecodeError] RawConfig -&gt; Result CanonicalConfig
+</span><a href="#local-6989586621679308559"><span class="hs-identifier hs-var">convert</span></a></span><span> </span><span class="annot"><span class="annottext">(IO (Either [TomlDecodeError] RawConfig)
+ -&gt; IO (Result CanonicalConfig))
+-&gt; (String -&gt; IO (Either [TomlDecodeError] RawConfig))
+-&gt; String
+-&gt; IO (Result CanonicalConfig)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec RawConfig
+-&gt; String -&gt; IO (Either [TomlDecodeError] RawConfig)
+forall a (m :: * -&gt; *).
+MonadIO m =&gt;
+TomlCodec a -&gt; String -&gt; m (Either [TomlDecodeError] a)
+</span><span class="hs-identifier hs-var">Toml.decodeFileEither</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec RawConfig
+</span><a href="Language.Lambda.RawConfig.html#configCodec"><span class="hs-identifier hs-var">configCodec</span></a></span><span>
+</span><span id="line-80"></span><span>
+</span><span id="line-81"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalMetavarBinders"><span class="hs-identifier hs-type">IsCanonicalMetavarBinders</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawBinders"><span class="hs-identifier hs-type">RawBinders</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-82"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#toCanonicalMetavarBinders"><span class="hs-identifier hs-type">toCanonicalMetavarBinders</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawBinders"><span class="hs-identifier hs-type">RawBinders</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span>
+</span><span id="line-83"></span><span>  </span><span id="local-6989586621679308576"><span class="annot"><span class="annottext">toCanonicalMetavarBinders :: RawBinders -&gt; Result MetavarBinders
+</span><a href="Language.Lambda.Config.html#toCanonicalMetavarBinders"><span class="hs-identifier hs-var hs-var hs-var hs-var">toCanonicalMetavarBinders</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawBinders"><span class="hs-identifier hs-type">RawBinders</span></a></span><span> </span><span id="local-6989586621679308577"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679308577"><span class="hs-identifier hs-var">rawMetavarBinders</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-84"></span><span>    </span><span id="local-6989586621679308578"><span class="annot"><span class="annottext">[(MetavarIdent, ([Type], Type))]
+</span><a href="#local-6989586621679308578"><span class="hs-identifier hs-var">metavarBinders</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(String -&gt; Either String (MetavarIdent, ([Type], Type)))
+-&gt; [String] -&gt; Either String [(MetavarIdent, ([Type], Type))]
+forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Traversable t, Applicative f) =&gt;
+(a -&gt; f b) -&gt; t a -&gt; f (t b)
+forall (f :: * -&gt; *) a b.
+Applicative f =&gt;
+(a -&gt; f b) -&gt; [a] -&gt; f [b]
+</span><span class="hs-identifier hs-var">traverse</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Either String (MetavarIdent, ([Type], Type))
+</span><a href="#local-6989586621679308580"><span class="hs-identifier hs-var">parseMetavarBinder</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679308577"><span class="hs-identifier hs-var">rawMetavarBinders</span></a></span><span>
+</span><span id="line-85"></span><span>    </span><span class="annot"><span class="annottext">MetavarBinders -&gt; Result MetavarBinders
+forall a. a -&gt; Either String a
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[(MetavarIdent, ([Type], Type))] -&gt; MetavarBinders
+forall k a. Ord k =&gt; [(k, a)] -&gt; Map k a
+</span><span class="hs-identifier hs-var">Map.fromList</span></span><span> </span><span class="annot"><span class="annottext">[(MetavarIdent, ([Type], Type))]
+</span><a href="#local-6989586621679308578"><span class="hs-identifier hs-var">metavarBinders</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-86"></span><span>   </span><span class="hs-keyword">where</span><span>
+</span><span id="line-87"></span><span>    </span><span id="local-6989586621679308580"><span class="annot"><span class="annottext">parseMetavarBinder :: String -&gt; Either String (MetavarIdent, ([Type], Type))
+</span><a href="#local-6989586621679308580"><span class="hs-identifier hs-var hs-var">parseMetavarBinder</span></a></span></span><span> </span><span id="local-6989586621679308584"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679308584"><span class="hs-identifier hs-var">input</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-88"></span><span>      </span><span class="hs-keyword">let</span><span>
+</span><span id="line-89"></span><span>        </span><span id="local-6989586621679308585"><span class="annot"><span class="annottext">tokens :: [Token]
+</span><a href="#local-6989586621679308585"><span class="hs-identifier hs-var hs-var">tokens</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; [Token] -&gt; [Token]
+</span><a href="Language.Lambda.Syntax.Layout.html#resolveLayout"><span class="hs-identifier hs-var">Raw.resolveLayout</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; [Token]
+</span><a href="Language.Lambda.Syntax.Par.html#myLexer"><span class="hs-identifier hs-var">Raw.myLexer</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679308584"><span class="hs-identifier hs-var">input</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-90"></span><span>        </span><span id="local-6989586621679308588"><span class="annot"><span class="annottext">toMetavarBinder :: MetavarBinder -&gt; (MetavarIdent, ([Type], Type))
+</span><a href="#local-6989586621679308588"><span class="hs-identifier hs-var hs-var">toMetavarBinder</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Language.Lambda.Syntax.Abs.html#AMetavarBinder"><span class="hs-identifier hs-type">Raw.AMetavarBinder</span></a></span><span> </span><span id="local-6989586621679308590"><span class="annot"><span class="annottext">MetavarIdent
+</span><a href="#local-6989586621679308590"><span class="hs-identifier hs-var">metavar</span></a></span></span><span> </span><span id="local-6989586621679308591"><span class="annot"><span class="annottext">[Type]
+</span><a href="#local-6989586621679308591"><span class="hs-identifier hs-var">args</span></a></span></span><span> </span><span id="local-6989586621679308592"><span class="annot"><span class="annottext">Type
+</span><a href="#local-6989586621679308592"><span class="hs-identifier hs-var">returnType</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-91"></span><span>          </span><span class="hs-special">(</span><span class="annot"><span class="annottext">MetavarIdent
+</span><a href="#local-6989586621679308590"><span class="hs-identifier hs-var">metavar</span></a></span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Type]
+</span><a href="#local-6989586621679308591"><span class="hs-identifier hs-var">args</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Type
+</span><a href="#local-6989586621679308592"><span class="hs-identifier hs-var">returnType</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-92"></span><span>       </span><span class="hs-keyword">in</span><span>
+</span><span id="line-93"></span><span>        </span><span class="annot"><span class="annottext">(MetavarBinder -&gt; (MetavarIdent, ([Type], Type)))
+-&gt; Either String MetavarBinder
+-&gt; Either String (MetavarIdent, ([Type], Type))
+forall a b. (a -&gt; b) -&gt; Either String a -&gt; Either String b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">MetavarBinder -&gt; (MetavarIdent, ([Type], Type))
+</span><a href="#local-6989586621679308588"><span class="hs-identifier hs-var">toMetavarBinder</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[Token] -&gt; Either String MetavarBinder
+</span><a href="Language.Lambda.Syntax.Par.html#pMetavarBinder"><span class="hs-identifier hs-var">Raw.pMetavarBinder</span></a></span><span> </span><span class="annot"><span class="annottext">[Token]
+</span><a href="#local-6989586621679308585"><span class="hs-identifier hs-var">tokens</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-94"></span><span>  </span><span id="local-6989586621679308599"><span class="annot"><span class="annottext">fromCanonicalMetavarBinders :: MetavarBinders -&gt; Result RawBinders
+</span><a href="#local-6989586621679308599"><span class="hs-identifier hs-var hs-var hs-var hs-var">fromCanonicalMetavarBinders</span></a></span></span><span> </span><span id="local-6989586621679308601"><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308601"><span class="hs-identifier hs-var">metavarBinders</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-95"></span><span>    </span><span class="hs-keyword">let</span><span>
+</span><span id="line-96"></span><span>      </span><span id="local-6989586621679308602"><span class="annot"><span class="annottext">toRawMetavarBinder :: (MetavarIdent, ([Type], Type)) -&gt; MetavarBinder
+</span><a href="#local-6989586621679308602"><span class="hs-identifier hs-var hs-var">toRawMetavarBinder</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679308603"><span class="annot"><span class="annottext">MetavarIdent
+</span><a href="#local-6989586621679308603"><span class="hs-identifier hs-var">metavar</span></a></span></span><span class="hs-special">,</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679308604"><span class="annot"><span class="annottext">[Type]
+</span><a href="#local-6989586621679308604"><span class="hs-identifier hs-var">args</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679308605"><span class="annot"><span class="annottext">Type
+</span><a href="#local-6989586621679308605"><span class="hs-identifier hs-var">returnType</span></a></span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-97"></span><span>        </span><span class="annot"><span class="annottext">MetavarIdent -&gt; [Type] -&gt; Type -&gt; MetavarBinder
+</span><a href="Language.Lambda.Syntax.Abs.html#AMetavarBinder"><span class="hs-identifier hs-var">Raw.AMetavarBinder</span></a></span><span> </span><span class="annot"><span class="annottext">MetavarIdent
+</span><a href="#local-6989586621679308603"><span class="hs-identifier hs-var">metavar</span></a></span><span> </span><span class="annot"><span class="annottext">[Type]
+</span><a href="#local-6989586621679308604"><span class="hs-identifier hs-var">args</span></a></span><span> </span><span class="annot"><span class="annottext">Type
+</span><a href="#local-6989586621679308605"><span class="hs-identifier hs-var">returnType</span></a></span><span>
+</span><span id="line-98"></span><span>      </span><span id="local-6989586621679308606"><span class="annot"><span class="annottext">rawMetavarBinders :: [MetavarBinder]
+</span><a href="#local-6989586621679308606"><span class="hs-identifier hs-var hs-var">rawMetavarBinders</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((MetavarIdent, ([Type], Type)) -&gt; MetavarBinder)
+-&gt; [(MetavarIdent, ([Type], Type))] -&gt; [MetavarBinder]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">(MetavarIdent, ([Type], Type)) -&gt; MetavarBinder
+</span><a href="#local-6989586621679308602"><span class="hs-identifier hs-var">toRawMetavarBinder</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">MetavarBinders -&gt; [(MetavarIdent, ([Type], Type))]
+forall k a. Map k a -&gt; [(k, a)]
+</span><span class="hs-identifier hs-var">Map.toList</span></span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308601"><span class="hs-identifier hs-var">metavarBinders</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-99"></span><span>     </span><span class="hs-keyword">in</span><span>
+</span><span id="line-100"></span><span>      </span><span class="annot"><span class="annottext">RawBinders -&gt; Result RawBinders
+forall a. a -&gt; Either String a
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">(RawBinders -&gt; Result RawBinders)
+-&gt; RawBinders -&gt; Result RawBinders
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[String] -&gt; RawBinders
+</span><a href="Language.Lambda.RawConfig.html#RawBinders"><span class="hs-identifier hs-var">RawBinders</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">(MetavarBinder -&gt; String) -&gt; [MetavarBinder] -&gt; [String]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">MetavarBinder -&gt; String
+forall a. Print a =&gt; a -&gt; String
+</span><a href="Language.Lambda.Syntax.Print.html#printTree"><span class="hs-identifier hs-var">Raw.printTree</span></a></span><span> </span><span class="annot"><span class="annottext">[MetavarBinder]
+</span><a href="#local-6989586621679308606"><span class="hs-identifier hs-var">rawMetavarBinders</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-101"></span><span>
+</span><span id="line-102"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalSubstitutions"><span class="hs-identifier hs-type">IsCanonicalSubstitutions</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawSubstitutions"><span class="hs-identifier hs-type">RawSubstitutions</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-103"></span><span>  </span><span id="local-6989586621679308621"><span class="annot"><span class="annottext">toCanonicalSubstitution :: MetavarBinders -&gt; RawSubstitutions -&gt; Result MetaSubsts'
+</span><a href="#local-6989586621679308621"><span class="hs-identifier hs-var hs-var hs-var hs-var">toCanonicalSubstitution</span></a></span></span><span> </span><span id="local-6989586621679308623"><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308623"><span class="hs-identifier hs-var">metavarBinders</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawSubstitutions"><span class="hs-identifier hs-type">RawSubstitutions</span></a></span><span> </span><span id="local-6989586621679308624"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679308624"><span class="hs-identifier hs-var">rawSubsts</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-104"></span><span>    </span><span id="local-6989586621679308625"><span class="annot"><span class="annottext">[MetaSubst']
+</span><a href="#local-6989586621679308625"><span class="hs-identifier hs-var">substs</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(String -&gt; Either String MetaSubst')
+-&gt; [String] -&gt; Either String [MetaSubst']
+forall (t :: * -&gt; *) (f :: * -&gt; *) a b.
+(Traversable t, Applicative f) =&gt;
+(a -&gt; f b) -&gt; t a -&gt; f (t b)
+forall (f :: * -&gt; *) a b.
+Applicative f =&gt;
+(a -&gt; f b) -&gt; [a] -&gt; f [b]
+</span><span class="hs-identifier hs-var">traverse</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Either String MetaSubst'
+</span><a href="#local-6989586621679308626"><span class="hs-identifier hs-var">parse'</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679308624"><span class="hs-identifier hs-var">rawSubsts</span></a></span><span>
+</span><span id="line-105"></span><span>    </span><span class="annot"><span class="annottext">MetaSubsts' -&gt; Result MetaSubsts'
+forall a. a -&gt; Either String a
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[MetaSubst'] -&gt; MetaSubsts'
+forall (binder :: S -&gt; S -&gt; *) (sig :: * -&gt; * -&gt; *) metavar t.
+[MetaSubst binder sig metavar t] -&gt; MetaSubsts binder sig metavar t
+</span><a href="Data.SOAS.html#MetaSubsts"><span class="hs-identifier hs-var">MetaSubsts</span></a></span><span> </span><span class="annot"><span class="annottext">[MetaSubst']
+</span><a href="#local-6989586621679308625"><span class="hs-identifier hs-var">substs</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-106"></span><span>   </span><span class="hs-keyword">where</span><span>
+</span><span id="line-107"></span><span>    </span><span id="local-6989586621679308626"><span class="annot"><span class="annottext">parse' :: String -&gt; Either String MetaSubst'
+</span><a href="#local-6989586621679308626"><span class="hs-identifier hs-var hs-var">parse'</span></a></span></span><span> </span><span id="local-6989586621679308628"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679308628"><span class="hs-identifier hs-var">input</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-108"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679308629"><span class="annot"><span class="annottext">tokens :: [Token]
+</span><a href="#local-6989586621679308629"><span class="hs-identifier hs-var hs-var">tokens</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; [Token] -&gt; [Token]
+</span><a href="Language.Lambda.Syntax.Layout.html#resolveLayout"><span class="hs-identifier hs-var">Raw.resolveLayout</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; [Token]
+</span><a href="Language.Lambda.Syntax.Par.html#myLexer"><span class="hs-identifier hs-var">Raw.myLexer</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679308628"><span class="hs-identifier hs-var">input</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-109"></span><span>      </span><span id="local-6989586621679308630"><span class="annot"><span class="annottext">MetaSubst
+</span><a href="#local-6989586621679308630"><span class="hs-identifier hs-var">raw</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[Token] -&gt; Err MetaSubst
+</span><a href="Language.Lambda.Syntax.Par.html#pMetaSubst"><span class="hs-identifier hs-var">Raw.pMetaSubst</span></a></span><span> </span><span class="annot"><span class="annottext">[Token]
+</span><a href="#local-6989586621679308629"><span class="hs-identifier hs-var">tokens</span></a></span><span>
+</span><span id="line-110"></span><span>      </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">MetavarBinders -&gt; MetaSubst -&gt; Maybe MetaSubst'
+</span><a href="Language.Lambda.Impl.html#toMetaSubst"><span class="hs-identifier hs-var">toMetaSubst</span></a></span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308623"><span class="hs-identifier hs-var">metavarBinders</span></a></span><span> </span><span class="annot"><span class="annottext">MetaSubst
+</span><a href="#local-6989586621679308630"><span class="hs-identifier hs-var">raw</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-111"></span><span>        </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679308632"><span class="annot"><span class="annottext">MetaSubst'
+</span><a href="#local-6989586621679308632"><span class="hs-identifier hs-var">subst</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">MetaSubst' -&gt; Either String MetaSubst'
+forall a. a -&gt; Either String a
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">MetaSubst'
+</span><a href="#local-6989586621679308632"><span class="hs-identifier hs-var">subst</span></a></span><span>
+</span><span id="line-112"></span><span>        </span><span class="annot"><span class="annottext">Maybe MetaSubst'
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; Either String MetaSubst'
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;type error&quot;</span></span><span>
+</span><span id="line-113"></span><span>
+</span><span id="line-114"></span><span>  </span><span id="local-6989586621679308638"><span class="annot"><span class="annottext">fromCanonicalSubstitution :: MetavarBinders -&gt; MetaSubsts' -&gt; Result RawSubstitutions
+</span><a href="#local-6989586621679308638"><span class="hs-identifier hs-var hs-var hs-var hs-var">fromCanonicalSubstitution</span></a></span></span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Data.SOAS.html#MetaSubsts"><span class="hs-identifier hs-type">MetaSubsts</span></a></span><span> </span><span id="local-6989586621679308640"><span class="annot"><span class="annottext">[MetaSubst']
+</span><a href="#local-6989586621679308640"><span class="hs-identifier hs-var">substs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-115"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679308641"><span class="annot"><span class="annottext">rawSubsts :: [String]
+</span><a href="#local-6989586621679308641"><span class="hs-identifier hs-var hs-var">rawSubsts</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(MetaSubst' -&gt; String) -&gt; [MetaSubst'] -&gt; [String]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">MetaSubst -&gt; String
+forall a. Print a =&gt; a -&gt; String
+</span><a href="Language.Lambda.Syntax.Print.html#printTree"><span class="hs-identifier hs-var">Raw.printTree</span></a></span><span> </span><span class="annot"><span class="annottext">(MetaSubst -&gt; String)
+-&gt; (MetaSubst' -&gt; MetaSubst) -&gt; MetaSubst' -&gt; String
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">MetaSubst' -&gt; MetaSubst
+forall {t} {t}.
+MetaSubst
+  (AnnBinder t FoilPattern)
+  (AnnSig t (Sum TermSig (MetaAppSig MetavarIdent)))
+  MetavarIdent
+  t
+-&gt; MetaSubst
+</span><a href="#local-6989586621679308642"><span class="hs-identifier hs-var">fromMetaSubst</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[MetaSubst']
+</span><a href="#local-6989586621679308640"><span class="hs-identifier hs-var">substs</span></a></span><span>
+</span><span id="line-116"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679308643"><span class="annot"><span class="annottext">rawSubstitutions :: [String]
+</span><a href="#local-6989586621679308643"><span class="hs-identifier hs-var hs-var">rawSubstitutions</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(String -&gt; String) -&gt; [String] -&gt; [String]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String
+forall a. Print a =&gt; a -&gt; String
+</span><a href="Language.Lambda.Syntax.Print.html#printTree"><span class="hs-identifier hs-var">Raw.printTree</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679308641"><span class="hs-identifier hs-var">rawSubsts</span></a></span><span>
+</span><span id="line-117"></span><span>    </span><span class="annot"><span class="annottext">RawSubstitutions -&gt; Result RawSubstitutions
+forall a. a -&gt; Either String a
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="annot"><span class="annottext">(RawSubstitutions -&gt; Result RawSubstitutions)
+-&gt; RawSubstitutions -&gt; Result RawSubstitutions
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[String] -&gt; RawSubstitutions
+</span><a href="Language.Lambda.RawConfig.html#RawSubstitutions"><span class="hs-identifier hs-var">RawSubstitutions</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679308643"><span class="hs-identifier hs-var">rawSubstitutions</span></a></span><span>
+</span><span id="line-118"></span><span>   </span><span class="hs-keyword">where</span><span>
+</span><span id="line-119"></span><span>    </span><span id="local-6989586621679308642"><span class="annot"><span class="annottext">fromMetaSubst :: MetaSubst
+  (AnnBinder t FoilPattern)
+  (AnnSig t (Sum TermSig (MetaAppSig MetavarIdent)))
+  MetavarIdent
+  t
+-&gt; MetaSubst
+</span><a href="#local-6989586621679308642"><span class="hs-identifier hs-var hs-var">fromMetaSubst</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Data.SOAS.html#MetaSubst"><span class="hs-identifier hs-type">MetaSubst</span></a></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679308645"><span class="annot"><span class="annottext">MetavarIdent
+</span><a href="#local-6989586621679308645"><span class="hs-identifier hs-var">metavar</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Data.SOAS.html#MetaAbs"><span class="hs-identifier hs-type">MetaAbs</span></a></span><span> </span><span id="local-6989586621679308649"><span class="annot"><span class="annottext">NameBinderList 'VoidS n
+</span><a href="#local-6989586621679308649"><span class="hs-identifier hs-var">binderList</span></a></span></span><span> </span><span id="local-6989586621679308650"><span class="annot"><span class="annottext">AST
+  (AnnBinder t FoilPattern)
+  (AnnSig t (Sum TermSig (MetaAppSig MetavarIdent)))
+  n
+</span><a href="#local-6989586621679308650"><span class="hs-identifier hs-var">term</span></a></span></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-120"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679308651"><span class="annot"><span class="annottext">term' :: ScopedTerm
+</span><a href="#local-6989586621679308651"><span class="hs-identifier hs-var hs-var">term'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Term -&gt; ScopedTerm
+</span><a href="Language.Lambda.Syntax.Abs.html#AScopedTerm"><span class="hs-identifier hs-var">Raw.AScopedTerm</span></a></span><span> </span><span class="annot"><span class="annottext">(Term -&gt; ScopedTerm) -&gt; Term -&gt; ScopedTerm
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Term n -&gt; Term
+forall (n :: S). Term n -&gt; Term
+</span><a href="Language.Lambda.Impl.html#fromTerm"><span class="hs-identifier hs-var">fromTerm</span></a></span><span> </span><span class="annot"><span class="annottext">(Term n -&gt; Term) -&gt; Term n -&gt; Term
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">AST
+  (AnnBinder t FoilPattern)
+  (AnnSig t (Sum TermSig (MetaAppSig MetavarIdent)))
+  n
+-&gt; Term n
+forall (n :: S) t. MetaTerm MetavarIdent n t -&gt; Term n
+</span><a href="Language.Lambda.Impl.html#fromMetaTerm"><span class="hs-identifier hs-var">fromMetaTerm</span></a></span><span> </span><span class="annot"><span class="annottext">AST
+  (AnnBinder t FoilPattern)
+  (AnnSig t (Sum TermSig (MetaAppSig MetavarIdent)))
+  n
+</span><a href="#local-6989586621679308650"><span class="hs-identifier hs-var">term</span></a></span><span>
+</span><span id="line-121"></span><span>          </span><span id="local-6989586621679308653"><span class="annot"><span class="annottext">idents :: [VarIdent]
+</span><a href="#local-6989586621679308653"><span class="hs-identifier hs-var hs-var">idents</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">NameBinderList 'VoidS n -&gt; [VarIdent]
+forall (i :: S) (n :: S).
+Distinct i =&gt;
+NameBinderList i n -&gt; [VarIdent]
+</span><a href="Language.Lambda.Impl.html#toIdents"><span class="hs-identifier hs-var">toIdents</span></a></span><span> </span><span class="annot"><span class="annottext">NameBinderList 'VoidS n
+</span><a href="#local-6989586621679308649"><span class="hs-identifier hs-var">binderList</span></a></span><span>
+</span><span id="line-122"></span><span>       </span><span class="hs-keyword">in</span><span> </span><span class="annot"><span class="annottext">MetavarIdent -&gt; [VarIdent] -&gt; ScopedTerm -&gt; MetaSubst
+</span><a href="Language.Lambda.Syntax.Abs.html#AMetaSubst"><span class="hs-identifier hs-var">Raw.AMetaSubst</span></a></span><span> </span><span class="annot"><span class="annottext">MetavarIdent
+</span><a href="#local-6989586621679308645"><span class="hs-identifier hs-var">metavar</span></a></span><span> </span><span class="annot"><span class="annottext">[VarIdent]
+</span><a href="#local-6989586621679308653"><span class="hs-identifier hs-var">idents</span></a></span><span> </span><span class="annot"><span class="annottext">ScopedTerm
+</span><a href="#local-6989586621679308651"><span class="hs-identifier hs-var">term'</span></a></span><span>
+</span><span id="line-123"></span><span>
+</span><span id="line-124"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalConstraint"><span class="hs-identifier hs-type">IsCanonicalConstraint</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawConstraint"><span class="hs-identifier hs-type">RawConstraint</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-125"></span><span>  </span><span id="local-6989586621679308661"><span class="annot"><span class="annottext">toCanonicalConstraint :: MetavarBinders -&gt; RawConstraint -&gt; Result CanonicalConstraint
+</span><a href="#local-6989586621679308661"><span class="hs-identifier hs-var hs-var hs-var hs-var">toCanonicalConstraint</span></a></span></span><span> </span><span id="local-6989586621679308663"><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308663"><span class="hs-identifier hs-var">metavarBinders</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Language.Lambda.RawConfig.html#RawConstraint"><span class="hs-identifier hs-type">RawConstraint</span></a></span><span> </span><span id="local-6989586621679308664"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679308664"><span class="hs-identifier hs-var">input</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-126"></span><span>    </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679308665"><span class="annot"><span class="annottext">tokens :: [Token]
+</span><a href="#local-6989586621679308665"><span class="hs-identifier hs-var hs-var">tokens</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool -&gt; [Token] -&gt; [Token]
+</span><a href="Language.Lambda.Syntax.Layout.html#resolveLayout"><span class="hs-identifier hs-var">Raw.resolveLayout</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; [Token]
+</span><a href="Language.Lambda.Syntax.Par.html#myLexer"><span class="hs-identifier hs-var">Raw.myLexer</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679308664"><span class="hs-identifier hs-var">input</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-127"></span><span>    </span><span id="local-6989586621679308666"><span class="annot"><span class="annottext">UnificationConstraint
+</span><a href="#local-6989586621679308666"><span class="hs-identifier hs-var">raw</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[Token] -&gt; Err UnificationConstraint
+</span><a href="Language.Lambda.Syntax.Par.html#pUnificationConstraint"><span class="hs-identifier hs-var">Raw.pUnificationConstraint</span></a></span><span> </span><span class="annot"><span class="annottext">[Token]
+</span><a href="#local-6989586621679308665"><span class="hs-identifier hs-var">tokens</span></a></span><span>
+</span><span id="line-128"></span><span>    </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+-&gt; UnificationConstraint -&gt; Maybe CanonicalConstraint
+</span><a href="Language.Lambda.Config.html#toUnificationConstraint"><span class="hs-identifier hs-var">toUnificationConstraint</span></a></span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308663"><span class="hs-identifier hs-var">metavarBinders</span></a></span><span> </span><span class="annot"><span class="annottext">UnificationConstraint
+</span><a href="#local-6989586621679308666"><span class="hs-identifier hs-var">raw</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-129"></span><span>      </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679308668"><span class="annot"><span class="annottext">CanonicalConstraint
+</span><a href="#local-6989586621679308668"><span class="hs-identifier hs-var">uc</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">CanonicalConstraint -&gt; Result CanonicalConstraint
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="annot"><span class="annottext">CanonicalConstraint
+</span><a href="#local-6989586621679308668"><span class="hs-identifier hs-var">uc</span></a></span><span>
+</span><span id="line-130"></span><span>      </span><span class="annot"><span class="annottext">Maybe CanonicalConstraint
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; Result CanonicalConstraint
+forall a b. a -&gt; Either a b
+</span><span class="hs-identifier hs-var">Left</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;type error&quot;</span></span><span>
+</span><span id="line-131"></span><span>  </span><span id="local-6989586621679308671"><span class="annot"><span class="annottext">fromCanonicalConstraint :: MetavarBinders -&gt; CanonicalConstraint -&gt; Result RawConstraint
+</span><a href="#local-6989586621679308671"><span class="hs-identifier hs-var hs-var hs-var hs-var">fromCanonicalConstraint</span></a></span></span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-132"></span><span>    </span><span class="annot"><span class="annottext">RawConstraint -&gt; Result RawConstraint
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span>
+</span><span id="line-133"></span><span>      </span><span class="annot"><span class="annottext">(RawConstraint -&gt; Result RawConstraint)
+-&gt; (CanonicalConstraint -&gt; RawConstraint)
+-&gt; CanonicalConstraint
+-&gt; Result RawConstraint
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; RawConstraint
+</span><a href="Language.Lambda.RawConfig.html#RawConstraint"><span class="hs-identifier hs-var">RawConstraint</span></a></span><span>
+</span><span id="line-134"></span><span>      </span><span class="annot"><span class="annottext">(String -&gt; RawConstraint)
+-&gt; (CanonicalConstraint -&gt; String)
+-&gt; CanonicalConstraint
+-&gt; RawConstraint
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">UnificationConstraint -&gt; String
+forall a. Print a =&gt; a -&gt; String
+</span><a href="Language.Lambda.Syntax.Print.html#printTree"><span class="hs-identifier hs-var">Raw.printTree</span></a></span><span>
+</span><span id="line-135"></span><span>      </span><span class="annot"><span class="annottext">(UnificationConstraint -&gt; String)
+-&gt; (CanonicalConstraint -&gt; UnificationConstraint)
+-&gt; CanonicalConstraint
+-&gt; String
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">CanonicalConstraint -&gt; UnificationConstraint
+</span><a href="Language.Lambda.Config.html#fromUnificationConstraint"><span class="hs-identifier hs-var">fromUnificationConstraint</span></a></span><span>
+</span><span id="line-136"></span></pre></body></html>

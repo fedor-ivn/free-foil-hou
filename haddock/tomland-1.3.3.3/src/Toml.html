@@ -1,0 +1,80 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="annot"><span class="hs-comment">{- |
+Module                  : Toml
+Copyright               : (c) 2018-2022 Kowainik
+SPDX-License-Identifier : MPL-2.0
+Maintainer              : Kowainik &lt;xrom.xkov@gmail.com&gt;
+Stability               : Stable
+Portability             : Portable
+
+This module reexports all functionality of the @tomland@ package. It's
+recommended to import this module qualified, like this:
+
+@
+__import__ &quot;Toml&quot; ('TomlCodec', '(.=)')
+__import__ __qualified__ &quot;Toml&quot;
+@
+
+Simple @'TomlCodec'@ for a Haskell value, that can be decoded from
+TOML or encoded as TOML, could be written in the following way:
+
+@
+__data__ User = User
+    { userName :: Text
+    , userAge  :: Int
+    }
+
+userCodec :: 'TomlCodec' User
+userCodec = User
+    \&lt;$\&gt; Toml.'text' &quot;name&quot; '.=' userName
+    \&lt;*\&gt; Toml.'int'  &quot;age&quot;  '.=' userAge
+@
+
+A value of such type will look in TOML like this:
+
+@
+name = &quot;Alice&quot;
+age  = 27
+@
+
+For more detailed examples see README.md in the repository:
+
+* [tomland/README.md](https://github.com/kowainik/tomland#tomland)
+
+For the details of the library implementation see blog post:
+
+* [tomland: Bidirectional TOML serialization](https://kowainik.github.io/posts/2019-01-14-tomland)
+-}</span></span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Toml</span><span>
+</span><span id="line-49"></span><span>    </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- $codec</span></span><span>
+</span><span id="line-50"></span><span>      </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Codec.html"><span class="hs-identifier">Toml.Codec</span></a></span><span>
+</span><span id="line-51"></span><span>      </span><span class="annot"><span class="hs-comment">-- $type</span></span><span>
+</span><span id="line-52"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Type.html"><span class="hs-identifier">Toml.Type</span></a></span><span>
+</span><span id="line-53"></span><span>      </span><span class="annot"><span class="hs-comment">-- $parser</span></span><span>
+</span><span id="line-54"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Parser.html"><span class="hs-identifier">Toml.Parser</span></a></span><span>
+</span><span id="line-55"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-56"></span><span>
+</span><span id="line-57"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.html"><span class="hs-identifier">Toml.Codec</span></a></span><span>
+</span><span id="line-58"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Parser.html"><span class="hs-identifier">Toml.Parser</span></a></span><span>
+</span><span id="line-59"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.html"><span class="hs-identifier">Toml.Type</span></a></span><span>
+</span><span id="line-60"></span><span>
+</span><span id="line-61"></span><span class="annot"><span class="hs-comment">{- $codec
+Main types and functions to implement TOML codecs. This module
+provides high-level API of @tomland@ library.
+-}</span></span><span>
+</span><span id="line-65"></span><span>
+</span><span id="line-66"></span><span class="annot"><span class="hs-comment">{- $type
+Low-level implementation details of types that power @tomland@. The
+&quot;Toml.Type&quot; module contains types to represent TOML AST and basic
+functions to work with it. This module also contains pretty-printing
+API for 'TOML' AST and eDSL for type-safe definition of the TOML
+values.
+-}</span></span><span>
+</span><span id="line-73"></span><span>
+</span><span id="line-74"></span><span class="annot"><span class="hs-comment">{- $parser
+Parser for types, defined in &quot;Toml.Type&quot;. This modules contains
+low-level functions to parse 'TOML' from text. If you want to convert
+between Haskell types and TOML representation, use functions from
+&quot;Toml.Codec&quot;.
+-}</span></span><span>
+</span><span id="line-80"></span></pre></body></html>

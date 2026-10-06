@@ -1,0 +1,164 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="annot"><span class="hs-comment">{- |
+Module                  : Toml.Type.Edsl
+Copyright               : (c) 2018-2022 Kowainik
+SPDX-License-Identifier : MPL-2.0
+Maintainer              : Kowainik &lt;xrom.xkov@gmail.com&gt;
+Stability               : Stable
+Portability             : Portable
+
+This module introduces EDSL for manually specifying 'TOML' data types.
+
+Consider the following raw TOML:
+
+@
+key1 = 1
+key2 = true
+
+[meme-quotes]
+  quote1 = [ \&quot;Oh\&quot;, \&quot;Hi\&quot;, \&quot;Mark\&quot; ]
+
+[[arrayName]]
+  elem1 = &quot;yes&quot;
+
+[[arrayName]]
+  [arrayName.elem2]
+    deep = 7
+
+[[arrayName]]
+@
+
+using functions from this module you can specify the above TOML in safer way:
+
+@
+exampleToml :: 'TOML'
+exampleToml = 'mkToml' $ __do__
+    \&quot;key1\&quot; '=:' 1
+    \&quot;key2\&quot; '=:' Bool True
+    'table' \&quot;meme-quotes\&quot; $
+        \&quot;quote1\&quot; '=:' Array [\&quot;Oh\&quot;, \&quot;Hi\&quot;, \&quot;Mark\&quot;]
+    'tableArray' \&quot;arrayName\&quot; $
+        \&quot;elem1\&quot; '=:' \&quot;yes\&quot; :|
+        [ 'table' \&quot;elem2\&quot; $ \&quot;deep\&quot; '=:' Integer 7
+        , 'empty'
+        ]
+@
+
+@since 0.3
+-}</span></span><span>
+</span><span id="line-48"></span><span>
+</span><span id="line-49"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Toml.Type.Edsl</span><span>
+</span><span id="line-50"></span><span>       </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Toml.Type.Edsl.html#TDSL"><span class="hs-identifier">TDSL</span></a></span><span>
+</span><span id="line-51"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.Edsl.html#mkToml"><span class="hs-identifier">mkToml</span></a></span><span>
+</span><span id="line-52"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.Edsl.html#empty"><span class="hs-identifier">empty</span></a></span><span>
+</span><span id="line-53"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.Edsl.html#%3D%3A"><span class="hs-operator">(=:)</span></a></span><span>
+</span><span id="line-54"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.Edsl.html#table"><span class="hs-identifier">table</span></a></span><span>
+</span><span id="line-55"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.Edsl.html#tableArray"><span class="hs-identifier">tableArray</span></a></span><span>
+</span><span id="line-56"></span><span>       </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-57"></span><span>
+</span><span id="line-58"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.State</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">State</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">execState</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">modify</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">put</span></span><span class="hs-special">)</span><span>
+</span><span id="line-59"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.List.NonEmpty</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">NonEmpty</span></span><span class="hs-special">)</span><span>
+</span><span id="line-60"></span><span>
+</span><span id="line-61"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.Key.html"><span class="hs-identifier">Toml.Type.Key</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier">Key</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-62"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html"><span class="hs-identifier">Toml.Type.TOML</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier">TOML</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#insertKeyVal"><span class="hs-identifier">insertKeyVal</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#insertTable"><span class="hs-identifier">insertTable</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#insertTableArrays"><span class="hs-identifier">insertTableArrays</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-63"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.Value.html"><span class="hs-identifier">Toml.Type.Value</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Value.html#Value"><span class="hs-identifier">Value</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-64"></span><span>
+</span><span id="line-65"></span><span>
+</span><span id="line-66"></span><span class="annot"><span class="hs-comment">{- | Monad for creating TOML.
+
+@since 0.3
+-}</span></span><span>
+</span><span id="line-70"></span><span class="hs-keyword">type</span><span> </span><span id="TDSL"><span class="annot"><a href="Toml.Type.Edsl.html#TDSL"><span class="hs-identifier hs-var">TDSL</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">State</span></span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-71"></span><span>
+</span><span id="line-72"></span><span class="annot"><span class="hs-comment">{- | Creates 'TOML' from the 'TDSL'.
+
+@since 0.3
+-}</span></span><span>
+</span><span id="line-76"></span><span class="annot"><a href="Toml.Type.Edsl.html#mkToml"><span class="hs-identifier hs-type">mkToml</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Edsl.html#TDSL"><span class="hs-identifier hs-type">TDSL</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html#TOML"><span class="hs-identifier hs-type">TOML</span></a></span><span>
+</span><span id="line-77"></span><span id="mkToml"><span class="annot"><span class="annottext">mkToml :: TDSL -&gt; TOML
+</span><a href="Toml.Type.Edsl.html#mkToml"><span class="hs-identifier hs-var hs-var">mkToml</span></a></span></span><span> </span><span id="local-6989586621679105322"><span class="annot"><span class="annottext">TDSL
+</span><a href="#local-6989586621679105322"><span class="hs-identifier hs-var">env</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TDSL -&gt; TOML -&gt; TOML
+forall s a. State s a -&gt; s -&gt; s
+</span><span class="hs-identifier hs-var">execState</span></span><span> </span><span class="annot"><span class="annottext">TDSL
+</span><a href="#local-6989586621679105322"><span class="hs-identifier hs-var">env</span></a></span><span> </span><span class="annot"><span class="annottext">TOML
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-78"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Type.Edsl.html#mkToml"><span class="hs-pragma hs-type">mkToml</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-79"></span><span>
+</span><span id="line-80"></span><span class="annot"><span class="hs-comment">{- | Creates an empty 'TDSL'.
+
+@since 0.3
+-}</span></span><span>
+</span><span id="line-84"></span><span class="annot"><a href="Toml.Type.Edsl.html#empty"><span class="hs-identifier hs-type">empty</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Edsl.html#TDSL"><span class="hs-identifier hs-type">TDSL</span></a></span><span>
+</span><span id="line-85"></span><span id="empty"><span class="annot"><span class="annottext">empty :: TDSL
+</span><a href="Toml.Type.Edsl.html#empty"><span class="hs-identifier hs-var hs-var">empty</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TOML -&gt; TDSL
+forall s (m :: * -&gt; *). MonadState s m =&gt; s -&gt; m ()
+</span><span class="hs-identifier hs-var">put</span></span><span> </span><span class="annot"><span class="annottext">TOML
+forall a. Monoid a =&gt; a
+</span><span class="hs-identifier hs-var">mempty</span></span><span>
+</span><span id="line-86"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Type.Edsl.html#empty"><span class="hs-pragma hs-type">empty</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-87"></span><span>
+</span><span id="line-88"></span><span class="annot"><span class="hs-comment">{- | Adds key-value pair to the 'TDSL'.
+
+@since 0.3
+-}</span></span><span>
+</span><span id="line-92"></span><span id="local-6989586621679105283"><span class="annot"><a href="Toml.Type.Edsl.html#%3D%3A"><span class="hs-operator hs-type">(=:)</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Value.html#Value"><span class="hs-identifier hs-type">Value</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679105283"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Edsl.html#TDSL"><span class="hs-identifier hs-type">TDSL</span></a></span></span><span>
+</span><span id="line-93"></span><span id="%3D%3A"><span class="annot"><span class="annottext">=: :: forall (a :: TValue). Key -&gt; Value a -&gt; TDSL
+</span><a href="Toml.Type.Edsl.html#%3D%3A"><span class="hs-operator hs-var hs-var">(=:)</span></a></span></span><span> </span><span id="local-6989586621679105324"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679105324"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span id="local-6989586621679105325"><span class="annot"><span class="annottext">Value a
+</span><a href="#local-6989586621679105325"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(TOML -&gt; TOML) -&gt; TDSL
+forall s (m :: * -&gt; *). MonadState s m =&gt; (s -&gt; s) -&gt; m ()
+</span><span class="hs-identifier hs-var">modify</span></span><span> </span><span class="annot"><span class="annottext">((TOML -&gt; TOML) -&gt; TDSL) -&gt; (TOML -&gt; TOML) -&gt; TDSL
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; Value a -&gt; TOML -&gt; TOML
+forall (a :: TValue). Key -&gt; Value a -&gt; TOML -&gt; TOML
+</span><a href="Toml.Type.TOML.html#insertKeyVal"><span class="hs-identifier hs-var">insertKeyVal</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679105324"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">Value a
+</span><a href="#local-6989586621679105325"><span class="hs-identifier hs-var">v</span></a></span><span>
+</span><span id="line-94"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="hs-pragma">(</span><span class="hs-pragma">=:</span><span class="hs-pragma">)</span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-95"></span><span>
+</span><span id="line-96"></span><span class="annot"><span class="hs-comment">{- | Adds table to the 'TDSL'.
+
+@since 0.3
+-}</span></span><span>
+</span><span id="line-100"></span><span class="annot"><a href="Toml.Type.Edsl.html#table"><span class="hs-identifier hs-type">table</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Edsl.html#TDSL"><span class="hs-identifier hs-type">TDSL</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Edsl.html#TDSL"><span class="hs-identifier hs-type">TDSL</span></a></span><span>
+</span><span id="line-101"></span><span id="table"><span class="annot"><span class="annottext">table :: Key -&gt; TDSL -&gt; TDSL
+</span><a href="Toml.Type.Edsl.html#table"><span class="hs-identifier hs-var hs-var">table</span></a></span></span><span> </span><span id="local-6989586621679105326"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679105326"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(TOML -&gt; TOML) -&gt; TDSL
+forall s (m :: * -&gt; *). MonadState s m =&gt; (s -&gt; s) -&gt; m ()
+</span><span class="hs-identifier hs-var">modify</span></span><span> </span><span class="annot"><span class="annottext">((TOML -&gt; TOML) -&gt; TDSL) -&gt; (TDSL -&gt; TOML -&gt; TOML) -&gt; TDSL -&gt; TDSL
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; TOML -&gt; TOML -&gt; TOML
+</span><a href="Toml.Type.TOML.html#insertTable"><span class="hs-identifier hs-var">insertTable</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679105326"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">(TOML -&gt; TOML -&gt; TOML) -&gt; (TDSL -&gt; TOML) -&gt; TDSL -&gt; TOML -&gt; TOML
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">TDSL -&gt; TOML
+</span><a href="Toml.Type.Edsl.html#mkToml"><span class="hs-identifier hs-var">mkToml</span></a></span><span>
+</span><span id="line-102"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Type.Edsl.html#table"><span class="hs-pragma hs-type">table</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-103"></span><span>
+</span><span id="line-104"></span><span class="annot"><span class="hs-comment">{- | Adds array of tables to the 'TDSL'.
+
+@since 1.0.0
+-}</span></span><span>
+</span><span id="line-108"></span><span class="annot"><a href="Toml.Type.Edsl.html#tableArray"><span class="hs-identifier hs-type">tableArray</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">NonEmpty</span></span><span> </span><span class="annot"><a href="Toml.Type.Edsl.html#TDSL"><span class="hs-identifier hs-type">TDSL</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Type.Edsl.html#TDSL"><span class="hs-identifier hs-type">TDSL</span></a></span><span>
+</span><span id="line-109"></span><span id="tableArray"><span class="annot"><span class="annottext">tableArray :: Key -&gt; NonEmpty TDSL -&gt; TDSL
+</span><a href="Toml.Type.Edsl.html#tableArray"><span class="hs-identifier hs-var hs-var">tableArray</span></a></span></span><span> </span><span id="local-6989586621679105328"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679105328"><span class="hs-identifier hs-var">k</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(TOML -&gt; TOML) -&gt; TDSL
+forall s (m :: * -&gt; *). MonadState s m =&gt; (s -&gt; s) -&gt; m ()
+</span><span class="hs-identifier hs-var">modify</span></span><span> </span><span class="annot"><span class="annottext">((TOML -&gt; TOML) -&gt; TDSL)
+-&gt; (NonEmpty TDSL -&gt; TOML -&gt; TOML) -&gt; NonEmpty TDSL -&gt; TDSL
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Key -&gt; NonEmpty TOML -&gt; TOML -&gt; TOML
+</span><a href="Toml.Type.TOML.html#insertTableArrays"><span class="hs-identifier hs-var">insertTableArrays</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679105328"><span class="hs-identifier hs-var">k</span></a></span><span> </span><span class="annot"><span class="annottext">(NonEmpty TOML -&gt; TOML -&gt; TOML)
+-&gt; (NonEmpty TDSL -&gt; NonEmpty TOML)
+-&gt; NonEmpty TDSL
+-&gt; TOML
+-&gt; TOML
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(TDSL -&gt; TOML) -&gt; NonEmpty TDSL -&gt; NonEmpty TOML
+forall a b. (a -&gt; b) -&gt; NonEmpty a -&gt; NonEmpty b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">TDSL -&gt; TOML
+</span><a href="Toml.Type.Edsl.html#mkToml"><span class="hs-identifier hs-var">mkToml</span></a></span><span>
+</span><span id="line-110"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Type.Edsl.html#tableArray"><span class="hs-pragma hs-type">tableArray</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-111"></span></pre></body></html>

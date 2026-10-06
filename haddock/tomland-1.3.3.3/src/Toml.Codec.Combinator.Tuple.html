@@ -1,0 +1,167 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="annot"><span class="hs-comment">{- |
+Module                  : Toml.Codec.Combinator.Tuple
+Copyright               : (c) 2018-2022 Kowainik
+SPDX-License-Identifier : MPL-2.0
+Maintainer              : Kowainik &lt;xrom.xkov@gmail.com&gt;
+Stability               : Stable
+Portability             : Portable
+
+TOML-specific combinators for converting between TOML and Haskell tuples.
+It's recommended to create your custom data types and implement codecs
+for them, but if you need to have tuples (e.g. for decoding different
+constructors of sum types), you can find codecs from this module
+helpful.
+
++-------------------------------+---------------+------------------------+
+|         Haskell Type          |    @TOML@     |   'TomlCodec'          |
++===============================+===============+========================+
+| __@('Int', 'Text')@__         | @[foo]@       | @'pair'@               |
++-------------------------------+---------------+------------------------+
+|                               | @&#8201;&#8201;&#8201;&#8201;a = 42@  | @&#8201;&#8201;&#8201;&#8201;('Toml.int' &quot;a&quot;)@ |
++-------------------------------+---------------+------------------------+
+|                               |@&#8201;&#8201;&#8201;&#8201;b = &quot;bar&quot;@| @&#8201;&#8201;&#8201;&#8201;('Toml.text' &quot;b&quot;)@|
++-------------------------------+---------------+------------------------+
+| __@('Int', 'Text', 'Bool')@__ | @[foo]@       | @'triple'@             |
++-------------------------------+---------------+------------------------+
+|                               | @&#8201;&#8201;&#8201;&#8201;a = 42@  | @&#8201;&#8201;&#8201;&#8201;('Toml.int' &quot;a&quot;)@ |
++-------------------------------+---------------+------------------------+
+|                               |@&#8201;&#8201;&#8201;&#8201;b = &quot;bar&quot;@| @&#8201;&#8201;&#8201;&#8201;('Toml.text' &quot;b&quot;)@|
++-------------------------------+---------------+------------------------+
+|                               |@&#8201;&#8201;&#8201;&#8201;c = false@| @&#8201;&#8201;&#8201;&#8201;('Toml.bool' &quot;c&quot;)@|
++-------------------------------+---------------+------------------------+
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-35"></span><span>
+</span><span id="line-36"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Toml.Codec.Combinator.Tuple</span><span>
+</span><span id="line-37"></span><span>    </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Tuple.html#pair"><span class="hs-identifier">pair</span></a></span><span>
+</span><span id="line-38"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Tuple.html#triple"><span class="hs-identifier">triple</span></a></span><span>
+</span><span id="line-39"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-40"></span><span>
+</span><span id="line-41"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Di.html"><span class="hs-identifier">Toml.Codec.Di</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Di.html#.%3D"><span class="hs-operator">(.=)</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-42"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html"><span class="hs-identifier">Toml.Codec.Types</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier">TomlCodec</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-43"></span><span>
+</span><span id="line-44"></span><span>
+</span><span id="line-45"></span><span class="annot"><span class="hs-comment">{- | Codec for pair of values. Takes codecs for the first and for the second
+values of the pair.
+
+If I have the following @TOML@ entry
+
+@
+myPair = { first = 11, second = &quot;eleven&quot;}
+@
+
+and want to convert it into the Haskell tuple of two elements, I can use the
+following codec:
+
+@
+myPairCodec :: 'TomlCodec' ('Int', 'Text')
+myPairCodec = flip Toml.'table' \&quot;myPair\&quot; $ Toml.'pair'
+    (Toml.'int' \&quot;first\&quot;)
+    (Toml.'text' \&quot;second\&quot;)
+@
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-66"></span><span id="local-6989586621679107920"><span id="local-6989586621679107922"><span class="annot"><a href="Toml.Codec.Combinator.Tuple.html#pair"><span class="hs-identifier hs-type">pair</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107920"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107922"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679107920"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679107922"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">)</span></span></span><span>
+</span><span id="line-67"></span><span id="pair"><span class="annot"><span class="annottext">pair :: forall a b. TomlCodec a -&gt; TomlCodec b -&gt; TomlCodec (a, b)
+</span><a href="Toml.Codec.Combinator.Tuple.html#pair"><span class="hs-identifier hs-var hs-var">pair</span></a></span></span><span> </span><span id="local-6989586621679107957"><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679107957"><span class="hs-identifier hs-var">aCodec</span></a></span></span><span> </span><span id="local-6989586621679107958"><span class="annot"><span class="annottext">TomlCodec b
+</span><a href="#local-6989586621679107958"><span class="hs-identifier hs-var">bCodec</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="hs-special">,</span><span class="hs-special">)</span><span>
+</span><span id="line-68"></span><span>    </span><span class="annot"><span class="annottext">(a -&gt; b -&gt; (a, b)) -&gt; Codec (a, b) a -&gt; Codec (a, b) (b -&gt; (a, b))
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679107957"><span class="hs-identifier hs-var">aCodec</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec a -&gt; ((a, b) -&gt; a) -&gt; Codec (a, b) a
+forall field a object.
+Codec field a -&gt; (object -&gt; field) -&gt; Codec object a
+</span><a href="Toml.Codec.Di.html#.%3D"><span class="hs-operator hs-var">.=</span></a></span><span> </span><span class="annot"><span class="annottext">(a, b) -&gt; a
+forall a b. (a, b) -&gt; a
+</span><span class="hs-identifier hs-var">fst</span></span><span>
+</span><span id="line-69"></span><span>    </span><span class="annot"><span class="annottext">Codec (a, b) (b -&gt; (a, b)) -&gt; Codec (a, b) b -&gt; Codec (a, b) (a, b)
+forall a b.
+Codec (a, b) (a -&gt; b) -&gt; Codec (a, b) a -&gt; Codec (a, b) b
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;*&gt;</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec b
+</span><a href="#local-6989586621679107958"><span class="hs-identifier hs-var">bCodec</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec b -&gt; ((a, b) -&gt; b) -&gt; Codec (a, b) b
+forall field a object.
+Codec field a -&gt; (object -&gt; field) -&gt; Codec object a
+</span><a href="Toml.Codec.Di.html#.%3D"><span class="hs-operator hs-var">.=</span></a></span><span> </span><span class="annot"><span class="annottext">(a, b) -&gt; b
+forall a b. (a, b) -&gt; b
+</span><span class="hs-identifier hs-var">snd</span></span><span>
+</span><span id="line-70"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Tuple.html#pair"><span class="hs-pragma hs-type">pair</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-71"></span><span>
+</span><span id="line-72"></span><span class="annot"><span class="hs-comment">{- | Codec for triple of values. Takes codecs for the first, second and third
+values of the triple.
+
+If I have the following @TOML@ entry
+
+@
+myTriple =
+    { first = 11
+    , second = &quot;eleven&quot;
+    , isMyFavourite = true
+    }
+@
+
+and want to convert it into the Haskell tuple of three elements, I can use the
+following codec:
+
+@
+myTripleCodec :: 'TomlCodec' ('Int', 'Text', 'Bool')
+myTripleCodec = flip Toml.'table' \&quot;myTriple\&quot; $ Toml.'triple'
+    (Toml.'int' \&quot;first\&quot;)
+    (Toml.'text' \&quot;second\&quot;)
+    (Toml.'bool' \&quot;isMyFavourite\&quot;)
+@
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-98"></span><span id="local-6989586621679107943"><span id="local-6989586621679107944"><span id="local-6989586621679107945"><span class="annot"><a href="Toml.Codec.Combinator.Tuple.html#triple"><span class="hs-identifier hs-type">triple</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107943"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107944"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679107945"><span class="hs-identifier hs-type">c</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="#local-6989586621679107943"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679107944"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="#local-6989586621679107945"><span class="hs-identifier hs-type">c</span></a></span><span class="hs-special">)</span></span></span></span><span>
+</span><span id="line-99"></span><span id="triple"><span class="annot"><span class="annottext">triple :: forall a b c.
+TomlCodec a -&gt; TomlCodec b -&gt; TomlCodec c -&gt; TomlCodec (a, b, c)
+</span><a href="Toml.Codec.Combinator.Tuple.html#triple"><span class="hs-identifier hs-var hs-var">triple</span></a></span></span><span> </span><span id="local-6989586621679107965"><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679107965"><span class="hs-identifier hs-var">aCodec</span></a></span></span><span> </span><span id="local-6989586621679107966"><span class="annot"><span class="annottext">TomlCodec b
+</span><a href="#local-6989586621679107966"><span class="hs-identifier hs-var">bCodec</span></a></span></span><span> </span><span id="local-6989586621679107967"><span class="annot"><span class="annottext">TomlCodec c
+</span><a href="#local-6989586621679107967"><span class="hs-identifier hs-var">cCodec</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="hs-special">,</span><span class="hs-special">,</span><span class="hs-special">)</span><span>
+</span><span id="line-100"></span><span>    </span><span class="annot"><span class="annottext">(a -&gt; b -&gt; c -&gt; (a, b, c))
+-&gt; Codec (a, b, c) a -&gt; Codec (a, b, c) (b -&gt; c -&gt; (a, b, c))
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec a
+</span><a href="#local-6989586621679107965"><span class="hs-identifier hs-var">aCodec</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec a -&gt; ((a, b, c) -&gt; a) -&gt; Codec (a, b, c) a
+forall field a object.
+Codec field a -&gt; (object -&gt; field) -&gt; Codec object a
+</span><a href="Toml.Codec.Di.html#.%3D"><span class="hs-operator hs-var">.=</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span class="hs-special">(</span><span id="local-6989586621679107968"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679107968"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">b
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">c
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679107968"><span class="hs-identifier hs-var">a</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-101"></span><span>    </span><span class="annot"><span class="annottext">Codec (a, b, c) (b -&gt; c -&gt; (a, b, c))
+-&gt; Codec (a, b, c) b -&gt; Codec (a, b, c) (c -&gt; (a, b, c))
+forall a b.
+Codec (a, b, c) (a -&gt; b) -&gt; Codec (a, b, c) a -&gt; Codec (a, b, c) b
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;*&gt;</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec b
+</span><a href="#local-6989586621679107966"><span class="hs-identifier hs-var">bCodec</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec b -&gt; ((a, b, c) -&gt; b) -&gt; Codec (a, b, c) b
+forall field a object.
+Codec field a -&gt; (object -&gt; field) -&gt; Codec object a
+</span><a href="Toml.Codec.Di.html#.%3D"><span class="hs-operator hs-var">.=</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679107969"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679107969"><span class="hs-identifier hs-var">b</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">c
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679107969"><span class="hs-identifier hs-var">b</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-102"></span><span>    </span><span class="annot"><span class="annottext">Codec (a, b, c) (c -&gt; (a, b, c))
+-&gt; Codec (a, b, c) c -&gt; Codec (a, b, c) (a, b, c)
+forall a b.
+Codec (a, b, c) (a -&gt; b) -&gt; Codec (a, b, c) a -&gt; Codec (a, b, c) b
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;*&gt;</span></span><span> </span><span class="annot"><span class="annottext">TomlCodec c
+</span><a href="#local-6989586621679107967"><span class="hs-identifier hs-var">cCodec</span></a></span><span> </span><span class="annot"><span class="annottext">TomlCodec c -&gt; ((a, b, c) -&gt; c) -&gt; Codec (a, b, c) c
+forall field a object.
+Codec field a -&gt; (object -&gt; field) -&gt; Codec object a
+</span><a href="Toml.Codec.Di.html#.%3D"><span class="hs-operator hs-var">.=</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span class="hs-special">(</span><span class="annot"><span class="annottext">a
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">b
+</span><span class="hs-identifier">_</span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679107970"><span class="annot"><span class="annottext">c
+</span><a href="#local-6989586621679107970"><span class="hs-identifier hs-var">c</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">c
+</span><a href="#local-6989586621679107970"><span class="hs-identifier hs-var">c</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-103"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Tuple.html#triple"><span class="hs-pragma hs-type">triple</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-104"></span></pre></body></html>

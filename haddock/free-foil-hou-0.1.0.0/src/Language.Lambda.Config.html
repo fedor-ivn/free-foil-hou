@@ -1,0 +1,705 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE DataKinds #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE DeriveGeneric #-}</span><span>
+</span><span id="line-3"></span><span class="hs-pragma">{-# LANGUAGE FlexibleInstances #-}</span><span>
+</span><span id="line-4"></span><span class="hs-pragma">{-# LANGUAGE GADTs #-}</span><span>
+</span><span id="line-5"></span><span class="hs-pragma">{-# LANGUAGE InstanceSigs #-}</span><span>
+</span><span id="line-6"></span><span class="hs-pragma">{-# LANGUAGE RankNTypes #-}</span><span>
+</span><span id="line-7"></span><span>
+</span><span id="line-8"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Language.Lambda.Config</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-9"></span><span>  </span><span class="annot"><span class="hs-comment">-- * Config types</span></span><span>
+</span><span id="line-10"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#Config"><span class="hs-identifier">Config</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-11"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#Problem"><span class="hs-identifier">Problem</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-12"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#Solution"><span class="hs-identifier">Solution</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-13"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier">CanonicalConstraint</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-14"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#fromUnificationConstraint"><span class="hs-identifier">fromUnificationConstraint</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-15"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#toUnificationConstraint"><span class="hs-identifier">toUnificationConstraint</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-16"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalProblem"><span class="hs-identifier">CanonicalProblem</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-17"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalSolution"><span class="hs-identifier">CanonicalSolution</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-18"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConfig"><span class="hs-identifier">CanonicalConfig</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-19"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalConstraint"><span class="hs-identifier">IsCanonicalConstraint</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-20"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalSubstitutions"><span class="hs-identifier">IsCanonicalSubstitutions</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-21"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalMetavarBinders"><span class="hs-identifier">IsCanonicalMetavarBinders</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span>
+</span><span id="line-22"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier">Result</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-23"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#toCanonicalSolution"><span class="hs-identifier">toCanonicalSolution</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-24"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#toCanonicalConfig"><span class="hs-identifier">toCanonicalConfig</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-25"></span><span class="hs-special">)</span><span>
+</span><span id="line-26"></span><span class="hs-keyword">where</span><span>
+</span><span id="line-27"></span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.Foil</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Distinct</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">NameBinderList</span></span><span class="hs-special">)</span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.Foil</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Foil</span></span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Map</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Map</span></span><span>
+</span><span id="line-31"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Text</span></span><span class="hs-special">)</span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">GHC.Generics</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Generic</span></span><span class="hs-special">)</span><span>
+</span><span id="line-33"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html"><span class="hs-identifier">Language.Lambda.Impl</span></a></span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-34"></span><span>  </span><span class="annot"><a href="Language.Lambda.Impl.html#MetaSubsts%27"><span class="hs-identifier">MetaSubsts'</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-35"></span><span>  </span><span class="annot"><a href="Language.Lambda.Impl.html#MetaTerm"><span class="hs-identifier">MetaTerm</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-36"></span><span>  </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier">MetavarBinders</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-37"></span><span>  </span><span class="annot"><a href="Language.Lambda.Impl.html#annotate"><span class="hs-identifier">annotate</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-38"></span><span>  </span><span class="annot"><a href="Language.Lambda.Impl.html#fromMetaTerm"><span class="hs-identifier">fromMetaTerm</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-39"></span><span>  </span><span class="annot"><a href="Language.Lambda.Impl.html#fromTerm"><span class="hs-identifier">fromTerm</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-40"></span><span>  </span><span class="annot"><a href="Language.Lambda.Impl.html#getTermFromScopedTerm"><span class="hs-identifier">getTermFromScopedTerm</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-41"></span><span>  </span><span class="annot"><a href="Language.Lambda.Impl.html#toBinders"><span class="hs-identifier">toBinders</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-42"></span><span>  </span><span class="annot"><a href="Language.Lambda.Impl.html#toTerm"><span class="hs-identifier">toTerm</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-43"></span><span>  </span><span class="annot"><a href="Language.Lambda.Impl.html#withMetaSubstVars"><span class="hs-identifier">withMetaSubstVars</span></a></span><span class="hs-special">,</span><span>
+</span><span id="line-44"></span><span> </span><span class="hs-special">)</span><span>
+</span><span id="line-45"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="Language.Lambda.Syntax.Abs.html"><span class="hs-identifier">Language.Lambda.Syntax.Abs</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Raw</span></span><span>
+</span><span id="line-46"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="Language.Lambda.Syntax.Print.html"><span class="hs-identifier">Language.Lambda.Syntax.Print</span></a></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Raw</span></span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-keyword">newtype</span><span> </span><span id="Config"><span class="annot"><a href="Language.Lambda.Config.html#Config"><span class="hs-identifier hs-var">Config</span></a></span></span><span> </span><span id="local-6989586621679307953"><span class="annot"><a href="#local-6989586621679307953"><span class="hs-identifier hs-type">binders</span></a></span></span><span> </span><span id="local-6989586621679307954"><span class="annot"><a href="#local-6989586621679307954"><span class="hs-identifier hs-type">constraint</span></a></span></span><span> </span><span id="local-6989586621679307955"><span class="annot"><a href="#local-6989586621679307955"><span class="hs-identifier hs-type">solution</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Config"><span class="annot"><a href="Language.Lambda.Config.html#Config"><span class="hs-identifier hs-var">Config</span></a></span></span><span>
+</span><span id="line-49"></span><span>  </span><span class="hs-special">{</span><span> </span><span id="configProblems"><span class="annot"><span class="annottext">forall binders constraint solution.
+Config binders constraint solution
+-&gt; [Problem binders constraint solution]
+</span><a href="Language.Lambda.Config.html#configProblems"><span class="hs-identifier hs-var hs-var">configProblems</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Language.Lambda.Config.html#Problem"><span class="hs-identifier hs-type">Problem</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679307953"><span class="hs-identifier hs-type">binders</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679307954"><span class="hs-identifier hs-type">constraint</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679307955"><span class="hs-identifier hs-type">solution</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-50"></span><span>  </span><span class="hs-special">}</span><span>
+</span><span id="line-51"></span><span>  </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679308135"><span id="local-6989586621679308142"><span id="local-6989586621679308146"><span class="annot"><span class="annottext">Int -&gt; Config binders constraint solution -&gt; ShowS
+[Config binders constraint solution] -&gt; ShowS
+Config binders constraint solution -&gt; String
+(Int -&gt; Config binders constraint solution -&gt; ShowS)
+-&gt; (Config binders constraint solution -&gt; String)
+-&gt; ([Config binders constraint solution] -&gt; ShowS)
+-&gt; Show (Config binders constraint solution)
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+forall binders constraint solution.
+(Show binders, Show constraint, Show solution) =&gt;
+Int -&gt; Config binders constraint solution -&gt; ShowS
+forall binders constraint solution.
+(Show binders, Show constraint, Show solution) =&gt;
+[Config binders constraint solution] -&gt; ShowS
+forall binders constraint solution.
+(Show binders, Show constraint, Show solution) =&gt;
+Config binders constraint solution -&gt; String
+$cshowsPrec :: forall binders constraint solution.
+(Show binders, Show constraint, Show solution) =&gt;
+Int -&gt; Config binders constraint solution -&gt; ShowS
+showsPrec :: Int -&gt; Config binders constraint solution -&gt; ShowS
+$cshow :: forall binders constraint solution.
+(Show binders, Show constraint, Show solution) =&gt;
+Config binders constraint solution -&gt; String
+show :: Config binders constraint solution -&gt; String
+$cshowList :: forall binders constraint solution.
+(Show binders, Show constraint, Show solution) =&gt;
+[Config binders constraint solution] -&gt; ShowS
+showList :: [Config binders constraint solution] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679308151"><span id="local-6989586621679308153"><span class="annot"><span class="annottext">(forall x.
+ Config binders constraint solution
+ -&gt; Rep (Config binders constraint solution) x)
+-&gt; (forall x.
+    Rep (Config binders constraint solution) x
+    -&gt; Config binders constraint solution)
+-&gt; Generic (Config binders constraint solution)
+forall x.
+Rep (Config binders constraint solution) x
+-&gt; Config binders constraint solution
+forall x.
+Config binders constraint solution
+-&gt; Rep (Config binders constraint solution) x
+forall a.
+(forall x. a -&gt; Rep a x) -&gt; (forall x. Rep a x -&gt; a) -&gt; Generic a
+forall binders constraint solution x.
+Rep (Config binders constraint solution) x
+-&gt; Config binders constraint solution
+forall binders constraint solution x.
+Config binders constraint solution
+-&gt; Rep (Config binders constraint solution) x
+$cfrom :: forall binders constraint solution x.
+Config binders constraint solution
+-&gt; Rep (Config binders constraint solution) x
+from :: forall x.
+Config binders constraint solution
+-&gt; Rep (Config binders constraint solution) x
+$cto :: forall binders constraint solution x.
+Rep (Config binders constraint solution) x
+-&gt; Config binders constraint solution
+to :: forall x.
+Rep (Config binders constraint solution) x
+-&gt; Config binders constraint solution
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Generic</span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-52"></span><span>
+</span><span id="line-53"></span><span class="hs-keyword">type</span><span> </span><span id="CanonicalConfig"><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConfig"><span class="hs-identifier hs-var">CanonicalConfig</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-54"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span>
+</span><span id="line-55"></span><span>    </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span>
+</span><span id="line-56"></span><span>    </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-type">CanonicalConstraint</span></a></span><span>
+</span><span id="line-57"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Language.Lambda.Config.html#Solution"><span class="hs-identifier hs-type">Solution</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetaSubsts%27"><span class="hs-identifier hs-type">MetaSubsts'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-58"></span><span>
+</span><span id="line-59"></span><span class="hs-keyword">data</span><span> </span><span id="Problem"><span class="annot"><a href="Language.Lambda.Config.html#Problem"><span class="hs-identifier hs-var">Problem</span></a></span></span><span> </span><span id="local-6989586621679307982"><span class="annot"><a href="#local-6989586621679307982"><span class="hs-identifier hs-type">binders</span></a></span></span><span> </span><span id="local-6989586621679307983"><span class="annot"><a href="#local-6989586621679307983"><span class="hs-identifier hs-type">constraint</span></a></span></span><span> </span><span id="local-6989586621679307984"><span class="annot"><a href="#local-6989586621679307984"><span class="hs-identifier hs-type">solution</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Problem"><span class="annot"><a href="Language.Lambda.Config.html#Problem"><span class="hs-identifier hs-var">Problem</span></a></span></span><span>
+</span><span id="line-60"></span><span>  </span><span class="hs-special">{</span><span> </span><span id="problemMetavarBinders"><span class="annot"><span class="annottext">forall binders constraint solution.
+Problem binders constraint solution -&gt; binders
+</span><a href="Language.Lambda.Config.html#problemMetavarBinders"><span class="hs-identifier hs-var hs-var">problemMetavarBinders</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679307982"><span class="hs-identifier hs-type">binders</span></a></span><span>
+</span><span id="line-61"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="problemConstraints"><span class="annot"><span class="annottext">forall binders constraint solution.
+Problem binders constraint solution -&gt; [constraint]
+</span><a href="Language.Lambda.Config.html#problemConstraints"><span class="hs-identifier hs-var hs-var">problemConstraints</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679307983"><span class="hs-identifier hs-type">constraint</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-62"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="problemSolutions"><span class="annot"><span class="annottext">forall binders constraint solution.
+Problem binders constraint solution -&gt; [solution]
+</span><a href="Language.Lambda.Config.html#problemSolutions"><span class="hs-identifier hs-var hs-var">problemSolutions</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="#local-6989586621679307984"><span class="hs-identifier hs-type">solution</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-63"></span><span>  </span><span class="hs-special">}</span><span>
+</span><span id="line-64"></span><span>  </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679308164"><span id="local-6989586621679308170"><span id="local-6989586621679308173"><span class="annot"><span class="annottext">Int -&gt; Problem binders constraint solution -&gt; ShowS
+[Problem binders constraint solution] -&gt; ShowS
+Problem binders constraint solution -&gt; String
+(Int -&gt; Problem binders constraint solution -&gt; ShowS)
+-&gt; (Problem binders constraint solution -&gt; String)
+-&gt; ([Problem binders constraint solution] -&gt; ShowS)
+-&gt; Show (Problem binders constraint solution)
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+forall binders constraint solution.
+(Show binders, Show constraint, Show solution) =&gt;
+Int -&gt; Problem binders constraint solution -&gt; ShowS
+forall binders constraint solution.
+(Show binders, Show constraint, Show solution) =&gt;
+[Problem binders constraint solution] -&gt; ShowS
+forall binders constraint solution.
+(Show binders, Show constraint, Show solution) =&gt;
+Problem binders constraint solution -&gt; String
+$cshowsPrec :: forall binders constraint solution.
+(Show binders, Show constraint, Show solution) =&gt;
+Int -&gt; Problem binders constraint solution -&gt; ShowS
+showsPrec :: Int -&gt; Problem binders constraint solution -&gt; ShowS
+$cshow :: forall binders constraint solution.
+(Show binders, Show constraint, Show solution) =&gt;
+Problem binders constraint solution -&gt; String
+show :: Problem binders constraint solution -&gt; String
+$cshowList :: forall binders constraint solution.
+(Show binders, Show constraint, Show solution) =&gt;
+[Problem binders constraint solution] -&gt; ShowS
+showList :: [Problem binders constraint solution] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679308176"><span id="local-6989586621679308178"><span class="annot"><span class="annottext">(forall x.
+ Problem binders constraint solution
+ -&gt; Rep (Problem binders constraint solution) x)
+-&gt; (forall x.
+    Rep (Problem binders constraint solution) x
+    -&gt; Problem binders constraint solution)
+-&gt; Generic (Problem binders constraint solution)
+forall x.
+Rep (Problem binders constraint solution) x
+-&gt; Problem binders constraint solution
+forall x.
+Problem binders constraint solution
+-&gt; Rep (Problem binders constraint solution) x
+forall a.
+(forall x. a -&gt; Rep a x) -&gt; (forall x. Rep a x -&gt; a) -&gt; Generic a
+forall binders constraint solution x.
+Rep (Problem binders constraint solution) x
+-&gt; Problem binders constraint solution
+forall binders constraint solution x.
+Problem binders constraint solution
+-&gt; Rep (Problem binders constraint solution) x
+$cfrom :: forall binders constraint solution x.
+Problem binders constraint solution
+-&gt; Rep (Problem binders constraint solution) x
+from :: forall x.
+Problem binders constraint solution
+-&gt; Rep (Problem binders constraint solution) x
+$cto :: forall binders constraint solution x.
+Rep (Problem binders constraint solution) x
+-&gt; Problem binders constraint solution
+to :: forall x.
+Rep (Problem binders constraint solution) x
+-&gt; Problem binders constraint solution
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Generic</span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-65"></span><span>
+</span><span id="line-66"></span><span class="hs-keyword">type</span><span> </span><span id="CanonicalProblem"><span class="annot"><a href="Language.Lambda.Config.html#CanonicalProblem"><span class="hs-identifier hs-var">CanonicalProblem</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-67"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#Problem"><span class="hs-identifier hs-type">Problem</span></a></span><span>
+</span><span id="line-68"></span><span>    </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span>
+</span><span id="line-69"></span><span>    </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-type">CanonicalConstraint</span></a></span><span>
+</span><span id="line-70"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Language.Lambda.Config.html#Solution"><span class="hs-identifier hs-type">Solution</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetaSubsts%27"><span class="hs-identifier hs-type">MetaSubsts'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-71"></span><span>
+</span><span id="line-72"></span><span class="hs-keyword">type</span><span> </span><span id="CanonicalSolution"><span class="annot"><a href="Language.Lambda.Config.html#CanonicalSolution"><span class="hs-identifier hs-var">CanonicalSolution</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Solution"><span class="hs-identifier hs-type">Solution</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetaSubsts%27"><span class="hs-identifier hs-type">MetaSubsts'</span></a></span><span>
+</span><span id="line-73"></span><span>
+</span><span id="line-74"></span><span class="hs-keyword">data</span><span> </span><span id="Solution"><span class="annot"><a href="Language.Lambda.Config.html#Solution"><span class="hs-identifier hs-var">Solution</span></a></span></span><span> </span><span id="local-6989586621679308003"><span class="annot"><a href="#local-6989586621679308003"><span class="hs-identifier hs-type">binders</span></a></span></span><span> </span><span id="local-6989586621679308004"><span class="annot"><a href="#local-6989586621679308004"><span class="hs-identifier hs-type">substitutions</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Solution"><span class="annot"><a href="Language.Lambda.Config.html#Solution"><span class="hs-identifier hs-var">Solution</span></a></span></span><span>
+</span><span id="line-75"></span><span>  </span><span class="hs-special">{</span><span> </span><span id="solutionName"><span class="annot"><span class="annottext">forall binders substitutions.
+Solution binders substitutions -&gt; Maybe Text
+</span><a href="Language.Lambda.Config.html#solutionName"><span class="hs-identifier hs-var hs-var">solutionName</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span>
+</span><span id="line-76"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="solutionMetavarBinders"><span class="annot"><span class="annottext">forall binders substitutions.
+Solution binders substitutions -&gt; binders
+</span><a href="Language.Lambda.Config.html#solutionMetavarBinders"><span class="hs-identifier hs-var hs-var">solutionMetavarBinders</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679308003"><span class="hs-identifier hs-type">binders</span></a></span><span>
+</span><span id="line-77"></span><span>  </span><span class="hs-special">,</span><span> </span><span id="solutionSubstitutions"><span class="annot"><span class="annottext">forall binders substitutions.
+Solution binders substitutions -&gt; substitutions
+</span><a href="Language.Lambda.Config.html#solutionSubstitutions"><span class="hs-identifier hs-var hs-var">solutionSubstitutions</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679308004"><span class="hs-identifier hs-type">substitutions</span></a></span><span>
+</span><span id="line-78"></span><span>  </span><span class="hs-special">}</span><span>
+</span><span id="line-79"></span><span>  </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679308187"><span id="local-6989586621679308195"><span id="local-6989586621679308199"><span class="annot"><span class="annottext">Int -&gt; Solution binders substitutions -&gt; ShowS
+[Solution binders substitutions] -&gt; ShowS
+Solution binders substitutions -&gt; String
+(Int -&gt; Solution binders substitutions -&gt; ShowS)
+-&gt; (Solution binders substitutions -&gt; String)
+-&gt; ([Solution binders substitutions] -&gt; ShowS)
+-&gt; Show (Solution binders substitutions)
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+forall binders substitutions.
+(Show binders, Show substitutions) =&gt;
+Int -&gt; Solution binders substitutions -&gt; ShowS
+forall binders substitutions.
+(Show binders, Show substitutions) =&gt;
+[Solution binders substitutions] -&gt; ShowS
+forall binders substitutions.
+(Show binders, Show substitutions) =&gt;
+Solution binders substitutions -&gt; String
+$cshowsPrec :: forall binders substitutions.
+(Show binders, Show substitutions) =&gt;
+Int -&gt; Solution binders substitutions -&gt; ShowS
+showsPrec :: Int -&gt; Solution binders substitutions -&gt; ShowS
+$cshow :: forall binders substitutions.
+(Show binders, Show substitutions) =&gt;
+Solution binders substitutions -&gt; String
+show :: Solution binders substitutions -&gt; String
+$cshowList :: forall binders substitutions.
+(Show binders, Show substitutions) =&gt;
+[Solution binders substitutions] -&gt; ShowS
+showList :: [Solution binders substitutions] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679308203"><span id="local-6989586621679308205"><span class="annot"><span class="annottext">(forall x.
+ Solution binders substitutions
+ -&gt; Rep (Solution binders substitutions) x)
+-&gt; (forall x.
+    Rep (Solution binders substitutions) x
+    -&gt; Solution binders substitutions)
+-&gt; Generic (Solution binders substitutions)
+forall x.
+Rep (Solution binders substitutions) x
+-&gt; Solution binders substitutions
+forall x.
+Solution binders substitutions
+-&gt; Rep (Solution binders substitutions) x
+forall a.
+(forall x. a -&gt; Rep a x) -&gt; (forall x. Rep a x -&gt; a) -&gt; Generic a
+forall binders substitutions x.
+Rep (Solution binders substitutions) x
+-&gt; Solution binders substitutions
+forall binders substitutions x.
+Solution binders substitutions
+-&gt; Rep (Solution binders substitutions) x
+$cfrom :: forall binders substitutions x.
+Solution binders substitutions
+-&gt; Rep (Solution binders substitutions) x
+from :: forall x.
+Solution binders substitutions
+-&gt; Rep (Solution binders substitutions) x
+$cto :: forall binders substitutions x.
+Rep (Solution binders substitutions) x
+-&gt; Solution binders substitutions
+to :: forall x.
+Rep (Solution binders substitutions) x
+-&gt; Solution binders substitutions
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Generic</span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-80"></span><span>
+</span><span id="line-81"></span><span class="hs-keyword">data</span><span> </span><span id="CanonicalConstraint"><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-var">CanonicalConstraint</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-82"></span><span>  </span><span id="local-6989586621679308207"><span id="CanonicalConstraint"><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-var">CanonicalConstraint</span></a></span></span><span>
+</span><span id="line-83"></span><span>    </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">Distinct</span></span><span> </span><span class="annot"><a href="#local-6989586621679308207"><span class="hs-identifier hs-type">n</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-84"></span><span>    </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">NameBinderList</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Foil.VoidS</span></span><span> </span><span class="annot"><a href="#local-6989586621679308207"><span class="hs-identifier hs-type">n</span></a></span><span>
+</span><span id="line-85"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Foil.NameMap</span></span><span> </span><span class="annot"><a href="#local-6989586621679308207"><span class="hs-identifier hs-type">n</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Syntax.Abs.html#Type"><span class="hs-identifier hs-type">Raw.Type</span></a></span><span>
+</span><span id="line-86"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetaTerm"><span class="hs-identifier hs-type">MetaTerm</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Syntax.Abs.html#MetavarIdent"><span class="hs-identifier hs-type">Raw.MetavarIdent</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308207"><span class="hs-identifier hs-type">n</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Syntax.Abs.html#Type"><span class="hs-identifier hs-type">Raw.Type</span></a></span><span>
+</span><span id="line-87"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetaTerm"><span class="hs-identifier hs-type">MetaTerm</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Syntax.Abs.html#MetavarIdent"><span class="hs-identifier hs-type">Raw.MetavarIdent</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308207"><span class="hs-identifier hs-type">n</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Syntax.Abs.html#Type"><span class="hs-identifier hs-type">Raw.Type</span></a></span><span>
+</span><span id="line-88"></span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-type">CanonicalConstraint</span></a></span></span><span>
+</span><span id="line-89"></span><span>
+</span><span id="line-90"></span><span class="hs-keyword">type</span><span> </span><span id="Result"><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier hs-var">Result</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-91"></span><span>
+</span><span id="line-92"></span><span class="hs-keyword">class</span><span> </span><span id="IsCanonicalConstraint"><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalConstraint"><span class="hs-identifier hs-var">IsCanonicalConstraint</span></a></span></span><span> </span><span id="local-6989586621679308026"><span class="annot"><a href="#local-6989586621679308026"><span class="hs-identifier hs-type">c</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-93"></span><span>  </span><span id="toCanonicalConstraint"><span class="annot"><a href="Language.Lambda.Config.html#toCanonicalConstraint"><span class="hs-identifier hs-type">toCanonicalConstraint</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679308026"><span class="hs-identifier hs-type">c</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-type">CanonicalConstraint</span></a></span><span>
+</span><span id="line-94"></span><span>  </span><span id="fromCanonicalConstraint"><span class="annot"><a href="Language.Lambda.Config.html#fromCanonicalConstraint"><span class="hs-identifier hs-type">fromCanonicalConstraint</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-type">CanonicalConstraint</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308026"><span class="hs-identifier hs-type">c</span></a></span><span>
+</span><span id="line-95"></span><span>
+</span><span id="line-96"></span><span class="hs-keyword">class</span><span> </span><span id="IsCanonicalSubstitutions"><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalSubstitutions"><span class="hs-identifier hs-var">IsCanonicalSubstitutions</span></a></span></span><span> </span><span id="local-6989586621679308031"><span class="annot"><a href="#local-6989586621679308031"><span class="hs-identifier hs-type">s</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-97"></span><span>  </span><span id="toCanonicalSubstitution"><span class="annot"><a href="Language.Lambda.Config.html#toCanonicalSubstitution"><span class="hs-identifier hs-type">toCanonicalSubstitution</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679308031"><span class="hs-identifier hs-type">s</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetaSubsts%27"><span class="hs-identifier hs-type">MetaSubsts'</span></a></span><span>
+</span><span id="line-98"></span><span>  </span><span id="fromCanonicalSubstitution"><span class="annot"><a href="Language.Lambda.Config.html#fromCanonicalSubstitution"><span class="hs-identifier hs-type">fromCanonicalSubstitution</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetaSubsts%27"><span class="hs-identifier hs-type">MetaSubsts'</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308031"><span class="hs-identifier hs-type">s</span></a></span><span>
+</span><span id="line-99"></span><span>
+</span><span id="line-100"></span><span class="hs-keyword">class</span><span> </span><span id="IsCanonicalMetavarBinders"><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalMetavarBinders"><span class="hs-identifier hs-var">IsCanonicalMetavarBinders</span></a></span></span><span> </span><span id="local-6989586621679308033"><span class="annot"><a href="#local-6989586621679308033"><span class="hs-identifier hs-type">b</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-101"></span><span>  </span><span id="toCanonicalMetavarBinders"><span class="annot"><a href="Language.Lambda.Config.html#toCanonicalMetavarBinders"><span class="hs-identifier hs-type">toCanonicalMetavarBinders</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679308033"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span>
+</span><span id="line-102"></span><span>  </span><span id="fromCanonicalMetavarBinders"><span class="annot"><a href="Language.Lambda.Config.html#fromCanonicalMetavarBinders"><span class="hs-identifier hs-type">fromCanonicalMetavarBinders</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308033"><span class="hs-identifier hs-type">b</span></a></span><span>
+</span><span id="line-103"></span><span>
+</span><span id="line-104"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalConstraint"><span class="hs-identifier hs-type">IsCanonicalConstraint</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-type">CanonicalConstraint</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-105"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#toCanonicalConstraint"><span class="hs-identifier hs-type">toCanonicalConstraint</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-type">CanonicalConstraint</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-type">CanonicalConstraint</span></a></span><span>
+</span><span id="line-106"></span><span>  </span><span id="local-6989586621679308219"><span class="annot"><span class="annottext">toCanonicalConstraint :: MetavarBinders -&gt; CanonicalConstraint -&gt; Result CanonicalConstraint
+</span><a href="Language.Lambda.Config.html#toCanonicalConstraint"><span class="hs-identifier hs-var hs-var hs-var hs-var">toCanonicalConstraint</span></a></span></span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">CanonicalConstraint -&gt; Result CanonicalConstraint
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span>
+</span><span id="line-107"></span><span>
+</span><span id="line-108"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#fromCanonicalConstraint"><span class="hs-identifier hs-type">fromCanonicalConstraint</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-type">CanonicalConstraint</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-type">CanonicalConstraint</span></a></span><span>
+</span><span id="line-109"></span><span>  </span><span id="local-6989586621679308220"><span class="annot"><span class="annottext">fromCanonicalConstraint :: MetavarBinders -&gt; CanonicalConstraint -&gt; Result CanonicalConstraint
+</span><a href="Language.Lambda.Config.html#fromCanonicalConstraint"><span class="hs-identifier hs-var hs-var hs-var hs-var">fromCanonicalConstraint</span></a></span></span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">CanonicalConstraint -&gt; Result CanonicalConstraint
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span>
+</span><span id="line-110"></span><span>
+</span><span id="line-111"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalSubstitutions"><span class="hs-identifier hs-type">IsCanonicalSubstitutions</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetaSubsts%27"><span class="hs-identifier hs-type">MetaSubsts'</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-112"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#toCanonicalSubstitution"><span class="hs-identifier hs-type">toCanonicalSubstitution</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetaSubsts%27"><span class="hs-identifier hs-type">MetaSubsts'</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetaSubsts%27"><span class="hs-identifier hs-type">MetaSubsts'</span></a></span><span>
+</span><span id="line-113"></span><span>  </span><span id="local-6989586621679308225"><span class="annot"><span class="annottext">toCanonicalSubstitution :: MetavarBinders -&gt; MetaSubsts' -&gt; Result MetaSubsts'
+</span><a href="Language.Lambda.Config.html#toCanonicalSubstitution"><span class="hs-identifier hs-var hs-var hs-var hs-var">toCanonicalSubstitution</span></a></span></span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">MetaSubsts' -&gt; Result MetaSubsts'
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span>
+</span><span id="line-114"></span><span>
+</span><span id="line-115"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#fromCanonicalSubstitution"><span class="hs-identifier hs-type">fromCanonicalSubstitution</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetaSubsts%27"><span class="hs-identifier hs-type">MetaSubsts'</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetaSubsts%27"><span class="hs-identifier hs-type">MetaSubsts'</span></a></span><span>
+</span><span id="line-116"></span><span>  </span><span id="local-6989586621679308226"><span class="annot"><span class="annottext">fromCanonicalSubstitution :: MetavarBinders -&gt; MetaSubsts' -&gt; Result MetaSubsts'
+</span><a href="Language.Lambda.Config.html#fromCanonicalSubstitution"><span class="hs-identifier hs-var hs-var hs-var hs-var">fromCanonicalSubstitution</span></a></span></span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">MetaSubsts' -&gt; Result MetaSubsts'
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span>
+</span><span id="line-117"></span><span>
+</span><span id="line-118"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalMetavarBinders"><span class="hs-identifier hs-type">IsCanonicalMetavarBinders</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-119"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#toCanonicalMetavarBinders"><span class="hs-identifier hs-type">toCanonicalMetavarBinders</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span>
+</span><span id="line-120"></span><span>  </span><span id="local-6989586621679308231"><span class="annot"><span class="annottext">toCanonicalMetavarBinders :: MetavarBinders -&gt; Result MetavarBinders
+</span><a href="Language.Lambda.Config.html#toCanonicalMetavarBinders"><span class="hs-identifier hs-var hs-var hs-var hs-var">toCanonicalMetavarBinders</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">MetavarBinders -&gt; Result MetavarBinders
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span>
+</span><span id="line-121"></span><span>
+</span><span id="line-122"></span><span>  </span><span class="annot"><a href="Language.Lambda.Config.html#fromCanonicalMetavarBinders"><span class="hs-identifier hs-type">fromCanonicalMetavarBinders</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span>
+</span><span id="line-123"></span><span>  </span><span id="local-6989586621679308232"><span class="annot"><span class="annottext">fromCanonicalMetavarBinders :: MetavarBinders -&gt; Result MetavarBinders
+</span><a href="Language.Lambda.Config.html#fromCanonicalMetavarBinders"><span class="hs-identifier hs-var hs-var hs-var hs-var">fromCanonicalMetavarBinders</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">MetavarBinders -&gt; Result MetavarBinders
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span>
+</span><span id="line-124"></span><span>
+</span><span id="line-125"></span><span class="annot"><a href="Language.Lambda.Config.html#toCanonicalSolution"><span class="hs-identifier hs-type">toCanonicalSolution</span></a></span><span>
+</span><span id="line-126"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679308034"><span class="annot"><a href="#local-6989586621679308034"><span class="hs-identifier hs-type">b</span></a></span></span><span> </span><span id="local-6989586621679308035"><span class="annot"><a href="#local-6989586621679308035"><span class="hs-identifier hs-type">s</span></a></span></span><span>
+</span><span id="line-127"></span><span>   </span><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalMetavarBinders"><span class="hs-identifier hs-type">IsCanonicalMetavarBinders</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308034"><span class="hs-identifier hs-type">b</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalSubstitutions"><span class="hs-identifier hs-type">IsCanonicalSubstitutions</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308035"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-128"></span><span>  </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span>
+</span><span id="line-129"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Solution"><span class="hs-identifier hs-type">Solution</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308034"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308035"><span class="hs-identifier hs-type">s</span></a></span><span>
+</span><span id="line-130"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalSolution"><span class="hs-identifier hs-type">CanonicalSolution</span></a></span><span>
+</span><span id="line-131"></span><span id="toCanonicalSolution"><span class="annot"><span class="annottext">toCanonicalSolution :: forall b s.
+(IsCanonicalMetavarBinders b, IsCanonicalSubstitutions s) =&gt;
+MetavarBinders -&gt; Solution b s -&gt; Result CanonicalSolution
+</span><a href="Language.Lambda.Config.html#toCanonicalSolution"><span class="hs-identifier hs-var hs-var">toCanonicalSolution</span></a></span></span><span> </span><span id="local-6989586621679308245"><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308245"><span class="hs-identifier hs-var">globalBinders</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Language.Lambda.Config.html#Solution"><span class="hs-identifier hs-type">Solution</span></a></span><span> </span><span id="local-6989586621679308246"><span class="annot"><span class="annottext">Maybe Text
+</span><a href="#local-6989586621679308246"><span class="hs-identifier hs-var">name</span></a></span></span><span> </span><span id="local-6989586621679308247"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679308247"><span class="hs-identifier hs-var">localBinders</span></a></span></span><span> </span><span id="local-6989586621679308248"><span class="annot"><span class="annottext">s
+</span><a href="#local-6989586621679308248"><span class="hs-identifier hs-var">substs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-132"></span><span>  </span><span id="local-6989586621679308249"><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308249"><span class="hs-identifier hs-var">canonicalLocalBinders</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">b -&gt; Result MetavarBinders
+forall b. IsCanonicalMetavarBinders b =&gt; b -&gt; Result MetavarBinders
+</span><a href="Language.Lambda.Config.html#toCanonicalMetavarBinders"><span class="hs-identifier hs-var">toCanonicalMetavarBinders</span></a></span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679308247"><span class="hs-identifier hs-var">localBinders</span></a></span><span>
+</span><span id="line-133"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679308250"><span class="annot"><span class="annottext">binders :: MetavarBinders
+</span><a href="#local-6989586621679308250"><span class="hs-identifier hs-var hs-var">binders</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308245"><span class="hs-identifier hs-var">globalBinders</span></a></span><span> </span><span class="annot"><span class="annottext">MetavarBinders -&gt; MetavarBinders -&gt; MetavarBinders
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308249"><span class="hs-identifier hs-var">canonicalLocalBinders</span></a></span><span>
+</span><span id="line-134"></span><span>  </span><span id="local-6989586621679308251"><span class="annot"><span class="annottext">MetaSubsts'
+</span><a href="#local-6989586621679308251"><span class="hs-identifier hs-var">canonicalSubsts</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">MetavarBinders -&gt; s -&gt; Result MetaSubsts'
+forall s.
+IsCanonicalSubstitutions s =&gt;
+MetavarBinders -&gt; s -&gt; Result MetaSubsts'
+</span><a href="Language.Lambda.Config.html#toCanonicalSubstitution"><span class="hs-identifier hs-var">toCanonicalSubstitution</span></a></span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308250"><span class="hs-identifier hs-var">binders</span></a></span><span> </span><span class="annot"><span class="annottext">s
+</span><a href="#local-6989586621679308248"><span class="hs-identifier hs-var">substs</span></a></span><span>
+</span><span id="line-135"></span><span>  </span><span class="annot"><span class="annottext">CanonicalSolution -&gt; Result CanonicalSolution
+forall a. a -&gt; Either String a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(CanonicalSolution -&gt; Result CanonicalSolution)
+-&gt; CanonicalSolution -&gt; Result CanonicalSolution
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Maybe Text -&gt; MetavarBinders -&gt; MetaSubsts' -&gt; CanonicalSolution
+forall binders substitutions.
+Maybe Text
+-&gt; binders -&gt; substitutions -&gt; Solution binders substitutions
+</span><a href="Language.Lambda.Config.html#Solution"><span class="hs-identifier hs-var">Solution</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Text
+</span><a href="#local-6989586621679308246"><span class="hs-identifier hs-var">name</span></a></span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308249"><span class="hs-identifier hs-var">canonicalLocalBinders</span></a></span><span> </span><span class="annot"><span class="annottext">MetaSubsts'
+</span><a href="#local-6989586621679308251"><span class="hs-identifier hs-var">canonicalSubsts</span></a></span><span>
+</span><span id="line-136"></span><span>
+</span><span id="line-137"></span><span class="annot"><a href="Language.Lambda.Config.html#toCanonicalProblem"><span class="hs-identifier hs-type">toCanonicalProblem</span></a></span><span>
+</span><span id="line-138"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="hs-keyword">forall</span><span> </span><span id="local-6989586621679308051"><span class="annot"><a href="#local-6989586621679308051"><span class="hs-identifier hs-type">b</span></a></span></span><span> </span><span id="local-6989586621679308052"><span class="annot"><a href="#local-6989586621679308052"><span class="hs-identifier hs-type">c</span></a></span></span><span> </span><span id="local-6989586621679308053"><span class="annot"><a href="#local-6989586621679308053"><span class="hs-identifier hs-type">s</span></a></span></span><span>
+</span><span id="line-139"></span><span>   </span><span class="hs-operator">.</span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalMetavarBinders"><span class="hs-identifier hs-type">IsCanonicalMetavarBinders</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308051"><span class="hs-identifier hs-type">b</span></a></span><span>
+</span><span id="line-140"></span><span>     </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalConstraint"><span class="hs-identifier hs-type">IsCanonicalConstraint</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308052"><span class="hs-identifier hs-type">c</span></a></span><span>
+</span><span id="line-141"></span><span>     </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalSubstitutions"><span class="hs-identifier hs-type">IsCanonicalSubstitutions</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308053"><span class="hs-identifier hs-type">s</span></a></span><span>
+</span><span id="line-142"></span><span>     </span><span class="hs-special">)</span><span>
+</span><span id="line-143"></span><span>  </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Problem"><span class="hs-identifier hs-type">Problem</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308051"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308052"><span class="hs-identifier hs-type">c</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Language.Lambda.Config.html#Solution"><span class="hs-identifier hs-type">Solution</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308051"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308053"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-144"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Result"><span class="hs-identifier hs-type">Result</span></a></span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalProblem"><span class="hs-identifier hs-type">CanonicalProblem</span></a></span><span>
+</span><span id="line-145"></span><span id="toCanonicalProblem"><span class="annot"><span class="annottext">toCanonicalProblem :: forall b c s.
+(IsCanonicalMetavarBinders b, IsCanonicalConstraint c,
+ IsCanonicalSubstitutions s) =&gt;
+Problem b c (Solution b s) -&gt; Result CanonicalProblem
+</span><a href="Language.Lambda.Config.html#toCanonicalProblem"><span class="hs-identifier hs-var hs-var">toCanonicalProblem</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Language.Lambda.Config.html#Problem"><span class="hs-identifier hs-type">Problem</span></a></span><span> </span><span id="local-6989586621679308269"><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679308269"><span class="hs-identifier hs-var">binders</span></a></span></span><span> </span><span id="local-6989586621679308270"><span class="annot"><span class="annottext">[c]
+</span><a href="#local-6989586621679308270"><span class="hs-identifier hs-var">constraints</span></a></span></span><span> </span><span id="local-6989586621679308271"><span class="annot"><span class="annottext">[Solution b s]
+</span><a href="#local-6989586621679308271"><span class="hs-identifier hs-var">solutions</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-146"></span><span>  </span><span id="local-6989586621679308272"><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308272"><span class="hs-identifier hs-var">canonicalBinders</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">b -&gt; Result MetavarBinders
+forall b. IsCanonicalMetavarBinders b =&gt; b -&gt; Result MetavarBinders
+</span><a href="Language.Lambda.Config.html#toCanonicalMetavarBinders"><span class="hs-identifier hs-var">toCanonicalMetavarBinders</span></a></span><span> </span><span class="annot"><span class="annottext">b
+</span><a href="#local-6989586621679308269"><span class="hs-identifier hs-var">binders</span></a></span><span>
+</span><span id="line-147"></span><span>  </span><span id="local-6989586621679308273"><span class="annot"><span class="annottext">[CanonicalConstraint]
+</span><a href="#local-6989586621679308273"><span class="hs-identifier hs-var">canonicalConstraints</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(c -&gt; Result CanonicalConstraint)
+-&gt; [c] -&gt; Either String [CanonicalConstraint]
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Traversable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m (t b)
+forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; [a] -&gt; m [b]
+</span><span class="hs-identifier hs-var">mapM</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">MetavarBinders -&gt; c -&gt; Result CanonicalConstraint
+forall c.
+IsCanonicalConstraint c =&gt;
+MetavarBinders -&gt; c -&gt; Result CanonicalConstraint
+</span><a href="Language.Lambda.Config.html#toCanonicalConstraint"><span class="hs-identifier hs-var">toCanonicalConstraint</span></a></span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308272"><span class="hs-identifier hs-var">canonicalBinders</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[c]
+</span><a href="#local-6989586621679308270"><span class="hs-identifier hs-var">constraints</span></a></span><span>
+</span><span id="line-148"></span><span>  </span><span id="local-6989586621679308275"><span class="annot"><span class="annottext">[CanonicalSolution]
+</span><a href="#local-6989586621679308275"><span class="hs-identifier hs-var">canonicalSolutions</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">(Solution b s -&gt; Result CanonicalSolution)
+-&gt; [Solution b s] -&gt; Either String [CanonicalSolution]
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Traversable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m (t b)
+forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; [a] -&gt; m [b]
+</span><span class="hs-identifier hs-var">mapM</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">MetavarBinders -&gt; Solution b s -&gt; Result CanonicalSolution
+forall b s.
+(IsCanonicalMetavarBinders b, IsCanonicalSubstitutions s) =&gt;
+MetavarBinders -&gt; Solution b s -&gt; Result CanonicalSolution
+</span><a href="Language.Lambda.Config.html#toCanonicalSolution"><span class="hs-identifier hs-var">toCanonicalSolution</span></a></span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308272"><span class="hs-identifier hs-var">canonicalBinders</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[Solution b s]
+</span><a href="#local-6989586621679308271"><span class="hs-identifier hs-var">solutions</span></a></span><span>
+</span><span id="line-149"></span><span>  </span><span class="annot"><span class="annottext">CanonicalProblem -&gt; Result CanonicalProblem
+forall a. a -&gt; Either String a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">(CanonicalProblem -&gt; Result CanonicalProblem)
+-&gt; CanonicalProblem -&gt; Result CanonicalProblem
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+-&gt; [CanonicalConstraint] -&gt; [CanonicalSolution] -&gt; CanonicalProblem
+forall binders constraint solution.
+binders
+-&gt; [constraint]
+-&gt; [solution]
+-&gt; Problem binders constraint solution
+</span><a href="Language.Lambda.Config.html#Problem"><span class="hs-identifier hs-var">Problem</span></a></span><span> </span><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308272"><span class="hs-identifier hs-var">canonicalBinders</span></a></span><span> </span><span class="annot"><span class="annottext">[CanonicalConstraint]
+</span><a href="#local-6989586621679308273"><span class="hs-identifier hs-var">canonicalConstraints</span></a></span><span> </span><span class="annot"><span class="annottext">[CanonicalSolution]
+</span><a href="#local-6989586621679308275"><span class="hs-identifier hs-var">canonicalSolutions</span></a></span><span>
+</span><span id="line-150"></span><span>
+</span><span id="line-151"></span><span id="local-6989586621679308062"><span id="local-6989586621679308063"><span id="local-6989586621679308064"><span class="annot"><a href="Language.Lambda.Config.html#toCanonicalConfig"><span class="hs-identifier hs-type">toCanonicalConfig</span></a></span><span>
+</span><span id="line-152"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalMetavarBinders"><span class="hs-identifier hs-type">IsCanonicalMetavarBinders</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308062"><span class="hs-identifier hs-type">b</span></a></span><span>
+</span><span id="line-153"></span><span>     </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalConstraint"><span class="hs-identifier hs-type">IsCanonicalConstraint</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308063"><span class="hs-identifier hs-type">c</span></a></span><span>
+</span><span id="line-154"></span><span>     </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#IsCanonicalSubstitutions"><span class="hs-identifier hs-type">IsCanonicalSubstitutions</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308064"><span class="hs-identifier hs-type">s</span></a></span><span>
+</span><span id="line-155"></span><span>     </span><span class="hs-special">)</span><span>
+</span><span id="line-156"></span><span>  </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308062"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308063"><span class="hs-identifier hs-type">c</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Language.Lambda.Config.html#Solution"><span class="hs-identifier hs-type">Solution</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308062"><span class="hs-identifier hs-type">b</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679308064"><span class="hs-identifier hs-type">s</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-157"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConfig"><span class="hs-identifier hs-type">CanonicalConfig</span></a></span></span></span></span><span>
+</span><span id="line-158"></span><span id="toCanonicalConfig"><span class="annot"><span class="annottext">toCanonicalConfig :: forall b c s.
+(IsCanonicalMetavarBinders b, IsCanonicalConstraint c,
+ IsCanonicalSubstitutions s) =&gt;
+Config b c (Solution b s) -&gt; Either String CanonicalConfig
+</span><a href="Language.Lambda.Config.html#toCanonicalConfig"><span class="hs-identifier hs-var hs-var">toCanonicalConfig</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Language.Lambda.Config.html#Config"><span class="hs-identifier hs-type">Config</span></a></span><span> </span><span id="local-6989586621679308286"><span class="annot"><span class="annottext">[Problem b c (Solution b s)]
+</span><a href="#local-6989586621679308286"><span class="hs-identifier hs-var">problems</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-159"></span><span>  </span><span class="annot"><span class="annottext">[CanonicalProblem] -&gt; CanonicalConfig
+forall binders constraint solution.
+[Problem binders constraint solution]
+-&gt; Config binders constraint solution
+</span><a href="Language.Lambda.Config.html#Config"><span class="hs-identifier hs-var">Config</span></a></span><span> </span><span class="annot"><span class="annottext">([CanonicalProblem] -&gt; CanonicalConfig)
+-&gt; Either String [CanonicalProblem]
+-&gt; Either String CanonicalConfig
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">(Problem b c (Solution b s) -&gt; Result CanonicalProblem)
+-&gt; [Problem b c (Solution b s)] -&gt; Either String [CanonicalProblem]
+forall (t :: * -&gt; *) (m :: * -&gt; *) a b.
+(Traversable t, Monad m) =&gt;
+(a -&gt; m b) -&gt; t a -&gt; m (t b)
+forall (m :: * -&gt; *) a b. Monad m =&gt; (a -&gt; m b) -&gt; [a] -&gt; m [b]
+</span><span class="hs-identifier hs-var">mapM</span></span><span> </span><span class="annot"><span class="annottext">Problem b c (Solution b s) -&gt; Result CanonicalProblem
+forall b c s.
+(IsCanonicalMetavarBinders b, IsCanonicalConstraint c,
+ IsCanonicalSubstitutions s) =&gt;
+Problem b c (Solution b s) -&gt; Result CanonicalProblem
+</span><a href="Language.Lambda.Config.html#toCanonicalProblem"><span class="hs-identifier hs-var">toCanonicalProblem</span></a></span><span> </span><span class="annot"><span class="annottext">[Problem b c (Solution b s)]
+</span><a href="#local-6989586621679308286"><span class="hs-identifier hs-var">problems</span></a></span><span>
+</span><span id="line-160"></span><span>
+</span><span id="line-161"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679308289"><span id="local-6989586621679308294"><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-type">CanonicalConstraint</span></a></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-162"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">show</span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-type">CanonicalConstraint</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-163"></span><span>  </span><span id="local-6989586621679308299"><span class="annot"><span class="annottext">show :: CanonicalConstraint -&gt; String
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">show</span></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">UnificationConstraint -&gt; String
+forall a. Print a =&gt; a -&gt; String
+</span><a href="Language.Lambda.Syntax.Print.html#printTree"><span class="hs-identifier hs-var">Raw.printTree</span></a></span><span> </span><span class="annot"><span class="annottext">(UnificationConstraint -&gt; String)
+-&gt; (CanonicalConstraint -&gt; UnificationConstraint)
+-&gt; CanonicalConstraint
+-&gt; String
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">CanonicalConstraint -&gt; UnificationConstraint
+</span><a href="Language.Lambda.Config.html#fromUnificationConstraint"><span class="hs-identifier hs-var">fromUnificationConstraint</span></a></span><span>
+</span><span id="line-164"></span><span>
+</span><span id="line-165"></span><span class="annot"><a href="Language.Lambda.Config.html#fromUnificationConstraint"><span class="hs-identifier hs-type">fromUnificationConstraint</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-type">CanonicalConstraint</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Syntax.Abs.html#UnificationConstraint"><span class="hs-identifier hs-type">Raw.UnificationConstraint</span></a></span><span>
+</span><span id="line-166"></span><span id="fromUnificationConstraint"><span class="annot"><span class="annottext">fromUnificationConstraint :: CanonicalConstraint -&gt; UnificationConstraint
+</span><a href="Language.Lambda.Config.html#fromUnificationConstraint"><span class="hs-identifier hs-var hs-var">fromUnificationConstraint</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-type">CanonicalConstraint</span></a></span><span> </span><span id="local-6989586621679308304"><span class="annot"><span class="annottext">NameBinderList 'VoidS n
+</span><a href="#local-6989586621679308304"><span class="hs-identifier hs-var">binders</span></a></span></span><span> </span><span id="local-6989586621679308305"><span class="annot"><span class="annottext">NameMap n Type
+</span><a href="#local-6989586621679308305"><span class="hs-identifier hs-var">binderTypes</span></a></span></span><span> </span><span id="local-6989586621679308306"><span class="annot"><span class="annottext">MetaTerm MetavarIdent n Type
+</span><a href="#local-6989586621679308306"><span class="hs-identifier hs-var">lhs</span></a></span></span><span> </span><span id="local-6989586621679308307"><span class="annot"><span class="annottext">MetaTerm MetavarIdent n Type
+</span><a href="#local-6989586621679308307"><span class="hs-identifier hs-var">rhs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-167"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679308308"><span class="annot"><span class="annottext">fromMetaTerm' :: MetaTerm MetavarIdent n t -&gt; ScopedTerm
+</span><a href="#local-6989586621679308308"><span class="hs-identifier hs-var hs-var">fromMetaTerm'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Term -&gt; ScopedTerm
+</span><a href="Language.Lambda.Syntax.Abs.html#AScopedTerm"><span class="hs-identifier hs-var">Raw.AScopedTerm</span></a></span><span> </span><span class="annot"><span class="annottext">(Term -&gt; ScopedTerm)
+-&gt; (MetaTerm MetavarIdent n t -&gt; Term)
+-&gt; MetaTerm MetavarIdent n t
+-&gt; ScopedTerm
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Term n -&gt; Term
+forall (n :: S). Term n -&gt; Term
+</span><a href="Language.Lambda.Impl.html#fromTerm"><span class="hs-identifier hs-var">fromTerm</span></a></span><span> </span><span class="annot"><span class="annottext">(Term n -&gt; Term)
+-&gt; (MetaTerm MetavarIdent n t -&gt; Term n)
+-&gt; MetaTerm MetavarIdent n t
+-&gt; Term
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">MetaTerm MetavarIdent n t -&gt; Term n
+forall (n :: S) t. MetaTerm MetavarIdent n t -&gt; Term n
+</span><a href="Language.Lambda.Impl.html#fromMetaTerm"><span class="hs-identifier hs-var">fromMetaTerm</span></a></span><span>
+</span><span id="line-168"></span><span>   </span><span class="hs-keyword">in</span><span> </span><span class="annot"><span class="annottext">[VarBinder] -&gt; ScopedTerm -&gt; ScopedTerm -&gt; UnificationConstraint
+</span><a href="Language.Lambda.Syntax.Abs.html#AUnificationConstraint"><span class="hs-identifier hs-var">Raw.AUnificationConstraint</span></a></span><span>
+</span><span id="line-169"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">NameBinderList 'VoidS n -&gt; NameMap n Type -&gt; [VarBinder]
+forall (i :: S) (n :: S).
+Distinct i =&gt;
+NameBinderList i n -&gt; NameMap n Type -&gt; [VarBinder]
+</span><a href="Language.Lambda.Impl.html#toBinders"><span class="hs-identifier hs-var">toBinders</span></a></span><span> </span><span class="annot"><span class="annottext">NameBinderList 'VoidS n
+</span><a href="#local-6989586621679308304"><span class="hs-identifier hs-var">binders</span></a></span><span> </span><span class="annot"><span class="annottext">NameMap n Type
+</span><a href="#local-6989586621679308305"><span class="hs-identifier hs-var">binderTypes</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-170"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">MetaTerm MetavarIdent n Type -&gt; ScopedTerm
+forall {n :: S} {t}. MetaTerm MetavarIdent n t -&gt; ScopedTerm
+</span><a href="#local-6989586621679308308"><span class="hs-identifier hs-var">fromMetaTerm'</span></a></span><span> </span><span class="annot"><span class="annottext">MetaTerm MetavarIdent n Type
+</span><a href="#local-6989586621679308306"><span class="hs-identifier hs-var">lhs</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-171"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">MetaTerm MetavarIdent n Type -&gt; ScopedTerm
+forall {n :: S} {t}. MetaTerm MetavarIdent n t -&gt; ScopedTerm
+</span><a href="#local-6989586621679308308"><span class="hs-identifier hs-var">fromMetaTerm'</span></a></span><span> </span><span class="annot"><span class="annottext">MetaTerm MetavarIdent n Type
+</span><a href="#local-6989586621679308307"><span class="hs-identifier hs-var">rhs</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-172"></span><span>
+</span><span id="line-173"></span><span class="annot"><a href="Language.Lambda.Config.html#toUnificationConstraint"><span class="hs-identifier hs-type">toUnificationConstraint</span></a></span><span>
+</span><span id="line-174"></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Language.Lambda.Impl.html#MetavarBinders"><span class="hs-identifier hs-type">MetavarBinders</span></a></span><span>
+</span><span id="line-175"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Language.Lambda.Syntax.Abs.html#UnificationConstraint"><span class="hs-identifier hs-type">Raw.UnificationConstraint</span></a></span><span>
+</span><span id="line-176"></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-type">CanonicalConstraint</span></a></span><span>
+</span><span id="line-177"></span><span id="toUnificationConstraint"><span class="annot"><span class="annottext">toUnificationConstraint :: MetavarBinders
+-&gt; UnificationConstraint -&gt; Maybe CanonicalConstraint
+</span><a href="Language.Lambda.Config.html#toUnificationConstraint"><span class="hs-identifier hs-var hs-var">toUnificationConstraint</span></a></span></span><span> </span><span id="local-6989586621679308311"><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308311"><span class="hs-identifier hs-var">metavarBinders</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Language.Lambda.Syntax.Abs.html#AUnificationConstraint"><span class="hs-identifier hs-type">Raw.AUnificationConstraint</span></a></span><span> </span><span id="local-6989586621679308312"><span class="annot"><span class="annottext">[VarBinder]
+</span><a href="#local-6989586621679308312"><span class="hs-identifier hs-var">vars</span></a></span></span><span> </span><span id="local-6989586621679308313"><span class="annot"><span class="annottext">ScopedTerm
+</span><a href="#local-6989586621679308313"><span class="hs-identifier hs-var">lhs</span></a></span></span><span> </span><span id="local-6989586621679308314"><span class="annot"><span class="annottext">ScopedTerm
+</span><a href="#local-6989586621679308314"><span class="hs-identifier hs-var">rhs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-178"></span><span>  </span><span class="annot"><span class="annottext">Scope 'VoidS
+-&gt; Map VarIdent (Name 'VoidS)
+-&gt; NameBinderList 'VoidS 'VoidS
+-&gt; NameMap 'VoidS Type
+-&gt; [(VarIdent, Type)]
+-&gt; (forall {l :: S}.
+    Distinct l =&gt;
+    Scope l
+    -&gt; Map VarIdent (Name l)
+    -&gt; NameBinderList 'VoidS l
+    -&gt; NameMap l Type
+    -&gt; Maybe CanonicalConstraint)
+-&gt; Maybe CanonicalConstraint
+forall (n :: S) (i :: S) r.
+Distinct n =&gt;
+Scope n
+-&gt; Map VarIdent (Name n)
+-&gt; NameBinderList i n
+-&gt; NameMap n Type
+-&gt; [(VarIdent, Type)]
+-&gt; (forall (l :: S).
+    Distinct l =&gt;
+    Scope l
+    -&gt; Map VarIdent (Name l)
+    -&gt; NameBinderList i l
+    -&gt; NameMap l Type
+    -&gt; r)
+-&gt; r
+</span><a href="Language.Lambda.Impl.html#withMetaSubstVars"><span class="hs-identifier hs-var">withMetaSubstVars</span></a></span><span>
+</span><span id="line-179"></span><span>    </span><span class="annot"><span class="annottext">Scope 'VoidS
+</span><span class="hs-identifier hs-var">Foil.emptyScope</span></span><span>
+</span><span id="line-180"></span><span>    </span><span class="annot"><span class="annottext">Map VarIdent (Name 'VoidS)
+forall k a. Map k a
+</span><span class="hs-identifier hs-var">Map.empty</span></span><span>
+</span><span id="line-181"></span><span>    </span><span class="annot"><span class="annottext">NameBinderList 'VoidS 'VoidS
+forall (n :: S). NameBinderList n n
+</span><span class="hs-identifier hs-var">Foil.NameBinderListEmpty</span></span><span>
+</span><span id="line-182"></span><span>    </span><span class="annot"><span class="annottext">NameMap 'VoidS Type
+forall a. NameMap 'VoidS a
+</span><span class="hs-identifier hs-var">Foil.emptyNameMap</span></span><span>
+</span><span id="line-183"></span><span>    </span><span class="annot"><span class="annottext">[(VarIdent, Type)]
+</span><a href="#local-6989586621679308319"><span class="hs-identifier hs-var">binders</span></a></span><span>
+</span><span id="line-184"></span><span>    </span><span class="annot"><span class="annottext">((forall {l :: S}.
+  Distinct l =&gt;
+  Scope l
+  -&gt; Map VarIdent (Name l)
+  -&gt; NameBinderList 'VoidS l
+  -&gt; NameMap l Type
+  -&gt; Maybe CanonicalConstraint)
+ -&gt; Maybe CanonicalConstraint)
+-&gt; (forall {l :: S}.
+    Distinct l =&gt;
+    Scope l
+    -&gt; Map VarIdent (Name l)
+    -&gt; NameBinderList 'VoidS l
+    -&gt; NameMap l Type
+    -&gt; Maybe CanonicalConstraint)
+-&gt; Maybe CanonicalConstraint
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679308328"><span class="annot"><span class="annottext">Scope l
+</span><a href="#local-6989586621679308328"><span class="hs-identifier hs-var">scope</span></a></span></span><span> </span><span id="local-6989586621679308329"><span class="annot"><span class="annottext">Map VarIdent (Name l)
+</span><a href="#local-6989586621679308329"><span class="hs-identifier hs-var">env</span></a></span></span><span> </span><span id="local-6989586621679308330"><span class="annot"><span class="annottext">NameBinderList 'VoidS l
+</span><a href="#local-6989586621679308330"><span class="hs-identifier hs-var">binderList</span></a></span></span><span> </span><span id="local-6989586621679308331"><span class="annot"><span class="annottext">NameMap l Type
+</span><a href="#local-6989586621679308331"><span class="hs-identifier hs-var">binderTypes</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span>
+</span><span id="line-185"></span><span>      </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679308332"><span class="annot"><span class="annottext">annotate' :: ScopedTerm -&gt; Maybe (MetaTerm MetavarIdent l Type, Type)
+</span><a href="#local-6989586621679308332"><span class="hs-identifier hs-var hs-var">annotate'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-186"></span><span>            </span><span class="annot"><span class="annottext">MetavarBinders
+-&gt; NameMap l Type
+-&gt; Term l
+-&gt; Maybe (MetaTerm MetavarIdent l Type, Type)
+forall (n :: S).
+MetavarBinders
+-&gt; NameMap n Type
+-&gt; Term n
+-&gt; Maybe (MetaTerm MetavarIdent n Type, Type)
+</span><a href="Language.Lambda.Impl.html#annotate"><span class="hs-identifier hs-var">annotate</span></a></span><span>
+</span><span id="line-187"></span><span>              </span><span class="annot"><span class="annottext">MetavarBinders
+</span><a href="#local-6989586621679308311"><span class="hs-identifier hs-var">metavarBinders</span></a></span><span>
+</span><span id="line-188"></span><span>              </span><span class="annot"><span class="annottext">NameMap l Type
+</span><a href="#local-6989586621679308331"><span class="hs-identifier hs-var">binderTypes</span></a></span><span>
+</span><span id="line-189"></span><span>              </span><span class="annot"><span class="annottext">(Term l -&gt; Maybe (MetaTerm MetavarIdent l Type, Type))
+-&gt; (ScopedTerm -&gt; Term l)
+-&gt; ScopedTerm
+-&gt; Maybe (MetaTerm MetavarIdent l Type, Type)
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Scope l -&gt; Map VarIdent (Name l) -&gt; Term -&gt; Term l
+forall (n :: S).
+Distinct n =&gt;
+Scope n -&gt; Map VarIdent (Name n) -&gt; Term -&gt; Term n
+</span><a href="Language.Lambda.Impl.html#toTerm"><span class="hs-identifier hs-var">toTerm</span></a></span><span> </span><span class="annot"><span class="annottext">Scope l
+</span><a href="#local-6989586621679308328"><span class="hs-identifier hs-var">scope</span></a></span><span> </span><span class="annot"><span class="annottext">Map VarIdent (Name l)
+</span><a href="#local-6989586621679308329"><span class="hs-identifier hs-var">env</span></a></span><span>
+</span><span id="line-190"></span><span>              </span><span class="annot"><span class="annottext">(Term -&gt; Term l) -&gt; (ScopedTerm -&gt; Term) -&gt; ScopedTerm -&gt; Term l
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">ScopedTerm -&gt; Term
+</span><a href="Language.Lambda.Impl.html#getTermFromScopedTerm"><span class="hs-identifier hs-var">getTermFromScopedTerm</span></a></span><span>
+</span><span id="line-191"></span><span>       </span><span class="hs-keyword">in</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-192"></span><span>            </span><span class="hs-special">(</span><span id="local-6989586621679308333"><span class="annot"><span class="annottext">MetaTerm MetavarIdent l Type
+</span><a href="#local-6989586621679308333"><span class="hs-identifier hs-var">lhs'</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Type
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ScopedTerm -&gt; Maybe (MetaTerm MetavarIdent l Type, Type)
+</span><a href="#local-6989586621679308332"><span class="hs-identifier hs-var">annotate'</span></a></span><span> </span><span class="annot"><span class="annottext">ScopedTerm
+</span><a href="#local-6989586621679308313"><span class="hs-identifier hs-var">lhs</span></a></span><span>
+</span><span id="line-193"></span><span>            </span><span class="hs-special">(</span><span id="local-6989586621679308334"><span class="annot"><span class="annottext">MetaTerm MetavarIdent l Type
+</span><a href="#local-6989586621679308334"><span class="hs-identifier hs-var">rhs'</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Type
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ScopedTerm -&gt; Maybe (MetaTerm MetavarIdent l Type, Type)
+</span><a href="#local-6989586621679308332"><span class="hs-identifier hs-var">annotate'</span></a></span><span> </span><span class="annot"><span class="annottext">ScopedTerm
+</span><a href="#local-6989586621679308314"><span class="hs-identifier hs-var">rhs</span></a></span><span>
+</span><span id="line-194"></span><span>            </span><span class="annot"><span class="annottext">CanonicalConstraint -&gt; Maybe CanonicalConstraint
+forall a. a -&gt; Maybe a
+forall (f :: * -&gt; *) a. Applicative f =&gt; a -&gt; f a
+</span><span class="hs-identifier hs-var">pure</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">NameBinderList 'VoidS l
+-&gt; NameMap l Type
+-&gt; MetaTerm MetavarIdent l Type
+-&gt; MetaTerm MetavarIdent l Type
+-&gt; CanonicalConstraint
+forall (n :: S).
+Distinct n =&gt;
+NameBinderList 'VoidS n
+-&gt; NameMap n Type
+-&gt; MetaTerm MetavarIdent n Type
+-&gt; MetaTerm MetavarIdent n Type
+-&gt; CanonicalConstraint
+</span><a href="Language.Lambda.Config.html#CanonicalConstraint"><span class="hs-identifier hs-var">CanonicalConstraint</span></a></span><span> </span><span class="annot"><span class="annottext">NameBinderList 'VoidS l
+</span><a href="#local-6989586621679308330"><span class="hs-identifier hs-var">binderList</span></a></span><span> </span><span class="annot"><span class="annottext">NameMap l Type
+</span><a href="#local-6989586621679308331"><span class="hs-identifier hs-var">binderTypes</span></a></span><span> </span><span class="annot"><span class="annottext">MetaTerm MetavarIdent l Type
+</span><a href="#local-6989586621679308333"><span class="hs-identifier hs-var">lhs'</span></a></span><span> </span><span class="annot"><span class="annottext">MetaTerm MetavarIdent l Type
+</span><a href="#local-6989586621679308334"><span class="hs-identifier hs-var">rhs'</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-195"></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-196"></span><span>  </span><span id="local-6989586621679308319"><span class="annot"><span class="annottext">binders :: [(VarIdent, Type)]
+</span><a href="#local-6989586621679308319"><span class="hs-identifier hs-var hs-var">binders</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(VarBinder -&gt; (VarIdent, Type))
+-&gt; [VarBinder] -&gt; [(VarIdent, Type)]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">\</span><span class="hs-special">(</span><span class="annot"><a href="Language.Lambda.Syntax.Abs.html#AVarBinder"><span class="hs-identifier hs-type">Raw.AVarBinder</span></a></span><span> </span><span id="local-6989586621679308336"><span class="annot"><span class="annottext">VarIdent
+</span><a href="#local-6989586621679308336"><span class="hs-identifier hs-var">ident</span></a></span></span><span> </span><span id="local-6989586621679308337"><span class="annot"><span class="annottext">Type
+</span><a href="#local-6989586621679308337"><span class="hs-identifier hs-var">typ</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">VarIdent
+</span><a href="#local-6989586621679308336"><span class="hs-identifier hs-var">ident</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Type
+</span><a href="#local-6989586621679308337"><span class="hs-identifier hs-var">typ</span></a></span><span class="hs-special">)</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">[VarBinder]
+</span><a href="#local-6989586621679308312"><span class="hs-identifier hs-var">vars</span></a></span><span>
+</span><span id="line-197"></span></pre></body></html>

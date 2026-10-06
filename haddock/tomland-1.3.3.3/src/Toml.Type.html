@@ -1,0 +1,77 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="annot"><span class="hs-comment">{- |
+Module                  : Toml.Type
+Copyright               : (c) 2018-2022 Kowainik
+SPDX-License-Identifier : MPL-2.0
+Maintainer              : Kowainik &lt;xrom.xkov@gmail.com&gt;
+Stability               : Stable
+Portability             : Portable
+
+Core types for TOML AST.
+-}</span></span><span>
+</span><span id="line-11"></span><span>
+</span><span id="line-12"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Toml.Type</span><span>
+</span><span id="line-13"></span><span>    </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- $toml</span></span><span>
+</span><span id="line-14"></span><span>      </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html"><span class="hs-identifier">Toml.Type.TOML</span></a></span><span>
+</span><span id="line-15"></span><span>
+</span><span id="line-16"></span><span class="hs-comment">--      -- $edsl</span><span>
+</span><span id="line-17"></span><span class="hs-comment">--    , module Toml.Type.Edsl</span><span>
+</span><span id="line-18"></span><span class="hs-comment">--    Edsl.table conflicts with Codec.table</span><span>
+</span><span id="line-19"></span><span>
+</span><span id="line-20"></span><span>      </span><span class="annot"><span class="hs-comment">-- $printer</span></span><span>
+</span><span id="line-21"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Type.Printer.html"><span class="hs-identifier">Toml.Type.Printer</span></a></span><span>
+</span><span id="line-22"></span><span>      </span><span class="annot"><span class="hs-comment">-- $prefix</span></span><span>
+</span><span id="line-23"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html"><span class="hs-identifier">Toml.Type.PrefixTree</span></a></span><span>
+</span><span id="line-24"></span><span>      </span><span class="annot"><span class="hs-comment">-- $key</span></span><span>
+</span><span id="line-25"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Type.Key.html"><span class="hs-identifier">Toml.Type.Key</span></a></span><span>
+</span><span id="line-26"></span><span>      </span><span class="annot"><span class="hs-comment">-- $uvalue</span></span><span>
+</span><span id="line-27"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Type.UValue.html"><span class="hs-identifier">Toml.Type.UValue</span></a></span><span>
+</span><span id="line-28"></span><span>      </span><span class="annot"><span class="hs-comment">-- $value</span></span><span>
+</span><span id="line-29"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Type.Value.html"><span class="hs-identifier">Toml.Type.Value</span></a></span><span>
+</span><span id="line-30"></span><span>      </span><span class="annot"><span class="hs-comment">-- $anyvalue</span></span><span>
+</span><span id="line-31"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Type.AnyValue.html"><span class="hs-identifier">Toml.Type.AnyValue</span></a></span><span>
+</span><span id="line-32"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-33"></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.AnyValue.html"><span class="hs-identifier">Toml.Type.AnyValue</span></a></span><span>
+</span><span id="line-35"></span><span class="hs-comment">-- import Toml.Type.Edsl</span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.Key.html"><span class="hs-identifier">Toml.Type.Key</span></a></span><span>
+</span><span id="line-37"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.PrefixTree.html"><span class="hs-identifier">Toml.Type.PrefixTree</span></a></span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.Printer.html"><span class="hs-identifier">Toml.Type.Printer</span></a></span><span>
+</span><span id="line-39"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.TOML.html"><span class="hs-identifier">Toml.Type.TOML</span></a></span><span>
+</span><span id="line-40"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.UValue.html"><span class="hs-identifier">Toml.Type.UValue</span></a></span><span>
+</span><span id="line-41"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.Value.html"><span class="hs-identifier">Toml.Type.Value</span></a></span><span>
+</span><span id="line-42"></span><span>
+</span><span id="line-43"></span><span class="annot"><span class="hs-comment">{- $toml
+Main TOML AST data type. Text is converted to 'TOML' first. All codecs
+work with the 'TOML' type instead of raw text.
+-}</span></span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-comment">-- {- $eDSL</span><span>
+</span><span id="line-49"></span><span class="hs-comment">-- eDSL for type-safe construction of the 'TOML' values.</span><span>
+</span><span id="line-50"></span><span class="hs-comment">-- -}</span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span class="annot"><span class="hs-comment">{- $printer
+Pretty-printer for 'TOML'.
+-}</span></span><span>
+</span><span id="line-55"></span><span>
+</span><span id="line-56"></span><span class="annot"><span class="hs-comment">{- $prefix
+'PrefixMap' and 'PrefixTree' types that help representing 'TOML' AST.
+-}</span></span><span>
+</span><span id="line-59"></span><span>
+</span><span id="line-60"></span><span class="annot"><span class="hs-comment">{- $key
+Key in key-value pairs and table names. Also 'Key' in 'PrefixMap'.
+-}</span></span><span>
+</span><span id="line-63"></span><span>
+</span><span id="line-64"></span><span class="annot"><span class="hs-comment">{- $uvalue
+Untyped value obtained directly from parsing.
+-}</span></span><span>
+</span><span id="line-67"></span><span>
+</span><span id="line-68"></span><span class="annot"><span class="hs-comment">{- $value
+Typed 'Value'. Result of type-checking 'UValue'.
+-}</span></span><span>
+</span><span id="line-71"></span><span>
+</span><span id="line-72"></span><span class="annot"><span class="hs-comment">{- $anyvalue
+Existential wrapper around 'Value' to be able to store 'Value's of
+different types inside lists or other containers like
+'Data.Map.Strict.Map' or 'Data.HashMap.Strict.HashMap'.
+-}</span></span><span>
+</span><span id="line-77"></span></pre></body></html>

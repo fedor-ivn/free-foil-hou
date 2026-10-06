@@ -1,0 +1,368 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE CPP #-}</span><span>
+</span><span id="line-2"></span><span class="hs-pragma">{-# LANGUAGE LambdaCase #-}</span><span>
+</span><span id="line-3"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Cabal.Paths</span><span> </span><span class="hs-special">(</span><span>
+</span><span id="line-4"></span><span>  </span><span class="annot"><a href="Cabal.Paths.html#Paths"><span class="hs-identifier">Paths</span></a></span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-5"></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Cabal.Paths.html#paths"><span class="hs-identifier">paths</span></a></span><span>
+</span><span id="line-6"></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-7"></span><span>
+</span><span id="line-8"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Imports.html"><span class="hs-identifier">Imports</span></a></span><span>
+</span><span id="line-9"></span><span>
+</span><span id="line-10"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Char</span></span><span>
+</span><span id="line-11"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Tuple</span></span><span>
+</span><span id="line-12"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Data.Version</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">parseVersion</span></span><span class="hs-special">)</span><span>
+</span><span id="line-13"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">Data.Version</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">Version</span></span><span>
+</span><span id="line-14"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.Exit</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">die</span></span><span class="hs-special">)</span><span>
+</span><span id="line-15"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.Directory</span></span><span>
+</span><span id="line-16"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.FilePath</span></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.IO</span></span><span>
+</span><span id="line-18"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.Process</span></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Text.ParserCombinators.ReadP</span></span><span>
+</span><span id="line-20"></span><span>
+</span><span id="line-21"></span><span class="hs-keyword">data</span><span> </span><span id="Paths"><span class="annot"><a href="Cabal.Paths.html#Paths"><span class="hs-identifier hs-var">Paths</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Paths"><span class="annot"><a href="Cabal.Paths.html#Paths"><span class="hs-identifier hs-var">Paths</span></a></span></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-22"></span><span>  </span><span id="ghc"><span class="annot"><span class="annottext">Paths -&gt; String
+</span><a href="Cabal.Paths.html#ghc"><span class="hs-identifier hs-var hs-var">ghc</span></a></span></span><span>  </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span>
+</span><span id="line-23"></span><span class="hs-special">,</span><span> </span><span id="ghcPkg"><span class="annot"><span class="annottext">Paths -&gt; String
+</span><a href="Cabal.Paths.html#ghcPkg"><span class="hs-identifier hs-var hs-var">ghcPkg</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span>
+</span><span id="line-24"></span><span class="hs-special">,</span><span> </span><span id="cache"><span class="annot"><span class="annottext">Paths -&gt; String
+</span><a href="Cabal.Paths.html#cache"><span class="hs-identifier hs-var hs-var">cache</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span>
+</span><span id="line-25"></span><span class="hs-special">}</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679235934"><span id="local-6989586621679235939"><span class="annot"><span class="annottext">Paths -&gt; Paths -&gt; Bool
+(Paths -&gt; Paths -&gt; Bool) -&gt; (Paths -&gt; Paths -&gt; Bool) -&gt; Eq Paths
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: Paths -&gt; Paths -&gt; Bool
+== :: Paths -&gt; Paths -&gt; Bool
+$c/= :: Paths -&gt; Paths -&gt; Bool
+/= :: Paths -&gt; Paths -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679235944"><span id="local-6989586621679235953"><span id="local-6989586621679235957"><span class="annot"><span class="annottext">Int -&gt; Paths -&gt; ShowS
+[Paths] -&gt; ShowS
+Paths -&gt; String
+(Int -&gt; Paths -&gt; ShowS)
+-&gt; (Paths -&gt; String) -&gt; ([Paths] -&gt; ShowS) -&gt; Show Paths
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; Paths -&gt; ShowS
+showsPrec :: Int -&gt; Paths -&gt; ShowS
+$cshow :: Paths -&gt; String
+show :: Paths -&gt; String
+$cshowList :: [Paths] -&gt; ShowS
+showList :: [Paths] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-26"></span><span>
+</span><span id="line-27"></span><span class="annot"><a href="Cabal.Paths.html#paths"><span class="hs-identifier hs-type">paths</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="Cabal.Paths.html#Paths"><span class="hs-identifier hs-type">Paths</span></a></span><span>
+</span><span id="line-28"></span><span id="paths"><span class="annot"><span class="annottext">paths :: String -&gt; [String] -&gt; IO Paths
+</span><a href="Cabal.Paths.html#paths"><span class="hs-identifier hs-var hs-var">paths</span></a></span></span><span> </span><span id="local-6989586621679235961"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235961"><span class="hs-identifier hs-var">cabal</span></a></span></span><span> </span><span id="local-6989586621679235962"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679235962"><span class="hs-identifier hs-var">args</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-29"></span><span>  </span><span id="local-6989586621679235963"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235963"><span class="hs-identifier hs-var">cabalVersion</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ShowS
+</span><a href="Cabal.Paths.html#strip"><span class="hs-identifier hs-var">strip</span></a></span><span> </span><span class="annot"><span class="annottext">ShowS -&gt; IO String -&gt; IO String
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; String -&gt; IO String
+</span><span class="hs-identifier hs-var">readProcess</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235961"><span class="hs-identifier hs-var">cabal</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--numeric-version&quot;</span></span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span>
+</span><span id="line-30"></span><span>
+</span><span id="line-31"></span><span>  </span><span class="hs-keyword">let</span><span>
+</span><span id="line-32"></span><span>    </span><span class="annot"><a href="#local-6989586621679235967"><span class="hs-identifier hs-type">required</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Version</span></span><span>
+</span><span id="line-33"></span><span>    </span><span id="local-6989586621679235967"><span class="annot"><span class="annottext">required :: Version
+</span><a href="#local-6989586621679235967"><span class="hs-identifier hs-var hs-var">required</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Int] -&gt; Version
+</span><span class="hs-identifier hs-var">makeVersion</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">3</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">12</span></span><span class="hs-special">]</span><span>
+</span><span id="line-34"></span><span>
+</span><span id="line-35"></span><span>  </span><span class="annot"><span class="annottext">Bool -&gt; IO () -&gt; IO ()
+forall (f :: * -&gt; *). Applicative f =&gt; Bool -&gt; f () -&gt; f ()
+</span><span class="hs-identifier hs-var">when</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Maybe Version
+</span><a href="Cabal.Paths.html#parseVersion"><span class="hs-identifier hs-var">parseVersion</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235963"><span class="hs-identifier hs-var">cabalVersion</span></a></span><span> </span><span class="annot"><span class="annottext">Maybe Version -&gt; Maybe Version -&gt; Bool
+forall a. Ord a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">&lt;</span></span><span> </span><span class="annot"><span class="annottext">Version -&gt; Maybe Version
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">Version
+</span><a href="#local-6989586621679235967"><span class="hs-identifier hs-var">required</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(IO () -&gt; IO ()) -&gt; IO () -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-36"></span><span>    </span><span class="annot"><span class="annottext">String -&gt; IO ()
+forall a. String -&gt; IO a
+</span><a href="Cabal.Paths.html#die"><span class="hs-identifier hs-var">die</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; IO ()) -&gt; String -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;'cabal-install' version &quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">Version -&gt; String
+</span><span class="hs-identifier hs-var">showVersion</span></span><span> </span><span class="annot"><span class="annottext">Version
+</span><a href="#local-6989586621679235967"><span class="hs-identifier hs-var">required</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot; or later is required, but 'cabal --numeric-version' returned &quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235963"><span class="hs-identifier hs-var">cabalVersion</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;.&quot;</span></span><span>
+</span><span id="line-37"></span><span>
+</span><span id="line-38"></span><span>  </span><span id="local-6989586621679235974"><span class="annot"><span class="annottext">[(String, String)]
+</span><a href="#local-6989586621679235974"><span class="hs-identifier hs-var">values</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; [(String, String)]
+</span><a href="#local-6989586621679235975"><span class="hs-identifier hs-var">parseFields</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; [(String, String)])
+-&gt; IO String -&gt; IO [(String, String)]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; String -&gt; IO String
+</span><span class="hs-identifier hs-var">readProcess</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235961"><span class="hs-identifier hs-var">cabal</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;path&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679235962"><span class="hs-identifier hs-var">args</span></a></span><span> </span><span class="annot"><span class="annottext">[String] -&gt; [String] -&gt; [String]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;-v0&quot;</span></span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span>
+</span><span id="line-39"></span><span>
+</span><span id="line-40"></span><span>  </span><span class="hs-keyword">let</span><span>
+</span><span id="line-41"></span><span>    </span><span class="annot"><a href="#local-6989586621679235976"><span class="hs-identifier hs-type">getPath</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span>
+</span><span id="line-42"></span><span>    </span><span id="local-6989586621679235976"><span class="annot"><span class="annottext">getPath :: String -&gt; String -&gt; IO String
+</span><a href="#local-6989586621679235976"><span class="hs-identifier hs-var hs-var">getPath</span></a></span></span><span> </span><span id="local-6989586621679235977"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235977"><span class="hs-identifier hs-var">subject</span></a></span></span><span> </span><span id="local-6989586621679235978"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235978"><span class="hs-identifier hs-var">key</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">String -&gt; [(String, String)] -&gt; Maybe String
+forall a b. Eq a =&gt; a -&gt; [(a, b)] -&gt; Maybe b
+</span><span class="hs-identifier hs-var">lookup</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235978"><span class="hs-identifier hs-var">key</span></a></span><span> </span><span class="annot"><span class="annottext">[(String, String)]
+</span><a href="#local-6989586621679235974"><span class="hs-identifier hs-var">values</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-43"></span><span>      </span><span class="annot"><span class="annottext">Maybe String
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; IO String
+forall a. String -&gt; IO a
+</span><a href="Cabal.Paths.html#die"><span class="hs-identifier hs-var">die</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; IO String) -&gt; String -&gt; IO String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Cannot determine the path to &quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235977"><span class="hs-identifier hs-var">subject</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;. Running 'cabal path' did not return a value for '&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235978"><span class="hs-identifier hs-var">key</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;'.&quot;</span></span><span>
+</span><span id="line-44"></span><span>      </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679235980"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235980"><span class="hs-identifier hs-var">path</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; IO String
+</span><span class="hs-identifier hs-var">canonicalizePath</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235980"><span class="hs-identifier hs-var">path</span></a></span><span>
+</span><span id="line-45"></span><span>
+</span><span id="line-46"></span><span>  </span><span id="local-6989586621679235982"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235982"><span class="hs-identifier hs-var">ghc</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; IO String
+</span><a href="#local-6989586621679235976"><span class="hs-identifier hs-var">getPath</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;'ghc'&quot;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;compiler-path&quot;</span></span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span>  </span><span id="local-6989586621679235983"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235983"><span class="hs-identifier hs-var">ghcVersion</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ShowS
+</span><a href="Cabal.Paths.html#strip"><span class="hs-identifier hs-var">strip</span></a></span><span> </span><span class="annot"><span class="annottext">ShowS -&gt; IO String -&gt; IO String
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; String -&gt; IO String
+</span><span class="hs-identifier hs-var">readProcess</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235982"><span class="hs-identifier hs-var">ghc</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--numeric-version&quot;</span></span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span>
+</span><span id="line-49"></span><span>
+</span><span id="line-50"></span><span>  </span><span class="hs-keyword">let</span><span>
+</span><span id="line-51"></span><span>    </span><span class="annot"><a href="#local-6989586621679235984"><span class="hs-identifier hs-type">ghcPkg</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span>
+</span><span id="line-52"></span><span>    </span><span id="local-6989586621679235984"><span class="annot"><span class="annottext">ghcPkg :: String
+</span><a href="#local-6989586621679235984"><span class="hs-identifier hs-var hs-var">ghcPkg</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ShowS
+</span><span class="hs-identifier hs-var">takeDirectory</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235982"><span class="hs-identifier hs-var">ghc</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+</span><span class="hs-operator hs-var">&lt;/&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;ghc-pkg-&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235983"><span class="hs-identifier hs-var">ghcVersion</span></a></span><span class="hs-cpp">
+#ifdef mingw32_HOST_OS
+</span><span>      </span><span class="hs-operator">&lt;.&gt;</span><span> </span><span class="hs-string">&quot;exe&quot;</span><span class="hs-cpp">
+#endif
+</span><span>
+</span><span id="line-57"></span><span>  </span><span class="annot"><span class="annottext">String -&gt; IO Bool
+</span><span class="hs-identifier hs-var">doesFileExist</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235984"><span class="hs-identifier hs-var">ghcPkg</span></a></span><span> </span><span class="annot"><span class="annottext">IO Bool -&gt; (Bool -&gt; IO ()) -&gt; IO ()
+forall a b. IO a -&gt; (a -&gt; IO b) -&gt; IO b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span> </span><span class="hs-glyph">case</span><span>
+</span><span id="line-58"></span><span>    </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO ()
+forall (m :: * -&gt; *). Monad m =&gt; m ()
+</span><a href="Imports.html#pass"><span class="hs-identifier hs-var">pass</span></a></span><span>
+</span><span id="line-59"></span><span>    </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; IO ()
+forall a. String -&gt; IO a
+</span><a href="Cabal.Paths.html#die"><span class="hs-identifier hs-var">die</span></a></span><span> </span><span class="annot"><span class="annottext">(String -&gt; IO ()) -&gt; String -&gt; IO ()
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Cannot determine the path to 'ghc-pkg' from '&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235982"><span class="hs-identifier hs-var">ghc</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;'. File '&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235984"><span class="hs-identifier hs-var">ghcPkg</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;' does not exist.&quot;</span></span><span>
+</span><span id="line-60"></span><span>
+</span><span id="line-61"></span><span>  </span><span id="local-6989586621679235989"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235989"><span class="hs-identifier hs-var">abi</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ShowS
+</span><a href="Cabal.Paths.html#strip"><span class="hs-identifier hs-var">strip</span></a></span><span> </span><span class="annot"><span class="annottext">ShowS -&gt; IO String -&gt; IO String
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; String -&gt; IO String
+</span><span class="hs-identifier hs-var">readProcess</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235984"><span class="hs-identifier hs-var">ghcPkg</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--no-user-package-db&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;field&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;base&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;abi&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--simple-output&quot;</span></span><span class="hs-special">]</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span>
+</span><span id="line-62"></span><span>
+</span><span id="line-63"></span><span>  </span><span id="local-6989586621679235990"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235990"><span class="hs-identifier hs-var">cache_home</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; IO String
+</span><a href="#local-6989586621679235976"><span class="hs-identifier hs-var">getPath</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Cabal's cache directory&quot;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;cache-home&quot;</span></span><span>
+</span><span id="line-64"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679235994"><span class="annot"><span class="annottext">cache :: String
+</span><a href="#local-6989586621679235994"><span class="hs-identifier hs-var hs-var">cache</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235990"><span class="hs-identifier hs-var">cache_home</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+</span><span class="hs-operator hs-var">&lt;/&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;doctest&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+</span><span class="hs-operator hs-var">&lt;/&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;ghc-&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235983"><span class="hs-identifier hs-var">ghcVersion</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;-&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235989"><span class="hs-identifier hs-var">abi</span></a></span><span>
+</span><span id="line-65"></span><span>
+</span><span id="line-66"></span><span>  </span><span class="annot"><span class="annottext">Bool -&gt; String -&gt; IO ()
+</span><span class="hs-identifier hs-var">createDirectoryIfMissing</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235994"><span class="hs-identifier hs-var">cache</span></a></span><span>
+</span><span id="line-67"></span><span>
+</span><span id="line-68"></span><span>  </span><span class="annot"><span class="annottext">Paths -&gt; IO Paths
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><a href="Cabal.Paths.html#Paths"><span class="hs-identifier hs-type">Paths</span></a></span><span> </span><span class="hs-special">{</span><span>
+</span><span id="line-69"></span><span>    </span><span class="annot"><span class="annottext">String
+ghc :: String
+ghc :: String
+</span><a href="Cabal.Paths.html#ghc"><span class="hs-identifier hs-var hs-var">ghc</span></a></span><span>
+</span><span id="line-70"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+ghcPkg :: String
+ghcPkg :: String
+</span><a href="Cabal.Paths.html#ghcPkg"><span class="hs-identifier hs-var hs-var">ghcPkg</span></a></span><span>
+</span><span id="line-71"></span><span>  </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+cache :: String
+cache :: String
+</span><a href="Cabal.Paths.html#cache"><span class="hs-identifier hs-var hs-var">cache</span></a></span><span>
+</span><span id="line-72"></span><span>  </span><span class="hs-special">}</span><span>
+</span><span id="line-73"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-74"></span><span>    </span><span class="annot"><a href="#local-6989586621679235975"><span class="hs-identifier hs-type">parseFields</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-75"></span><span>    </span><span id="local-6989586621679235975"><span class="annot"><span class="annottext">parseFields :: String -&gt; [(String, String)]
+</span><a href="#local-6989586621679235975"><span class="hs-identifier hs-var hs-var">parseFields</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(String -&gt; (String, String)) -&gt; [String] -&gt; [(String, String)]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; (String, String)
+</span><a href="#local-6989586621679235996"><span class="hs-identifier hs-var">parseField</span></a></span><span> </span><span class="annot"><span class="annottext">([String] -&gt; [(String, String)])
+-&gt; (String -&gt; [String]) -&gt; String -&gt; [(String, String)]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String]
+</span><span class="hs-identifier hs-var">lines</span></span><span>
+</span><span id="line-76"></span><span>
+</span><span id="line-77"></span><span>    </span><span class="annot"><a href="#local-6989586621679235996"><span class="hs-identifier hs-type">parseField</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span class="hs-special">)</span><span>
+</span><span id="line-78"></span><span>    </span><span id="local-6989586621679235996"><span class="annot"><span class="annottext">parseField :: String -&gt; (String, String)
+</span><a href="#local-6989586621679235996"><span class="hs-identifier hs-var hs-var">parseField</span></a></span></span><span> </span><span id="local-6989586621679235999"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235999"><span class="hs-identifier hs-var">input</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; String -&gt; (String, String)
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; ([a], [a])
+</span><span class="hs-identifier hs-var">break</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char -&gt; Char -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">':'</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235999"><span class="hs-identifier hs-var">input</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-79"></span><span>      </span><span class="hs-special">(</span><span id="local-6989586621679236001"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236001"><span class="hs-identifier hs-var">key</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">':'</span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span id="local-6989586621679236002"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236002"><span class="hs-identifier hs-var">value</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236001"><span class="hs-identifier hs-var">key</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; ShowS
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">dropWhile</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; Bool
+</span><span class="hs-identifier hs-var">isSpace</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236002"><span class="hs-identifier hs-var">value</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-80"></span><span>      </span><span class="hs-special">(</span><span id="local-6989586621679236005"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236005"><span class="hs-identifier hs-var">key</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236005"><span class="hs-identifier hs-var">key</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span class="hs-special">)</span><span>
+</span><span id="line-81"></span><span>
+</span><span id="line-82"></span><span id="local-6989586621679235855"><span class="annot"><a href="Cabal.Paths.html#die"><span class="hs-identifier hs-type">die</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="#local-6989586621679235855"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-83"></span><span id="die"><span class="annot"><span class="annottext">die :: forall a. String -&gt; IO a
+</span><a href="Cabal.Paths.html#die"><span class="hs-identifier hs-var hs-var">die</span></a></span></span><span> </span><span id="local-6989586621679236008"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236008"><span class="hs-identifier hs-var">message</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-84"></span><span>  </span><span class="annot"><span class="annottext">Handle -&gt; String -&gt; IO ()
+</span><span class="hs-identifier hs-var">hPutStrLn</span></span><span> </span><span class="annot"><span class="annottext">Handle
+</span><span class="hs-identifier hs-var">stderr</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;Error: [cabal-doctest]&quot;</span></span><span>
+</span><span id="line-85"></span><span>  </span><span class="annot"><span class="annottext">Handle -&gt; String -&gt; IO ()
+</span><span class="hs-identifier hs-var">hPutStrLn</span></span><span> </span><span class="annot"><span class="annottext">Handle
+</span><span class="hs-identifier hs-var">stderr</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236008"><span class="hs-identifier hs-var">message</span></a></span><span>
+</span><span id="line-86"></span><span>  </span><span class="annot"><span class="annottext">IO a
+forall a. IO a
+</span><span class="hs-identifier hs-var">exitFailure</span></span><span>
+</span><span id="line-87"></span><span>
+</span><span id="line-88"></span><span class="annot"><a href="Cabal.Paths.html#strip"><span class="hs-identifier hs-type">strip</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span>
+</span><span id="line-89"></span><span id="strip"><span class="annot"><span class="annottext">strip :: ShowS
+</span><a href="Cabal.Paths.html#strip"><span class="hs-identifier hs-var hs-var">strip</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ShowS
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="annot"><span class="annottext">ShowS -&gt; ShowS -&gt; ShowS
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; ShowS
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">dropWhile</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; Bool
+</span><span class="hs-identifier hs-var">isSpace</span></span><span> </span><span class="annot"><span class="annottext">ShowS -&gt; ShowS -&gt; ShowS
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">ShowS
+forall a. [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">reverse</span></span><span> </span><span class="annot"><span class="annottext">ShowS -&gt; ShowS -&gt; ShowS
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">(Char -&gt; Bool) -&gt; ShowS
+forall a. (a -&gt; Bool) -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">dropWhile</span></span><span> </span><span class="annot"><span class="annottext">Char -&gt; Bool
+</span><span class="hs-identifier hs-var">isSpace</span></span><span>
+</span><span id="line-90"></span><span>
+</span><span id="line-91"></span><span class="annot"><a href="Cabal.Paths.html#parseVersion"><span class="hs-identifier hs-type">parseVersion</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Maybe</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Version</span></span><span>
+</span><span id="line-92"></span><span id="parseVersion"><span class="annot"><span class="annottext">parseVersion :: String -&gt; Maybe Version
+</span><a href="Cabal.Paths.html#parseVersion"><span class="hs-identifier hs-var hs-var">parseVersion</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String -&gt; [(String, Version)] -&gt; Maybe Version
+forall a b. Eq a =&gt; a -&gt; [(a, b)] -&gt; Maybe b
+</span><span class="hs-identifier hs-var">lookup</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&quot;</span></span><span> </span><span class="annot"><span class="annottext">([(String, Version)] -&gt; Maybe Version)
+-&gt; (String -&gt; [(String, Version)]) -&gt; String -&gt; Maybe Version
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">((Version, String) -&gt; (String, Version))
+-&gt; [(Version, String)] -&gt; [(String, Version)]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">(Version, String) -&gt; (String, Version)
+forall a b. (a, b) -&gt; (b, a)
+</span><span class="hs-identifier hs-var">swap</span></span><span> </span><span class="annot"><span class="annottext">([(Version, String)] -&gt; [(String, Version)])
+-&gt; (String -&gt; [(Version, String)]) -&gt; String -&gt; [(String, Version)]
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">ReadP Version -&gt; String -&gt; [(Version, String)]
+forall a. ReadP a -&gt; ReadS a
+</span><span class="hs-identifier hs-var">readP_to_S</span></span><span> </span><span class="annot"><span class="annottext">ReadP Version
+</span><span class="hs-identifier hs-var">Version.parseVersion</span></span><span>
+</span><span id="line-93"></span></pre></body></html>
