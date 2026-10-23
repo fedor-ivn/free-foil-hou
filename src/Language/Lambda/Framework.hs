@@ -256,7 +256,7 @@ parseUnificationConstraint metavarBinders input = do
   let tokens = Raw.resolveLayout False (Raw.myLexer input)
   raw <- Raw.pUnificationConstraint tokens
   case toUnificationConstraint metavarBinders raw of
-    Just uc -> trace (show uc) $ pure uc
+    Just uc -> pure uc
     Nothing -> Left "type error"
 
 -- ** Matching and solving functions
