@@ -1,8 +1,4 @@
 -- | Run second-order matching through the typed lambda-calculus adapter.
--- The projection example specialises the repeated-argument example of
--- Fedor Ivanov and Nikolai Kudasov in 'Data.SOAS'. The nested cases combine
--- the repeated and nested metavariable fixtures in
--- @problems/matching-regressions.toml@ under a lambda binder.
 module Main (main) where
 
 import Control.Monad (forM_)
