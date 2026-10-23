@@ -15,13 +15,43 @@ stack build
 stack exec -- runghc -package=free-foil-hou examples/Matching.hs
 ```
 
-[The example](examples/Matching.hs) uses the lambda-calculus adapter to solve
-three problems:
+[The example](examples/Matching.hs) first declares a metavariable `M` with
+two arguments of type `t` and result type `t`, then asks the library to solve:
 
-- `M[x, x] = x` has two solutions: `M[a, b] ↦ a` and `M[a, b] ↦ b`.
-- `M[] = x` has no solution: the universally quantified variable `x` is not
-  available in the body assigned to `M`.
-- `x = x` succeeds with the empty substitution.
+```haskell
+matchUnificationConstraint
+  ["M : [t, t] t"]
+  "∀ x: t. M[x, x] = x"
+```
+
+Here `x` is universally quantified. We want a body for `M` that makes the left
+side equal to `x` whenever both arguments are `x`. The matcher finds two bodies:
+
+```text
+M[a, b] ↦ a
+M[a, b] ↦ b
+```
+
+The names `a` and `b` are the formal parameters of `M`. The first solution
+returns its first argument, so `M[x, x]` becomes `x`. The second returns its
+second argument, giving `x` again. These are distinct substitutions: applied
+to `M[x, y]`, they would give `x` and `y`, respectively. Since the target is a
+variable, a body headed by an object-language operator cannot match it.
+Thus the two projections are the only solutions.
+
+The caller supplies the metavariable declaration and the equation. The
+lambda-calculus adapter parses them and passes the terms and type contexts
+to the generic `match` function in `Data.SOAS`. The matcher computes both
+substitutions. It uses free foil to handle bound names and substitution
+without variable capture. The same matching algorithm works with other
+object-language signatures through the interface described below.
+
+The example also solves two smaller problems:
+
+- `M[] = x` has no solution. With no formal parameters, the body assigned to
+  `M` has no way to refer to the universally quantified variable `x`.
+- `x = x` succeeds with the empty substitution, because the two sides already
+  agree and there is no metavariable to assign.
 
 All variables have the base type `t`. Matching compares syntax up to
 alpha-equivalence; it does not identify object-language terms by beta or eta
