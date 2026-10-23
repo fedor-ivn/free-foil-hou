@@ -1,11 +1,11 @@
-# Free foil matching and higher-order unification
+# Generic matching and higher-order unification over free-foil
 
 This repository provides generic second-order matching over
 [free foil](https://github.com/fizruk/free-foil) syntax, a typed lambda-calculus
 adapter, and TOML problem sets. It also contains experimental higher-order
 unification algorithms, including Huet preunification.
 
-## Run the matching example
+## Running the matching example
 
 Install [Stack](https://docs.haskellstack.org/), then run these commands from
 the repository root:
@@ -57,7 +57,7 @@ In these three problems, all variables have the base type `t`. Matching
 compares syntax up to alpha-equivalence; it does not identify object-language
 terms by beta or eta conversion.
 
-### Nested metavariables under a binder
+### Matching nested metavariables under a binder
 
 The same executable also runs a problem with application, abstraction, and
 nested metavariables. Both `M` and `N` take a function and a base-type argument:
@@ -129,7 +129,7 @@ rejects both:
 The last case requires `N[a, b] ↦ a (a b)`, which agrees with neither
 assignment admitted by the first problem.
 
-## Use the generic matcher
+## Using the generic matcher
 
 [`Data.SOAS`](src/Data/SOAS.hs) provides `TypedSOAS`, `MetaApp`, `MetaSubsts`,
 `match`, and `applyMetaSubsts`. `match` takes five arguments:
@@ -172,7 +172,7 @@ Inputs must be well-scoped, with complete contexts and correct operator and
 binder annotations. The matcher checks compared term types and metavariable
 arities and types. It does not implement an object-language type checker.
 
-## Run the tests
+## Running the tests
 
 ```sh
 stack test --pedantic --ghc-options -O2
@@ -191,7 +191,7 @@ discarded arguments, and renaming of both binder lists.
 
 The suite also tests the lambda-calculus adapter and Huet preunification.
 
-## Add matching problems
+## Adding matching problems
 
 Each matching fixture contains metavariable declarations, one constraint,
 and zero or more expected solutions. For example, the first problem in
@@ -218,7 +218,7 @@ solutions from `problems/matching.toml`:
 stack run free-foil-hou-exe
 ```
 
-## Development
+## Contributing
 
 `stack.yaml` pins the compiler snapshot and free-foil dependency. Stack builds
 the BNFC, Alex, and Happy build tools. The custom `Setup.hs` generates the
