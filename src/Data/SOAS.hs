@@ -319,10 +319,10 @@ combineMetaSubsts = foldr (mapMaybe . combine) [MetaSubsts []]
 --   1. M[z₁, z₂] ↦ z₁
 --   2. M[z₁, z₂] ↦ z₂
 --
--- Hence, this function produces a list of possible simultaneous substitutions.
--- An empty list means failure. A result containing @MetaSubsts []@ includes
--- a successful branch requiring no assignments. Metavariables in discarded
--- arguments may remain unassigned.
+-- The result is a list of solutions to the matching problem. Each solution
+-- is a simultaneous metavariable substitution ('MetaSubsts'). An empty list
+-- means that no solutions exist. @MetaSubsts []@ represents a solution with
+-- no assignments. Metavariables in discarded arguments may remain unassigned.
 --
 -- Matching compares syntax up to alpha-equivalence, without beta or eta
 -- conversion. For ordinary second-order matching, RHS contains no

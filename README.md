@@ -32,9 +32,13 @@ M[a, b] ↦ a
 M[a, b] ↦ b
 ```
 
-The names `a` and `b` are the formal parameters of `M`. The first solution
-returns its first argument, so `M[x, x]` becomes `x`. The second returns its
-second argument, giving `x` again. These are distinct substitutions: applied
+The names `a` and `b` are the formal parameters of `M`. They are the only
+free variables permitted in its body. In particular, `M[a, b] ↦ x` is not a
+valid solution: the universally quantified `x` is outside this scope.
+
+The first solution returns its first argument, so `M[x, x]` becomes `x`.
+The second returns its second argument, giving `x` again. These are distinct
+substitutions: applied
 to `M[x, y]`, they would give `x` and `y`, respectively. Since the target is a
 variable, a body headed by an object-language operator cannot match it.
 Thus the two projections are the only solutions.
@@ -142,10 +146,10 @@ match scope metavarTypes varTypes lhs rhs
 name to its argument types and result type. `varTypes` records the type of each
 variable. `lhs` is the pattern, and `rhs` is the target term.
 
-The result is a list of simultaneous metavariable substitutions. An empty list
-means failure; a list containing `MetaSubsts []` includes a successful branch
-that needs no assignments. Several solutions may exist. Metavariables in
-unused arguments may remain unassigned.
+The result is a list of solutions to the matching problem. Each solution is
+a simultaneous metavariable substitution (`MetaSubsts`). An empty list means
+that no solutions exist. `MetaSubsts []` represents a solution with no
+assignments. Metavariables in unused arguments may remain unassigned.
 
 For the matching problem studied in the paper, the target contains no
 metavariables. The API also permits a target signature extension `ext`, whose
@@ -218,7 +222,7 @@ solutions from `problems/matching.toml`:
 stack run free-foil-hou-exe
 ```
 
-## Contributing
+## Development setup
 
 `stack.yaml` pins the compiler snapshot and free-foil dependency. Stack builds
 the BNFC, Alex, and Happy build tools. The custom `Setup.hs` generates the
