@@ -53,9 +53,81 @@ The example also solves two smaller problems:
 - `x = x` succeeds with the empty substitution, because the two sides already
   agree and there is no metavariable to assign.
 
-All variables have the base type `t`. Matching compares syntax up to
-alpha-equivalence; it does not identify object-language terms by beta or eta
-conversion.
+In these three problems, all variables have the base type `t`. Matching
+compares syntax up to alpha-equivalence; it does not identify object-language
+terms by beta or eta conversion.
+
+### Nested metavariables under a binder
+
+The same executable also runs a problem with application, abstraction, and
+nested metavariables. Both `M` and `N` take a function and a base-type argument:
+
+```text
+M : [t -> t, t] t
+N : [t -> t, t] t
+
+∀ p: t -> t -> t, f: t -> t, x: t.
+  λu:t. p (M[f, N[f, x]]) (N[f, u])
+    = λv:t. p (f x) v
+```
+
+Here `p` is a universally quantified binary function. Its two arguments let
+us place two requirements on the same metavariable `N` within one equation.
+The lambda binders have different names, but introduce corresponding
+variables.
+
+First, **decomposition** compares the abstraction bodies in a common scope.
+Calling the bound variable `z`, it then decomposes the applications of `p`.
+**Deletion** discharges the resulting `p = p` constraint. Two matching problems
+remain:
+
+```text
+M[f, N[f, x]] = f x
+N[f, z]       = z
+```
+
+For the first problem, **imitation** follows the application structure of
+`f x`. The function part comes from the first parameter of `M`, and the
+argument comes from its second parameter. This gives `M[a, b] ↦ a b` and
+requires `N[f, x] = x`. Projection onto the second parameter of `N` solves
+that requirement. Thus one candidate is:
+
+```text
+M[a, b] ↦ a b
+N[a, b] ↦ b
+```
+
+There is also a **projection** branch for `M`: return its second parameter
+directly, giving `M[a, b] ↦ b`. The nested application `N[f, x]` must then
+produce the whole target `f x`. Imitation gives a second candidate:
+
+```text
+M[a, b] ↦ b
+N[a, b] ↦ a b
+```
+
+Both candidates solve the first problem. The second problem, `N[f, z] = z`,
+requires `N[a, b] ↦ b`. When the matcher combines the partial solutions,
+it keeps the first candidate and rejects the second, whose assignment to
+`N` conflicts with this requirement.
+
+Applying the surviving substitution turns the left side into
+`λu:t. p (f x) u`, which is alpha-equivalent to `λv:t. p (f x) v`.
+The library performs the binder alignment, explores imitation and projection,
+and checks that repeated occurrences receive compatible assignments.
+
+The executable also varies the final argument of the target. The first
+problem stays the same, while the second selects a different candidate or
+rejects both:
+
+| Final target argument | Result |
+| --- | --- |
+| `v` | `M[a, b] ↦ a b`, `N[a, b] ↦ b` |
+| `f v` | `M[a, b] ↦ b`, `N[a, b] ↦ a b` |
+| `f (f v)` | No solutions |
+
+The last case requires `N[a, b] ↦ a (a b)`, which agrees with neither
+assignment admitted by the first problem.
 
 ## Use the generic matcher
 
