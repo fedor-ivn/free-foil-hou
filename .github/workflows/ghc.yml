@@ -16,9 +16,6 @@ name: GHC (build, test, haddock)
 permissions:
   contents: write # to submit Haddock documentation to GitHub Pages
 
-env:
-  syntax-dir: "free-foil-hou/src/Language/Lambda/Syntax"
-
 jobs:
   tests:
     name: Run tests
@@ -35,42 +32,15 @@ jobs:
           submodules: true
           ref: ${{ github.ref }}
 
-      - name: Restore Syntax files
-        id: restore-syntax-files
-        uses: actions/cache/restore@v4
-        with:
-          key: syntax-files-${{ runner.os }}-${{ hashFiles(format('{0}.cf', env.syntax-dir), 'stack.yaml.lock') }}
-          path: |
-            ${{ env.syntax-dir }}/Lex.hs
-            ${{ env.syntax-dir }}/Par.hs
-
-      - name: Check Syntax files exist
-        if: steps.restore-syntax-files.outputs.cache-hit == 'true'
-        shell: bash
-        id: check-syntax-files
-        run: |
-          source scripts/lib.sh
-          check_syntax_files_exist
-          printf "SYNTAX_FILES_EXIST=$SYNTAX_FILES_EXIST\n" >> $GITHUB_OUTPUT
-
       - name: 🧰 Setup Stack
         uses: freckle/stack-action@v5
         with:
           stack-build-arguments: --pedantic
           stack-build-arguments-build: --dry-run
-          stack-build-arguments-test: --ghc-options -O2 ${{ steps.check-syntax-files.outputs.SYNTAX_FILES_EXIST == 'true' && ' ' || '--reconfigure --force-dirty --ghc-options -fforce-recomp' }}
+          stack-build-arguments-test: --ghc-options -O2 --reconfigure --force-dirty --ghc-options -fforce-recomp
 
       - name: Run README matching example
         run: stack exec -- runghc -package=free-foil-hou examples/Matching.hs
-
-      - name: Save Syntax files
-        uses: actions/cache/save@v4
-        if: steps.restore-syntax-files.outputs.cache-hit != 'true'
-        with:
-          key: syntax-files-${{ runner.os }}-${{ hashFiles(format('{0}.cf', env.syntax-dir), 'stack.yaml.lock') }}
-          path: |
-            ${{ env.syntax-dir }}/Lex.hs
-            ${{ env.syntax-dir }}/Par.hs
 
   docs:
     needs: [tests]
