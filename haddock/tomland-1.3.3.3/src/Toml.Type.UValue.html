@@ -1,0 +1,305 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE GADTs #-}</span><span>
+</span><span id="line-2"></span><span>
+</span><span id="line-3"></span><span class="annot"><span class="hs-comment">{- |
+Module                  : Toml.Type.UValue
+Copyright               : (c) 2018-2022 Kowainik
+SPDX-License-Identifier : MPL-2.0
+Maintainer              : Kowainik &lt;xrom.xkov@gmail.com&gt;
+Stability               : Stable
+Portability             : Portable
+
+Intermediate untype value representation used for parsing.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-15"></span><span>
+</span><span id="line-16"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Toml.Type.UValue</span><span>
+</span><span id="line-17"></span><span>       </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Toml.Type.UValue.html#UValue"><span class="hs-identifier">UValue</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-18"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.UValue.html#typeCheck"><span class="hs-identifier">typeCheck</span></a></span><span>
+</span><span id="line-19"></span><span>       </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-20"></span><span>
+</span><span id="line-21"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Text</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Text</span></span><span class="hs-special">)</span><span>
+</span><span id="line-22"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Time</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Day</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">LocalTime</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">TimeOfDay</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">ZonedTime</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">zonedTimeToUTC</span></span><span class="hs-special">)</span><span>
+</span><span id="line-23"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Type.Equality</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-operator">(:~:)</span></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.AnyValue.html"><span class="hs-identifier">Toml.Type.AnyValue</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier">AnyValue</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.Value.html"><span class="hs-identifier">Toml.Type.Value</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Value.html#TypeMismatchError"><span class="hs-identifier">TypeMismatchError</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.Value.html#Value"><span class="hs-identifier">Value</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.Value.html#sameValue"><span class="hs-identifier">sameValue</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-27"></span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span class="annot"><span class="hs-comment">{- | Untyped value of @TOML@. You shouldn't use this type in your
+code. Use 'Value' instead.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-34"></span><span class="hs-keyword">data</span><span> </span><span id="UValue"><span class="annot"><a href="Toml.Type.UValue.html#UValue"><span class="hs-identifier hs-var">UValue</span></a></span></span><span>
+</span><span id="line-35"></span><span>    </span><span class="hs-glyph">=</span><span> </span><span id="UBool"><span class="annot"><a href="Toml.Type.UValue.html#UBool"><span class="hs-identifier hs-var">UBool</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Bool</span></span><span>
+</span><span id="line-36"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span id="UInteger"><span class="annot"><a href="Toml.Type.UValue.html#UInteger"><span class="hs-identifier hs-var">UInteger</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Integer</span></span><span>
+</span><span id="line-37"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span id="UDouble"><span class="annot"><a href="Toml.Type.UValue.html#UDouble"><span class="hs-identifier hs-var">UDouble</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Double</span></span><span>
+</span><span id="line-38"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span id="UText"><span class="annot"><a href="Toml.Type.UValue.html#UText"><span class="hs-identifier hs-var">UText</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Text</span></span><span>
+</span><span id="line-39"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span id="UZoned"><span class="annot"><a href="Toml.Type.UValue.html#UZoned"><span class="hs-identifier hs-var">UZoned</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">ZonedTime</span></span><span>
+</span><span id="line-40"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span id="ULocal"><span class="annot"><a href="Toml.Type.UValue.html#ULocal"><span class="hs-identifier hs-var">ULocal</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">LocalTime</span></span><span>
+</span><span id="line-41"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span id="UDay"><span class="annot"><a href="Toml.Type.UValue.html#UDay"><span class="hs-identifier hs-var">UDay</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">Day</span></span><span>
+</span><span id="line-42"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span id="UHours"><span class="annot"><a href="Toml.Type.UValue.html#UHours"><span class="hs-identifier hs-var">UHours</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><span class="hs-identifier hs-type">TimeOfDay</span></span><span>
+</span><span id="line-43"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span id="UArray"><span class="annot"><a href="Toml.Type.UValue.html#UArray"><span class="hs-identifier hs-var">UArray</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="hs-special">[</span><span class="annot"><a href="Toml.Type.UValue.html#UValue"><span class="hs-identifier hs-type">UValue</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-44"></span><span>    </span><span class="hs-keyword">deriving</span><span> </span><span class="annot"><span class="hs-keyword">stock</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679104880"><span id="local-6989586621679104911"><span id="local-6989586621679104915"><span class="annot"><span class="annottext">Int -&gt; UValue -&gt; ShowS
+[UValue] -&gt; ShowS
+UValue -&gt; String
+(Int -&gt; UValue -&gt; ShowS)
+-&gt; (UValue -&gt; String) -&gt; ([UValue] -&gt; ShowS) -&gt; Show UValue
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; UValue -&gt; ShowS
+showsPrec :: Int -&gt; UValue -&gt; ShowS
+$cshow :: UValue -&gt; String
+show :: UValue -&gt; String
+$cshowList :: [UValue] -&gt; ShowS
+showList :: [UValue] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-45"></span><span>
+</span><span id="line-46"></span><span class="annot"><span class="hs-comment">-- | @since 0.0.0</span></span><span>
+</span><span id="line-47"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679104920"><span class="annot"><span class="hs-identifier hs-type">Eq</span></span><span> </span><span class="annot"><a href="Toml.Type.UValue.html#UValue"><span class="hs-identifier hs-type">UValue</span></a></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-48"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UBool"><span class="hs-identifier hs-type">UBool</span></a></span><span> </span><span id="local-6989586621679104946"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679104946"><span class="hs-identifier hs-var">b1</span></a></span></span><span class="hs-special">)</span><span>    </span><span id="local-6989586621679104947"><span class="annot"><span class="annottext">== :: UValue -&gt; UValue -&gt; Bool
+</span><span class="hs-operator hs-var hs-var hs-var hs-var">==</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UBool"><span class="hs-identifier hs-type">UBool</span></a></span><span> </span><span id="local-6989586621679104948"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679104948"><span class="hs-identifier hs-var">b2</span></a></span></span><span class="hs-special">)</span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679104946"><span class="hs-identifier hs-var">b1</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679104948"><span class="hs-identifier hs-var">b2</span></a></span><span>
+</span><span id="line-49"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UInteger"><span class="hs-identifier hs-type">UInteger</span></a></span><span> </span><span id="local-6989586621679104949"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679104949"><span class="hs-identifier hs-var">i1</span></a></span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="hs-operator hs-var">==</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UInteger"><span class="hs-identifier hs-type">UInteger</span></a></span><span> </span><span id="local-6989586621679104950"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679104950"><span class="hs-identifier hs-var">i2</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679104949"><span class="hs-identifier hs-var">i1</span></a></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Integer -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679104950"><span class="hs-identifier hs-var">i2</span></a></span><span>
+</span><span id="line-50"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UDouble"><span class="hs-identifier hs-type">UDouble</span></a></span><span> </span><span id="local-6989586621679104951"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679104951"><span class="hs-identifier hs-var">f1</span></a></span></span><span class="hs-special">)</span><span>  </span><span class="annot"><span class="hs-operator hs-var">==</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UDouble"><span class="hs-identifier hs-type">UDouble</span></a></span><span> </span><span id="local-6989586621679104952"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679104952"><span class="hs-identifier hs-var">f2</span></a></span></span><span class="hs-special">)</span><span>
+</span><span id="line-51"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Double -&gt; Bool
+forall a. RealFloat a =&gt; a -&gt; Bool
+</span><span class="hs-identifier hs-var">isNaN</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679104951"><span class="hs-identifier hs-var">f1</span></a></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Bool -&gt; Bool
+</span><span class="hs-operator hs-var">&amp;&amp;</span></span><span> </span><span class="annot"><span class="annottext">Double -&gt; Bool
+forall a. RealFloat a =&gt; a -&gt; Bool
+</span><span class="hs-identifier hs-var">isNaN</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679104952"><span class="hs-identifier hs-var">f2</span></a></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span>
+</span><span id="line-52"></span><span>        </span><span class="hs-glyph">|</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">otherwise</span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679104951"><span class="hs-identifier hs-var">f1</span></a></span><span> </span><span class="annot"><span class="annottext">Double -&gt; Double -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679104952"><span class="hs-identifier hs-var">f2</span></a></span><span>
+</span><span id="line-53"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UText"><span class="hs-identifier hs-type">UText</span></a></span><span> </span><span id="local-6989586621679104955"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679104955"><span class="hs-identifier hs-var">s1</span></a></span></span><span class="hs-special">)</span><span>    </span><span class="annot"><span class="hs-operator hs-var">==</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UText"><span class="hs-identifier hs-type">UText</span></a></span><span> </span><span id="local-6989586621679104956"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679104956"><span class="hs-identifier hs-var">s2</span></a></span></span><span class="hs-special">)</span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679104955"><span class="hs-identifier hs-var">s1</span></a></span><span> </span><span class="annot"><span class="annottext">Text -&gt; Text -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679104956"><span class="hs-identifier hs-var">s2</span></a></span><span>
+</span><span id="line-54"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UZoned"><span class="hs-identifier hs-type">UZoned</span></a></span><span> </span><span id="local-6989586621679104957"><span class="annot"><span class="annottext">ZonedTime
+</span><a href="#local-6989586621679104957"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">)</span><span>    </span><span class="annot"><span class="hs-operator hs-var">==</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UZoned"><span class="hs-identifier hs-type">UZoned</span></a></span><span> </span><span id="local-6989586621679104958"><span class="annot"><span class="annottext">ZonedTime
+</span><a href="#local-6989586621679104958"><span class="hs-identifier hs-var">b</span></a></span></span><span class="hs-special">)</span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ZonedTime -&gt; UTCTime
+</span><span class="hs-identifier hs-var">zonedTimeToUTC</span></span><span> </span><span class="annot"><span class="annottext">ZonedTime
+</span><a href="#local-6989586621679104957"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">UTCTime -&gt; UTCTime -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">ZonedTime -&gt; UTCTime
+</span><span class="hs-identifier hs-var">zonedTimeToUTC</span></span><span> </span><span class="annot"><span class="annottext">ZonedTime
+</span><a href="#local-6989586621679104958"><span class="hs-identifier hs-var">b</span></a></span><span>
+</span><span id="line-55"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#ULocal"><span class="hs-identifier hs-type">ULocal</span></a></span><span> </span><span id="local-6989586621679104959"><span class="annot"><span class="annottext">LocalTime
+</span><a href="#local-6989586621679104959"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">)</span><span>    </span><span class="annot"><span class="hs-operator hs-var">==</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#ULocal"><span class="hs-identifier hs-type">ULocal</span></a></span><span> </span><span id="local-6989586621679104960"><span class="annot"><span class="annottext">LocalTime
+</span><a href="#local-6989586621679104960"><span class="hs-identifier hs-var">b</span></a></span></span><span class="hs-special">)</span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">LocalTime
+</span><a href="#local-6989586621679104959"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">LocalTime -&gt; LocalTime -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">LocalTime
+</span><a href="#local-6989586621679104960"><span class="hs-identifier hs-var">b</span></a></span><span>
+</span><span id="line-56"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UDay"><span class="hs-identifier hs-type">UDay</span></a></span><span> </span><span id="local-6989586621679104961"><span class="annot"><span class="annottext">Day
+</span><a href="#local-6989586621679104961"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">)</span><span>      </span><span class="annot"><span class="hs-operator hs-var">==</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UDay"><span class="hs-identifier hs-type">UDay</span></a></span><span> </span><span id="local-6989586621679104962"><span class="annot"><span class="annottext">Day
+</span><a href="#local-6989586621679104962"><span class="hs-identifier hs-var">b</span></a></span></span><span class="hs-special">)</span><span>      </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Day
+</span><a href="#local-6989586621679104961"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">Day -&gt; Day -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">Day
+</span><a href="#local-6989586621679104962"><span class="hs-identifier hs-var">b</span></a></span><span>
+</span><span id="line-57"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UHours"><span class="hs-identifier hs-type">UHours</span></a></span><span> </span><span id="local-6989586621679104963"><span class="annot"><span class="annottext">TimeOfDay
+</span><a href="#local-6989586621679104963"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">)</span><span>    </span><span class="annot"><span class="hs-operator hs-var">==</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UHours"><span class="hs-identifier hs-type">UHours</span></a></span><span> </span><span id="local-6989586621679104964"><span class="annot"><span class="annottext">TimeOfDay
+</span><a href="#local-6989586621679104964"><span class="hs-identifier hs-var">b</span></a></span></span><span class="hs-special">)</span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TimeOfDay
+</span><a href="#local-6989586621679104963"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">TimeOfDay -&gt; TimeOfDay -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">TimeOfDay
+</span><a href="#local-6989586621679104964"><span class="hs-identifier hs-var">b</span></a></span><span>
+</span><span id="line-58"></span><span>    </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UArray"><span class="hs-identifier hs-type">UArray</span></a></span><span> </span><span id="local-6989586621679104965"><span class="annot"><span class="annottext">[UValue]
+</span><a href="#local-6989586621679104965"><span class="hs-identifier hs-var">a1</span></a></span></span><span class="hs-special">)</span><span>   </span><span class="annot"><span class="hs-operator hs-var">==</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UArray"><span class="hs-identifier hs-type">UArray</span></a></span><span> </span><span id="local-6989586621679104966"><span class="annot"><span class="annottext">[UValue]
+</span><a href="#local-6989586621679104966"><span class="hs-identifier hs-var">a2</span></a></span></span><span class="hs-special">)</span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[UValue]
+</span><a href="#local-6989586621679104965"><span class="hs-identifier hs-var">a1</span></a></span><span> </span><span class="annot"><span class="annottext">[UValue] -&gt; [UValue] -&gt; Bool
+forall a. Eq a =&gt; a -&gt; a -&gt; Bool
+</span><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">[UValue]
+</span><a href="#local-6989586621679104966"><span class="hs-identifier hs-var">a2</span></a></span><span>
+</span><span id="line-59"></span><span>    </span><span class="annot"><span class="annottext">UValue
+</span><span class="hs-identifier">_</span></span><span>             </span><span class="annot"><span class="hs-operator hs-var">==</span></span><span> </span><span class="annot"><span class="annottext">UValue
+</span><span class="hs-identifier">_</span></span><span>             </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span>
+</span><span id="line-60"></span><span>
+</span><span id="line-61"></span><span class="annot"><span class="hs-comment">{- | Ensures that 'UValue's represents type-safe version of @toml@.
+
+@since 0.0.0
+-}</span></span><span>
+</span><span id="line-65"></span><span class="annot"><a href="Toml.Type.UValue.html#typeCheck"><span class="hs-identifier hs-type">typeCheck</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.UValue.html#UValue"><span class="hs-identifier hs-type">UValue</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="annot"><a href="Toml.Type.Value.html#TypeMismatchError"><span class="hs-identifier hs-type">TypeMismatchError</span></a></span><span> </span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier hs-type">AnyValue</span></a></span><span>
+</span><span id="line-66"></span><span id="typeCheck"><span class="annot"><span class="annottext">typeCheck :: UValue -&gt; Either TypeMismatchError AnyValue
+</span><a href="Toml.Type.UValue.html#typeCheck"><span class="hs-identifier hs-var hs-var">typeCheck</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UBool"><span class="hs-identifier hs-type">UBool</span></a></span><span> </span><span id="local-6989586621679104967"><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679104967"><span class="hs-identifier hs-var">b</span></a></span></span><span class="hs-special">)</span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Value 'TBool -&gt; Either TypeMismatchError AnyValue
+forall (t :: TValue) l. Value t -&gt; Either l AnyValue
+</span><a href="Toml.Type.UValue.html#rightAny"><span class="hs-identifier hs-var">rightAny</span></a></span><span> </span><span class="annot"><span class="annottext">(Value 'TBool -&gt; Either TypeMismatchError AnyValue)
+-&gt; Value 'TBool -&gt; Either TypeMismatchError AnyValue
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Bool -&gt; Value 'TBool
+</span><a href="Toml.Type.Value.html#Bool"><span class="hs-identifier hs-var">Bool</span></a></span><span> </span><span class="annot"><span class="annottext">Bool
+</span><a href="#local-6989586621679104967"><span class="hs-identifier hs-var">b</span></a></span><span>
+</span><span id="line-67"></span><span class="annot"><a href="Toml.Type.UValue.html#typeCheck"><span class="hs-identifier hs-var">typeCheck</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UInteger"><span class="hs-identifier hs-type">UInteger</span></a></span><span> </span><span id="local-6989586621679104970"><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679104970"><span class="hs-identifier hs-var">n</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Value 'TInteger -&gt; Either TypeMismatchError AnyValue
+forall (t :: TValue) l. Value t -&gt; Either l AnyValue
+</span><a href="Toml.Type.UValue.html#rightAny"><span class="hs-identifier hs-var">rightAny</span></a></span><span> </span><span class="annot"><span class="annottext">(Value 'TInteger -&gt; Either TypeMismatchError AnyValue)
+-&gt; Value 'TInteger -&gt; Either TypeMismatchError AnyValue
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Integer -&gt; Value 'TInteger
+</span><a href="Toml.Type.Value.html#Integer"><span class="hs-identifier hs-var">Integer</span></a></span><span> </span><span class="annot"><span class="annottext">Integer
+</span><a href="#local-6989586621679104970"><span class="hs-identifier hs-var">n</span></a></span><span>
+</span><span id="line-68"></span><span class="annot"><a href="Toml.Type.UValue.html#typeCheck"><span class="hs-identifier hs-var">typeCheck</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UDouble"><span class="hs-identifier hs-type">UDouble</span></a></span><span> </span><span id="local-6989586621679104972"><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679104972"><span class="hs-identifier hs-var">f</span></a></span></span><span class="hs-special">)</span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Value 'TDouble -&gt; Either TypeMismatchError AnyValue
+forall (t :: TValue) l. Value t -&gt; Either l AnyValue
+</span><a href="Toml.Type.UValue.html#rightAny"><span class="hs-identifier hs-var">rightAny</span></a></span><span> </span><span class="annot"><span class="annottext">(Value 'TDouble -&gt; Either TypeMismatchError AnyValue)
+-&gt; Value 'TDouble -&gt; Either TypeMismatchError AnyValue
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Double -&gt; Value 'TDouble
+</span><a href="Toml.Type.Value.html#Double"><span class="hs-identifier hs-var">Double</span></a></span><span> </span><span class="annot"><span class="annottext">Double
+</span><a href="#local-6989586621679104972"><span class="hs-identifier hs-var">f</span></a></span><span>
+</span><span id="line-69"></span><span class="annot"><a href="Toml.Type.UValue.html#typeCheck"><span class="hs-identifier hs-var">typeCheck</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UText"><span class="hs-identifier hs-type">UText</span></a></span><span> </span><span id="local-6989586621679104974"><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679104974"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">)</span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Value 'TText -&gt; Either TypeMismatchError AnyValue
+forall (t :: TValue) l. Value t -&gt; Either l AnyValue
+</span><a href="Toml.Type.UValue.html#rightAny"><span class="hs-identifier hs-var">rightAny</span></a></span><span> </span><span class="annot"><span class="annottext">(Value 'TText -&gt; Either TypeMismatchError AnyValue)
+-&gt; Value 'TText -&gt; Either TypeMismatchError AnyValue
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; Value 'TText
+</span><a href="Toml.Type.Value.html#Text"><span class="hs-identifier hs-var">Text</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><a href="#local-6989586621679104974"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-70"></span><span class="annot"><a href="Toml.Type.UValue.html#typeCheck"><span class="hs-identifier hs-var">typeCheck</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UZoned"><span class="hs-identifier hs-type">UZoned</span></a></span><span> </span><span id="local-6989586621679104976"><span class="annot"><span class="annottext">ZonedTime
+</span><a href="#local-6989586621679104976"><span class="hs-identifier hs-var">d</span></a></span></span><span class="hs-special">)</span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Value 'TZoned -&gt; Either TypeMismatchError AnyValue
+forall (t :: TValue) l. Value t -&gt; Either l AnyValue
+</span><a href="Toml.Type.UValue.html#rightAny"><span class="hs-identifier hs-var">rightAny</span></a></span><span> </span><span class="annot"><span class="annottext">(Value 'TZoned -&gt; Either TypeMismatchError AnyValue)
+-&gt; Value 'TZoned -&gt; Either TypeMismatchError AnyValue
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">ZonedTime -&gt; Value 'TZoned
+</span><a href="Toml.Type.Value.html#Zoned"><span class="hs-identifier hs-var">Zoned</span></a></span><span> </span><span class="annot"><span class="annottext">ZonedTime
+</span><a href="#local-6989586621679104976"><span class="hs-identifier hs-var">d</span></a></span><span>
+</span><span id="line-71"></span><span class="annot"><a href="Toml.Type.UValue.html#typeCheck"><span class="hs-identifier hs-var">typeCheck</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#ULocal"><span class="hs-identifier hs-type">ULocal</span></a></span><span> </span><span id="local-6989586621679104978"><span class="annot"><span class="annottext">LocalTime
+</span><a href="#local-6989586621679104978"><span class="hs-identifier hs-var">d</span></a></span></span><span class="hs-special">)</span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Value 'TLocal -&gt; Either TypeMismatchError AnyValue
+forall (t :: TValue) l. Value t -&gt; Either l AnyValue
+</span><a href="Toml.Type.UValue.html#rightAny"><span class="hs-identifier hs-var">rightAny</span></a></span><span> </span><span class="annot"><span class="annottext">(Value 'TLocal -&gt; Either TypeMismatchError AnyValue)
+-&gt; Value 'TLocal -&gt; Either TypeMismatchError AnyValue
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">LocalTime -&gt; Value 'TLocal
+</span><a href="Toml.Type.Value.html#Local"><span class="hs-identifier hs-var">Local</span></a></span><span> </span><span class="annot"><span class="annottext">LocalTime
+</span><a href="#local-6989586621679104978"><span class="hs-identifier hs-var">d</span></a></span><span>
+</span><span id="line-72"></span><span class="annot"><a href="Toml.Type.UValue.html#typeCheck"><span class="hs-identifier hs-var">typeCheck</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UDay"><span class="hs-identifier hs-type">UDay</span></a></span><span> </span><span id="local-6989586621679104980"><span class="annot"><span class="annottext">Day
+</span><a href="#local-6989586621679104980"><span class="hs-identifier hs-var">d</span></a></span></span><span class="hs-special">)</span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Value 'TDay -&gt; Either TypeMismatchError AnyValue
+forall (t :: TValue) l. Value t -&gt; Either l AnyValue
+</span><a href="Toml.Type.UValue.html#rightAny"><span class="hs-identifier hs-var">rightAny</span></a></span><span> </span><span class="annot"><span class="annottext">(Value 'TDay -&gt; Either TypeMismatchError AnyValue)
+-&gt; Value 'TDay -&gt; Either TypeMismatchError AnyValue
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Day -&gt; Value 'TDay
+</span><a href="Toml.Type.Value.html#Day"><span class="hs-identifier hs-var">Day</span></a></span><span> </span><span class="annot"><span class="annottext">Day
+</span><a href="#local-6989586621679104980"><span class="hs-identifier hs-var">d</span></a></span><span>
+</span><span id="line-73"></span><span class="annot"><a href="Toml.Type.UValue.html#typeCheck"><span class="hs-identifier hs-var">typeCheck</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UHours"><span class="hs-identifier hs-type">UHours</span></a></span><span> </span><span id="local-6989586621679104982"><span class="annot"><span class="annottext">TimeOfDay
+</span><a href="#local-6989586621679104982"><span class="hs-identifier hs-var">d</span></a></span></span><span class="hs-special">)</span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Value 'THours -&gt; Either TypeMismatchError AnyValue
+forall (t :: TValue) l. Value t -&gt; Either l AnyValue
+</span><a href="Toml.Type.UValue.html#rightAny"><span class="hs-identifier hs-var">rightAny</span></a></span><span> </span><span class="annot"><span class="annottext">(Value 'THours -&gt; Either TypeMismatchError AnyValue)
+-&gt; Value 'THours -&gt; Either TypeMismatchError AnyValue
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">TimeOfDay -&gt; Value 'THours
+</span><a href="Toml.Type.Value.html#Hours"><span class="hs-identifier hs-var">Hours</span></a></span><span> </span><span class="annot"><span class="annottext">TimeOfDay
+</span><a href="#local-6989586621679104982"><span class="hs-identifier hs-var">d</span></a></span><span>
+</span><span id="line-74"></span><span class="annot"><a href="Toml.Type.UValue.html#typeCheck"><span class="hs-identifier hs-var">typeCheck</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.UValue.html#UArray"><span class="hs-identifier hs-type">UArray</span></a></span><span> </span><span id="local-6989586621679104984"><span class="annot"><span class="annottext">[UValue]
+</span><a href="#local-6989586621679104984"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">)</span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">[UValue]
+</span><a href="#local-6989586621679104984"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-75"></span><span>    </span><span class="hs-special">[</span><span class="hs-special">]</span><span>   </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Value 'TArray -&gt; Either TypeMismatchError AnyValue
+forall (t :: TValue) l. Value t -&gt; Either l AnyValue
+</span><a href="Toml.Type.UValue.html#rightAny"><span class="hs-identifier hs-var">rightAny</span></a></span><span> </span><span class="annot"><span class="annottext">(Value 'TArray -&gt; Either TypeMismatchError AnyValue)
+-&gt; Value 'TArray -&gt; Either TypeMismatchError AnyValue
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[Value Any] -&gt; Value 'TArray
+forall (t1 :: TValue). [Value t1] -&gt; Value 'TArray
+</span><a href="Toml.Type.Value.html#Array"><span class="hs-identifier hs-var">Array</span></a></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>
+</span><span id="line-76"></span><span>    </span><span id="local-6989586621679104986"><span class="annot"><span class="annottext">UValue
+</span><a href="#local-6989586621679104986"><span class="hs-identifier hs-var">x</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679104987"><span class="annot"><span class="annottext">[UValue]
+</span><a href="#local-6989586621679104987"><span class="hs-identifier hs-var">xs</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-77"></span><span>        </span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier hs-type">AnyValue</span></a></span><span> </span><span id="local-6989586621679104991"><span class="annot"><span class="annottext">Value t
+</span><a href="#local-6989586621679104991"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">UValue -&gt; Either TypeMismatchError AnyValue
+</span><a href="Toml.Type.UValue.html#typeCheck"><span class="hs-identifier hs-var">typeCheck</span></a></span><span> </span><span class="annot"><span class="annottext">UValue
+</span><a href="#local-6989586621679104986"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-78"></span><span>        </span><span class="annot"><span class="annottext">Value 'TArray -&gt; AnyValue
+forall (t :: TValue). Value t -&gt; AnyValue
+</span><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier hs-var">AnyValue</span></a></span><span> </span><span class="annot"><span class="annottext">(Value 'TArray -&gt; AnyValue)
+-&gt; ([Value t] -&gt; Value 'TArray) -&gt; [Value t] -&gt; AnyValue
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[Value t] -&gt; Value 'TArray
+forall (t1 :: TValue). [Value t1] -&gt; Value 'TArray
+</span><a href="Toml.Type.Value.html#Array"><span class="hs-identifier hs-var">Array</span></a></span><span> </span><span class="annot"><span class="annottext">([Value t] -&gt; AnyValue)
+-&gt; Either TypeMismatchError [Value t]
+-&gt; Either TypeMismatchError AnyValue
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Value t -&gt; [UValue] -&gt; Either TypeMismatchError [Value t]
+forall (t :: TValue).
+Value t -&gt; [UValue] -&gt; Either TypeMismatchError [Value t]
+</span><a href="#local-6989586621679104994"><span class="hs-identifier hs-var">checkElem</span></a></span><span> </span><span class="annot"><span class="annottext">Value t
+</span><a href="#local-6989586621679104991"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="annot"><span class="annottext">[UValue]
+</span><a href="#local-6989586621679104987"><span class="hs-identifier hs-var">xs</span></a></span><span>
+</span><span id="line-79"></span><span>  </span><span class="hs-keyword">where</span><span>
+</span><span id="line-80"></span><span>    </span><span id="local-6989586621679104855"><span class="annot"><a href="#local-6989586621679104994"><span class="hs-identifier hs-type">checkElem</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Value.html#Value"><span class="hs-identifier hs-type">Value</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679104855"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Toml.Type.UValue.html#UValue"><span class="hs-identifier hs-type">UValue</span></a></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="annot"><a href="Toml.Type.Value.html#TypeMismatchError"><span class="hs-identifier hs-type">TypeMismatchError</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Toml.Type.Value.html#Value"><span class="hs-identifier hs-type">Value</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679104855"><span class="hs-identifier hs-type">t</span></a></span><span class="hs-special">]</span></span><span>
+</span><span id="line-81"></span><span>    </span><span id="local-6989586621679104994"><span class="annot"><span class="annottext">checkElem :: forall (t :: TValue).
+Value t -&gt; [UValue] -&gt; Either TypeMismatchError [Value t]
+</span><a href="#local-6989586621679104994"><span class="hs-identifier hs-var hs-var">checkElem</span></a></span></span><span> </span><span id="local-6989586621679104996"><span class="annot"><span class="annottext">Value t
+</span><a href="#local-6989586621679104996"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="hs-special">[</span><span class="hs-special">]</span><span>     </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Value t] -&gt; Either TypeMismatchError [Value t]
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Value t
+</span><a href="#local-6989586621679104996"><span class="hs-identifier hs-var">v</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-82"></span><span>    </span><span class="annot"><a href="#local-6989586621679104994"><span class="hs-identifier hs-var">checkElem</span></a></span><span> </span><span id="local-6989586621679104997"><span class="annot"><span class="annottext">Value t
+</span><a href="#local-6989586621679104997"><span class="hs-identifier hs-var">v</span></a></span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679104998"><span class="annot"><span class="annottext">UValue
+</span><a href="#local-6989586621679104998"><span class="hs-identifier hs-var">x</span></a></span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span id="local-6989586621679104999"><span class="annot"><span class="annottext">[UValue]
+</span><a href="#local-6989586621679104999"><span class="hs-identifier hs-var">xs</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-83"></span><span>        </span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier hs-type">AnyValue</span></a></span><span> </span><span id="local-6989586621679105001"><span class="annot"><span class="annottext">Value t
+</span><a href="#local-6989586621679105001"><span class="hs-identifier hs-var">vx</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">UValue -&gt; Either TypeMismatchError AnyValue
+</span><a href="Toml.Type.UValue.html#typeCheck"><span class="hs-identifier hs-var">typeCheck</span></a></span><span> </span><span class="annot"><span class="annottext">UValue
+</span><a href="#local-6989586621679104998"><span class="hs-identifier hs-var">x</span></a></span><span>
+</span><span id="line-84"></span><span>        </span><span class="annot"><span class="annottext">t :~: t
+</span><span class="hs-identifier hs-var">Refl</span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">Value t -&gt; Value t -&gt; Either TypeMismatchError (t :~: t)
+forall (a :: TValue) (b :: TValue).
+Value a -&gt; Value b -&gt; Either TypeMismatchError (a :~: b)
+</span><a href="Toml.Type.Value.html#sameValue"><span class="hs-identifier hs-var">sameValue</span></a></span><span> </span><span class="annot"><span class="annottext">Value t
+</span><a href="#local-6989586621679104997"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="annot"><span class="annottext">Value t
+</span><a href="#local-6989586621679105001"><span class="hs-identifier hs-var">vx</span></a></span><span>
+</span><span id="line-85"></span><span>        </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Value t
+</span><a href="#local-6989586621679104997"><span class="hs-identifier hs-var">v</span></a></span><span> </span><span class="annot"><span class="annottext">Value t -&gt; [Value t] -&gt; [Value t]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">([Value t] -&gt; [Value t])
+-&gt; Either TypeMismatchError [Value t]
+-&gt; Either TypeMismatchError [Value t]
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Value t -&gt; [UValue] -&gt; Either TypeMismatchError [Value t]
+forall (t :: TValue).
+Value t -&gt; [UValue] -&gt; Either TypeMismatchError [Value t]
+</span><a href="#local-6989586621679104994"><span class="hs-identifier hs-var">checkElem</span></a></span><span> </span><span class="annot"><span class="annottext">Value t
+Value t
+</span><a href="#local-6989586621679105001"><span class="hs-identifier hs-var">vx</span></a></span><span> </span><span class="annot"><span class="annottext">[UValue]
+</span><a href="#local-6989586621679104999"><span class="hs-identifier hs-var">xs</span></a></span><span>
+</span><span id="line-86"></span><span>
+</span><span id="line-87"></span><span id="local-6989586621679104830"><span id="local-6989586621679104831"><span class="annot"><a href="Toml.Type.UValue.html#rightAny"><span class="hs-identifier hs-type">rightAny</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Value.html#Value"><span class="hs-identifier hs-type">Value</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679104830"><span class="hs-identifier hs-type">t</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Either</span></span><span> </span><span class="annot"><a href="#local-6989586621679104831"><span class="hs-identifier hs-type">l</span></a></span><span> </span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier hs-type">AnyValue</span></a></span></span></span><span>
+</span><span id="line-88"></span><span id="rightAny"><span class="annot"><span class="annottext">rightAny :: forall (t :: TValue) l. Value t -&gt; Either l AnyValue
+</span><a href="Toml.Type.UValue.html#rightAny"><span class="hs-identifier hs-var hs-var">rightAny</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">AnyValue -&gt; Either l AnyValue
+forall a b. b -&gt; Either a b
+</span><span class="hs-identifier hs-var">Right</span></span><span> </span><span class="annot"><span class="annottext">(AnyValue -&gt; Either l AnyValue)
+-&gt; (Value t -&gt; AnyValue) -&gt; Value t -&gt; Either l AnyValue
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">Value t -&gt; AnyValue
+forall (t :: TValue). Value t -&gt; AnyValue
+</span><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier hs-var">AnyValue</span></a></span><span>
+</span><span id="line-89"></span></pre></body></html>

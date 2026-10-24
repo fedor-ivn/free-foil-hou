@@ -1,0 +1,348 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="annot"><span class="hs-comment">{- |
+Module                  : Toml.Parser.Item
+Copyright               : (c) 2018-2022 Kowainik
+SPDX-License-Identifier : MPL-2.0
+Maintainer              : Kowainik &lt;xrom.xkov@gmail.com&gt;
+Stability               : Stable
+Portability             : Portable
+
+This module contains the definition of the 'TomlItem' data type which
+represents either key-value pair or table name. This data type serves the
+purpose to be the intermediate representation of parsing a TOML file which will
+be assembled to TOML AST later.
+
+@since 1.2.0.0
+-}</span></span><span>
+</span><span id="line-16"></span><span>
+</span><span id="line-17"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Toml.Parser.Item</span><span>
+</span><span id="line-18"></span><span>       </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Toml.Parser.Item.html#TomlItem"><span class="hs-identifier">TomlItem</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-19"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Parser.Item.html#Table"><span class="hs-identifier">Table</span></a></span><span> </span><span class="hs-special">(</span><span class="hs-glyph">..</span><span class="hs-special">)</span><span>
+</span><span id="line-20"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Parser.Item.html#setTableName"><span class="hs-identifier">setTableName</span></a></span><span>
+</span><span id="line-21"></span><span>
+</span><span id="line-22"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Parser.Item.html#tomlP"><span class="hs-identifier">tomlP</span></a></span><span>
+</span><span id="line-23"></span><span>       </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Parser.Item.html#keyValP"><span class="hs-identifier">keyValP</span></a></span><span>
+</span><span id="line-24"></span><span>       </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-25"></span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Applicative</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">liftA2</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">many</span></span><span class="hs-special">)</span><span>
+</span><span id="line-27"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Applicative.Combinators.NonEmpty</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">sepEndBy1</span></span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Control.Monad.Combinators</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">between</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">sepEndBy</span></span><span class="hs-special">)</span><span>
+</span><span id="line-29"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Foldable</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">asum</span></span><span class="hs-special">)</span><span>
+</span><span id="line-30"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.List.NonEmpty</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">NonEmpty</span></span><span class="hs-special">)</span><span>
+</span><span id="line-31"></span><span>
+</span><span id="line-32"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Parser.Core.html"><span class="hs-identifier">Toml.Parser.Core</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Parser.Core.html#Parser"><span class="hs-identifier">Parser</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">eof</span></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Parser.Core.html#sc"><span class="hs-identifier">sc</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Parser.Core.html#text"><span class="hs-identifier">text</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">try</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-operator">(&lt;?&gt;)</span></span><span class="hs-special">)</span><span>
+</span><span id="line-33"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Parser.Key.html"><span class="hs-identifier">Toml.Parser.Key</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Parser.Key.html#keyP"><span class="hs-identifier">keyP</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Parser.Key.html#tableArrayNameP"><span class="hs-identifier">tableArrayNameP</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Parser.Key.html#tableNameP"><span class="hs-identifier">tableNameP</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-34"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Parser.Value.html"><span class="hs-identifier">Toml.Parser.Value</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Parser.Value.html#anyValueP"><span class="hs-identifier">anyValueP</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-35"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.AnyValue.html"><span class="hs-identifier">Toml.Type.AnyValue</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier">AnyValue</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.Key.html"><span class="hs-identifier">Toml.Type.Key</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier">Key</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-37"></span><span>
+</span><span id="line-38"></span><span>
+</span><span id="line-39"></span><span class="annot"><span class="hs-comment">{- | One item of a TOML file. It could be either:
+
+* A name of a table
+* A name of a table array
+* Key-value pair
+* Inline table
+* Inline array of tables
+
+Knowing a list of 'TomlItem's, it's possible to construct 'Toml.Type.TOML.TOML'
+from this information.
+-}</span></span><span>
+</span><span id="line-50"></span><span class="hs-keyword">data</span><span> </span><span id="TomlItem"><span class="annot"><a href="Toml.Parser.Item.html#TomlItem"><span class="hs-identifier hs-var">TomlItem</span></a></span></span><span>
+</span><span id="line-51"></span><span>    </span><span class="hs-glyph">=</span><span> </span><span id="TableName"><span class="annot"><a href="Toml.Parser.Item.html#TableName"><span class="hs-identifier hs-var">TableName</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span>
+</span><span id="line-52"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span id="TableArrayName"><span class="annot"><a href="Toml.Parser.Item.html#TableArrayName"><span class="hs-identifier hs-var">TableArrayName</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span>
+</span><span id="line-53"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span id="KeyVal"><span class="annot"><a href="Toml.Parser.Item.html#KeyVal"><span class="hs-identifier hs-var">KeyVal</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">!</span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier hs-type">AnyValue</span></a></span><span>
+</span><span id="line-54"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span id="InlineTable"><span class="annot"><a href="Toml.Parser.Item.html#InlineTable"><span class="hs-identifier hs-var">InlineTable</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">!</span><span class="annot"><a href="Toml.Parser.Item.html#Table"><span class="hs-identifier hs-type">Table</span></a></span><span>
+</span><span id="line-55"></span><span>    </span><span class="hs-glyph">|</span><span> </span><span id="InlineTableArray"><span class="annot"><a href="Toml.Parser.Item.html#InlineTableArray"><span class="hs-identifier hs-var">InlineTableArray</span></a></span></span><span> </span><span class="hs-glyph">!</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">!</span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">NonEmpty</span></span><span> </span><span class="annot"><a href="Toml.Parser.Item.html#Table"><span class="hs-identifier hs-type">Table</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-56"></span><span>    </span><span class="hs-keyword">deriving</span><span> </span><span class="annot"><span class="hs-keyword">stock</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679106608"><span id="local-6989586621679106628"><span id="local-6989586621679106632"><span class="annot"><span class="annottext">Int -&gt; TomlItem -&gt; ShowS
+[TomlItem] -&gt; ShowS
+TomlItem -&gt; String
+(Int -&gt; TomlItem -&gt; ShowS)
+-&gt; (TomlItem -&gt; String) -&gt; ([TomlItem] -&gt; ShowS) -&gt; Show TomlItem
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; TomlItem -&gt; ShowS
+showsPrec :: Int -&gt; TomlItem -&gt; ShowS
+$cshow :: TomlItem -&gt; String
+show :: TomlItem -&gt; String
+$cshowList :: [TomlItem] -&gt; ShowS
+showList :: [TomlItem] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679106636"><span id="local-6989586621679106650"><span class="annot"><span class="annottext">TomlItem -&gt; TomlItem -&gt; Bool
+(TomlItem -&gt; TomlItem -&gt; Bool)
+-&gt; (TomlItem -&gt; TomlItem -&gt; Bool) -&gt; Eq TomlItem
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: TomlItem -&gt; TomlItem -&gt; Bool
+== :: TomlItem -&gt; TomlItem -&gt; Bool
+$c/= :: TomlItem -&gt; TomlItem -&gt; Bool
+/= :: TomlItem -&gt; TomlItem -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-57"></span><span>
+</span><span id="line-58"></span><span class="annot"><span class="hs-comment">{- | Changes name of table to a new one. Works only for 'TableName' and
+'TableArrayName' constructors.
+-}</span></span><span>
+</span><span id="line-61"></span><span class="annot"><a href="Toml.Parser.Item.html#setTableName"><span class="hs-identifier hs-type">setTableName</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Parser.Item.html#TomlItem"><span class="hs-identifier hs-type">TomlItem</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Parser.Item.html#TomlItem"><span class="hs-identifier hs-type">TomlItem</span></a></span><span>
+</span><span id="line-62"></span><span id="setTableName"><span class="annot"><span class="annottext">setTableName :: Key -&gt; TomlItem -&gt; TomlItem
+</span><a href="Toml.Parser.Item.html#setTableName"><span class="hs-identifier hs-var hs-var">setTableName</span></a></span></span><span> </span><span id="local-6989586621679106654"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679106654"><span class="hs-identifier hs-var">new</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-glyph">\</span><span class="hs-glyph">case</span><span>
+</span><span id="line-63"></span><span>    </span><span class="annot"><a href="Toml.Parser.Item.html#TableName"><span class="hs-identifier hs-type">TableName</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Key -&gt; TomlItem
+</span><a href="Toml.Parser.Item.html#TableName"><span class="hs-identifier hs-var">TableName</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679106654"><span class="hs-identifier hs-var">new</span></a></span><span>
+</span><span id="line-64"></span><span>    </span><span class="annot"><a href="Toml.Parser.Item.html#TableArrayName"><span class="hs-identifier hs-type">TableArrayName</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Key -&gt; TomlItem
+</span><a href="Toml.Parser.Item.html#TableArrayName"><span class="hs-identifier hs-var">TableArrayName</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679106654"><span class="hs-identifier hs-var">new</span></a></span><span>
+</span><span id="line-65"></span><span>    </span><span id="local-6989586621679106655"><span class="annot"><span class="annottext">TomlItem
+</span><a href="#local-6989586621679106655"><span class="hs-identifier hs-var">item</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">TomlItem
+</span><a href="#local-6989586621679106655"><span class="hs-identifier hs-var">item</span></a></span><span>
+</span><span id="line-66"></span><span>
+</span><span id="line-67"></span><span class="annot"><span class="hs-comment">{- | Table that contains only @key = val@ pairs.
+-}</span></span><span>
+</span><span id="line-69"></span><span class="hs-keyword">newtype</span><span> </span><span id="Table"><span class="annot"><a href="Toml.Parser.Item.html#Table"><span class="hs-identifier hs-var">Table</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Table"><span class="annot"><a href="Toml.Parser.Item.html#Table"><span class="hs-identifier hs-var">Table</span></a></span></span><span>
+</span><span id="line-70"></span><span>    </span><span class="hs-special">{</span><span> </span><span id="unTable"><span class="annot"><span class="annottext">Table -&gt; [(Key, AnyValue)]
+</span><a href="Toml.Parser.Item.html#unTable"><span class="hs-identifier hs-var hs-var">unTable</span></a></span></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Type.AnyValue.html#AnyValue"><span class="hs-identifier hs-type">AnyValue</span></a></span><span class="hs-special">)</span><span class="hs-special">]</span><span>
+</span><span id="line-71"></span><span>    </span><span class="hs-special">}</span><span> </span><span class="hs-keyword">deriving</span><span> </span><span class="annot"><span class="hs-keyword">stock</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679106659"><span id="local-6989586621679106665"><span id="local-6989586621679106668"><span class="annot"><span class="annottext">Int -&gt; Table -&gt; ShowS
+[Table] -&gt; ShowS
+Table -&gt; String
+(Int -&gt; Table -&gt; ShowS)
+-&gt; (Table -&gt; String) -&gt; ([Table] -&gt; ShowS) -&gt; Show Table
+forall a.
+(Int -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: Int -&gt; Table -&gt; ShowS
+showsPrec :: Int -&gt; Table -&gt; ShowS
+$cshow :: Table -&gt; String
+show :: Table -&gt; String
+$cshowList :: [Table] -&gt; ShowS
+showList :: [Table] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-72"></span><span>      </span><span class="hs-keyword">deriving</span><span> </span><span class="annot"><span class="hs-keyword">newtype</span></span><span> </span><span class="hs-special">(</span><span id="local-6989586621679106674"><span id="local-6989586621679106680"><span class="annot"><span class="annottext">Table -&gt; Table -&gt; Bool
+(Table -&gt; Table -&gt; Bool) -&gt; (Table -&gt; Table -&gt; Bool) -&gt; Eq Table
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: Table -&gt; Table -&gt; Bool
+== :: Table -&gt; Table -&gt; Bool
+$c/= :: Table -&gt; Table -&gt; Bool
+/= :: Table -&gt; Table -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-73"></span><span>
+</span><span id="line-74"></span><span class="hs-comment">----------------------------------------------------------------------------</span><span>
+</span><span id="line-75"></span><span class="hs-comment">-- Parser</span><span>
+</span><span id="line-76"></span><span class="hs-comment">----------------------------------------------------------------------------</span><span>
+</span><span id="line-77"></span><span>
+</span><span id="line-78"></span><span class="annot"><span class="hs-comment">-- | Parser for inline tables.</span></span><span>
+</span><span id="line-79"></span><span class="annot"><a href="Toml.Parser.Item.html#inlineTableP"><span class="hs-identifier hs-type">inlineTableP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Parser.Core.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="Toml.Parser.Item.html#Table"><span class="hs-identifier hs-type">Table</span></a></span><span>
+</span><span id="line-80"></span><span id="inlineTableP"><span class="annot"><span class="annottext">inlineTableP :: Parser Table
+</span><a href="Toml.Parser.Item.html#inlineTableP"><span class="hs-identifier hs-var hs-var">inlineTableP</span></a></span></span><span> </span><span class="hs-glyph">=</span><span>
+</span><span id="line-81"></span><span>    </span><span class="annot"><span class="annottext">([(Key, AnyValue)] -&gt; Table)
+-&gt; ParsecT Void Text Identity [(Key, AnyValue)] -&gt; Parser Table
+forall a b.
+(a -&gt; b)
+-&gt; ParsecT Void Text Identity a -&gt; ParsecT Void Text Identity b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-identifier hs-var">fmap</span></span><span> </span><span class="annot"><span class="annottext">[(Key, AnyValue)] -&gt; Table
+</span><a href="Toml.Parser.Item.html#Table"><span class="hs-identifier hs-var">Table</span></a></span><span>
+</span><span id="line-82"></span><span>    </span><span class="annot"><span class="annottext">(ParsecT Void Text Identity [(Key, AnyValue)] -&gt; Parser Table)
+-&gt; ParsecT Void Text Identity [(Key, AnyValue)] -&gt; Parser Table
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">ParsecT Void Text Identity Text
+-&gt; ParsecT Void Text Identity Text
+-&gt; ParsecT Void Text Identity [(Key, AnyValue)]
+-&gt; ParsecT Void Text Identity [(Key, AnyValue)]
+forall (m :: * -&gt; *) open close a.
+Applicative m =&gt;
+m open -&gt; m close -&gt; m a -&gt; m a
+</span><span class="hs-identifier hs-var">between</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text -&gt; ParsecT Void Text Identity Text
+</span><a href="Toml.Parser.Core.html#text"><span class="hs-identifier hs-var">text</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;{&quot;</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text -&gt; ParsecT Void Text Identity Text
+</span><a href="Toml.Parser.Core.html#text"><span class="hs-identifier hs-var">text</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;}&quot;</span></span><span class="hs-special">)</span><span>
+</span><span id="line-83"></span><span>    </span><span class="annot"><span class="annottext">(ParsecT Void Text Identity [(Key, AnyValue)]
+ -&gt; ParsecT Void Text Identity [(Key, AnyValue)])
+-&gt; ParsecT Void Text Identity [(Key, AnyValue)]
+-&gt; ParsecT Void Text Identity [(Key, AnyValue)]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(Key -&gt; AnyValue -&gt; (Key, AnyValue))
+-&gt; ParsecT Void Text Identity Key
+-&gt; ParsecT Void Text Identity AnyValue
+-&gt; ParsecT Void Text Identity (Key, AnyValue)
+forall a b c.
+(a -&gt; b -&gt; c)
+-&gt; ParsecT Void Text Identity a
+-&gt; ParsecT Void Text Identity b
+-&gt; ParsecT Void Text Identity c
+forall (f :: * -&gt; *) a b c.
+Applicative f =&gt;
+(a -&gt; b -&gt; c) -&gt; f a -&gt; f b -&gt; f c
+</span><span class="hs-identifier hs-var">liftA2</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">,</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">ParsecT Void Text Identity Key
+</span><a href="Toml.Parser.Key.html#keyP"><span class="hs-identifier hs-var">keyP</span></a></span><span> </span><span class="annot"><span class="annottext">ParsecT Void Text Identity Key
+-&gt; ParsecT Void Text Identity Text
+-&gt; ParsecT Void Text Identity Key
+forall a b.
+ParsecT Void Text Identity a
+-&gt; ParsecT Void Text Identity b -&gt; ParsecT Void Text Identity a
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f a -&gt; f b -&gt; f a
+</span><span class="hs-operator hs-var">&lt;*</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; ParsecT Void Text Identity Text
+</span><a href="Toml.Parser.Core.html#text"><span class="hs-identifier hs-var">text</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;=&quot;</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">ParsecT Void Text Identity AnyValue
+</span><a href="Toml.Parser.Value.html#anyValueP"><span class="hs-identifier hs-var">anyValueP</span></a></span><span> </span><span class="annot"><span class="annottext">ParsecT Void Text Identity (Key, AnyValue)
+-&gt; ParsecT Void Text Identity Text
+-&gt; ParsecT Void Text Identity [(Key, AnyValue)]
+forall (m :: * -&gt; *) a sep. MonadPlus m =&gt; m a -&gt; m sep -&gt; m [a]
+</span><span class="hs-operator hs-var">`sepEndBy`</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; ParsecT Void Text Identity Text
+</span><a href="Toml.Parser.Core.html#text"><span class="hs-identifier hs-var">text</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;,&quot;</span></span><span>
+</span><span id="line-84"></span><span>
+</span><span id="line-85"></span><span class="annot"><span class="hs-comment">-- | Parser for inline arrays of tables.</span></span><span>
+</span><span id="line-86"></span><span class="annot"><a href="Toml.Parser.Item.html#inlineTableArrayP"><span class="hs-identifier hs-type">inlineTableArrayP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Parser.Core.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">NonEmpty</span></span><span> </span><span class="annot"><a href="Toml.Parser.Item.html#Table"><span class="hs-identifier hs-type">Table</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-87"></span><span id="inlineTableArrayP"><span class="annot"><span class="annottext">inlineTableArrayP :: Parser (NonEmpty Table)
+</span><a href="Toml.Parser.Item.html#inlineTableArrayP"><span class="hs-identifier hs-var hs-var">inlineTableArrayP</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">ParsecT Void Text Identity Text
+-&gt; ParsecT Void Text Identity Text
+-&gt; Parser (NonEmpty Table)
+-&gt; Parser (NonEmpty Table)
+forall (m :: * -&gt; *) open close a.
+Applicative m =&gt;
+m open -&gt; m close -&gt; m a -&gt; m a
+</span><span class="hs-identifier hs-var">between</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text -&gt; ParsecT Void Text Identity Text
+</span><a href="Toml.Parser.Core.html#text"><span class="hs-identifier hs-var">text</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;[&quot;</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Text -&gt; ParsecT Void Text Identity Text
+</span><a href="Toml.Parser.Core.html#text"><span class="hs-identifier hs-var">text</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;]&quot;</span></span><span class="hs-special">)</span><span>
+</span><span id="line-88"></span><span>    </span><span class="annot"><span class="annottext">(Parser (NonEmpty Table) -&gt; Parser (NonEmpty Table))
+-&gt; Parser (NonEmpty Table) -&gt; Parser (NonEmpty Table)
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">Parser Table
+</span><a href="Toml.Parser.Item.html#inlineTableP"><span class="hs-identifier hs-var">inlineTableP</span></a></span><span> </span><span class="annot"><span class="annottext">Parser Table
+-&gt; ParsecT Void Text Identity Text -&gt; Parser (NonEmpty Table)
+forall (m :: * -&gt; *) a sep.
+Alternative m =&gt;
+m a -&gt; m sep -&gt; m (NonEmpty a)
+</span><span class="hs-operator hs-var">`sepEndBy1`</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; ParsecT Void Text Identity Text
+</span><a href="Toml.Parser.Core.html#text"><span class="hs-identifier hs-var">text</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;,&quot;</span></span><span>
+</span><span id="line-89"></span><span>
+</span><span id="line-90"></span><span class="annot"><span class="hs-comment">-- | Parser for a single item in the TOML file.</span></span><span>
+</span><span id="line-91"></span><span class="annot"><a href="Toml.Parser.Item.html#tomlItemP"><span class="hs-identifier hs-type">tomlItemP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Parser.Core.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="Toml.Parser.Item.html#TomlItem"><span class="hs-identifier hs-type">TomlItem</span></a></span><span>
+</span><span id="line-92"></span><span id="tomlItemP"><span class="annot"><span class="annottext">tomlItemP :: Parser TomlItem
+</span><a href="Toml.Parser.Item.html#tomlItemP"><span class="hs-identifier hs-var hs-var">tomlItemP</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Parser TomlItem] -&gt; Parser TomlItem
+forall (t :: * -&gt; *) (f :: * -&gt; *) a.
+(Foldable t, Alternative f) =&gt;
+t (f a) -&gt; f a
+</span><span class="hs-identifier hs-var">asum</span></span><span>
+</span><span id="line-93"></span><span>    </span><span class="hs-special">[</span><span> </span><span class="annot"><span class="annottext">Key -&gt; TomlItem
+</span><a href="Toml.Parser.Item.html#TableName"><span class="hs-identifier hs-var">TableName</span></a></span><span> </span><span class="annot"><span class="annottext">(Key -&gt; TomlItem)
+-&gt; ParsecT Void Text Identity Key -&gt; Parser TomlItem
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">ParsecT Void Text Identity Key -&gt; ParsecT Void Text Identity Key
+forall a.
+ParsecT Void Text Identity a -&gt; ParsecT Void Text Identity a
+forall e s (m :: * -&gt; *) a. MonadParsec e s m =&gt; m a -&gt; m a
+</span><span class="hs-identifier hs-var">try</span></span><span> </span><span class="annot"><span class="annottext">ParsecT Void Text Identity Key
+</span><a href="Toml.Parser.Key.html#tableNameP"><span class="hs-identifier hs-var">tableNameP</span></a></span><span> </span><span class="annot"><span class="annottext">Parser TomlItem -&gt; String -&gt; Parser TomlItem
+forall e s (m :: * -&gt; *) a.
+MonadParsec e s m =&gt;
+m a -&gt; String -&gt; m a
+</span><span class="hs-operator hs-var">&lt;?&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;table name&quot;</span></span><span>
+</span><span id="line-94"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Key -&gt; TomlItem
+</span><a href="Toml.Parser.Item.html#TableArrayName"><span class="hs-identifier hs-var">TableArrayName</span></a></span><span> </span><span class="annot"><span class="annottext">(Key -&gt; TomlItem)
+-&gt; ParsecT Void Text Identity Key -&gt; Parser TomlItem
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">ParsecT Void Text Identity Key
+</span><a href="Toml.Parser.Key.html#tableArrayNameP"><span class="hs-identifier hs-var">tableArrayNameP</span></a></span><span> </span><span class="annot"><span class="annottext">Parser TomlItem -&gt; String -&gt; Parser TomlItem
+forall e s (m :: * -&gt; *) a.
+MonadParsec e s m =&gt;
+m a -&gt; String -&gt; m a
+</span><span class="hs-operator hs-var">&lt;?&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;array of tables name&quot;</span></span><span>
+</span><span id="line-95"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Parser TomlItem
+</span><a href="Toml.Parser.Item.html#keyValP"><span class="hs-identifier hs-var">keyValP</span></a></span><span>
+</span><span id="line-96"></span><span>    </span><span class="hs-special">]</span><span>
+</span><span id="line-97"></span><span>
+</span><span id="line-98"></span><span class="annot"><span class="hs-comment">{- | parser for @&quot;key = val&quot;@ pairs; can be one of three forms:
+
+1. key = { ... }
+2. key = [ {...}, {...}, ... ]
+3. key = ...
+-}</span></span><span>
+</span><span id="line-104"></span><span class="annot"><a href="Toml.Parser.Item.html#keyValP"><span class="hs-identifier hs-type">keyValP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Parser.Core.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="annot"><a href="Toml.Parser.Item.html#TomlItem"><span class="hs-identifier hs-type">TomlItem</span></a></span><span>
+</span><span id="line-105"></span><span id="keyValP"><span class="annot"><span class="annottext">keyValP :: Parser TomlItem
+</span><a href="Toml.Parser.Item.html#keyValP"><span class="hs-identifier hs-var hs-var">keyValP</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-106"></span><span>    </span><span id="local-6989586621679106694"><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679106694"><span class="hs-identifier hs-var">key</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">ParsecT Void Text Identity Key
+</span><a href="Toml.Parser.Key.html#keyP"><span class="hs-identifier hs-var">keyP</span></a></span><span> </span><span class="annot"><span class="annottext">ParsecT Void Text Identity Key
+-&gt; ParsecT Void Text Identity Text
+-&gt; ParsecT Void Text Identity Key
+forall a b.
+ParsecT Void Text Identity a
+-&gt; ParsecT Void Text Identity b -&gt; ParsecT Void Text Identity a
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f a -&gt; f b -&gt; f a
+</span><span class="hs-operator hs-var">&lt;*</span></span><span> </span><span class="annot"><span class="annottext">Text -&gt; ParsecT Void Text Identity Text
+</span><a href="Toml.Parser.Core.html#text"><span class="hs-identifier hs-var">text</span></a></span><span> </span><span class="annot"><span class="annottext">Text
+</span><span class="hs-string">&quot;=&quot;</span></span><span>
+</span><span id="line-107"></span><span>    </span><span class="annot"><span class="annottext">[Parser TomlItem] -&gt; Parser TomlItem
+forall (t :: * -&gt; *) (f :: * -&gt; *) a.
+(Foldable t, Alternative f) =&gt;
+t (f a) -&gt; f a
+</span><span class="hs-identifier hs-var">asum</span></span><span>
+</span><span id="line-108"></span><span>        </span><span class="hs-special">[</span><span> </span><span class="annot"><span class="annottext">Key -&gt; Table -&gt; TomlItem
+</span><a href="Toml.Parser.Item.html#InlineTable"><span class="hs-identifier hs-var">InlineTable</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679106694"><span class="hs-identifier hs-var">key</span></a></span><span> </span><span class="annot"><span class="annottext">(Table -&gt; TomlItem) -&gt; Parser Table -&gt; Parser TomlItem
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Parser Table
+</span><a href="Toml.Parser.Item.html#inlineTableP"><span class="hs-identifier hs-var">inlineTableP</span></a></span><span> </span><span class="annot"><span class="annottext">Parser TomlItem -&gt; String -&gt; Parser TomlItem
+forall e s (m :: * -&gt; *) a.
+MonadParsec e s m =&gt;
+m a -&gt; String -&gt; m a
+</span><span class="hs-operator hs-var">&lt;?&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;inline table&quot;</span></span><span>
+</span><span id="line-109"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Key -&gt; NonEmpty Table -&gt; TomlItem
+</span><a href="Toml.Parser.Item.html#InlineTableArray"><span class="hs-identifier hs-var">InlineTableArray</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679106694"><span class="hs-identifier hs-var">key</span></a></span><span> </span><span class="annot"><span class="annottext">(NonEmpty Table -&gt; TomlItem)
+-&gt; Parser (NonEmpty Table) -&gt; Parser TomlItem
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">Parser (NonEmpty Table) -&gt; Parser (NonEmpty Table)
+forall a.
+ParsecT Void Text Identity a -&gt; ParsecT Void Text Identity a
+forall e s (m :: * -&gt; *) a. MonadParsec e s m =&gt; m a -&gt; m a
+</span><span class="hs-identifier hs-var">try</span></span><span> </span><span class="annot"><span class="annottext">Parser (NonEmpty Table)
+</span><a href="Toml.Parser.Item.html#inlineTableArrayP"><span class="hs-identifier hs-var">inlineTableArrayP</span></a></span><span> </span><span class="annot"><span class="annottext">Parser TomlItem -&gt; String -&gt; Parser TomlItem
+forall e s (m :: * -&gt; *) a.
+MonadParsec e s m =&gt;
+m a -&gt; String -&gt; m a
+</span><span class="hs-operator hs-var">&lt;?&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;inline array of tables&quot;</span></span><span>
+</span><span id="line-110"></span><span>        </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Key -&gt; AnyValue -&gt; TomlItem
+</span><a href="Toml.Parser.Item.html#KeyVal"><span class="hs-identifier hs-var">KeyVal</span></a></span><span> </span><span class="annot"><span class="annottext">Key
+</span><a href="#local-6989586621679106694"><span class="hs-identifier hs-var">key</span></a></span><span> </span><span class="annot"><span class="annottext">(AnyValue -&gt; TomlItem)
+-&gt; ParsecT Void Text Identity AnyValue -&gt; Parser TomlItem
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">&lt;$&gt;</span></span><span> </span><span class="annot"><span class="annottext">ParsecT Void Text Identity AnyValue
+</span><a href="Toml.Parser.Value.html#anyValueP"><span class="hs-identifier hs-var">anyValueP</span></a></span><span> </span><span class="annot"><span class="annottext">Parser TomlItem -&gt; String -&gt; Parser TomlItem
+forall e s (m :: * -&gt; *) a.
+MonadParsec e s m =&gt;
+m a -&gt; String -&gt; m a
+</span><span class="hs-operator hs-var">&lt;?&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;key-value pair&quot;</span></span><span>
+</span><span id="line-111"></span><span>        </span><span class="hs-special">]</span><span>
+</span><span id="line-112"></span><span>
+</span><span id="line-113"></span><span class="annot"><span class="hs-comment">-- | Parser for the full content of the .toml file.</span></span><span>
+</span><span id="line-114"></span><span class="annot"><a href="Toml.Parser.Item.html#tomlP"><span class="hs-identifier hs-type">tomlP</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Parser.Core.html#Parser"><span class="hs-identifier hs-type">Parser</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Toml.Parser.Item.html#TomlItem"><span class="hs-identifier hs-type">TomlItem</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-115"></span><span id="tomlP"><span class="annot"><span class="annottext">tomlP :: Parser [TomlItem]
+</span><a href="Toml.Parser.Item.html#tomlP"><span class="hs-identifier hs-var hs-var">tomlP</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Parser ()
+</span><a href="Toml.Parser.Core.html#sc"><span class="hs-identifier hs-var">sc</span></a></span><span> </span><span class="annot"><span class="annottext">Parser () -&gt; Parser [TomlItem] -&gt; Parser [TomlItem]
+forall a b.
+ParsecT Void Text Identity a
+-&gt; ParsecT Void Text Identity b -&gt; ParsecT Void Text Identity b
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f a -&gt; f b -&gt; f b
+</span><span class="hs-operator hs-var">*&gt;</span></span><span> </span><span class="annot"><span class="annottext">Parser TomlItem -&gt; Parser [TomlItem]
+forall a.
+ParsecT Void Text Identity a -&gt; ParsecT Void Text Identity [a]
+forall (f :: * -&gt; *) a. Alternative f =&gt; f a -&gt; f [a]
+</span><span class="hs-identifier hs-var">many</span></span><span> </span><span class="annot"><span class="annottext">Parser TomlItem
+</span><a href="Toml.Parser.Item.html#tomlItemP"><span class="hs-identifier hs-var">tomlItemP</span></a></span><span> </span><span class="annot"><span class="annottext">Parser [TomlItem] -&gt; Parser () -&gt; Parser [TomlItem]
+forall a b.
+ParsecT Void Text Identity a
+-&gt; ParsecT Void Text Identity b -&gt; ParsecT Void Text Identity a
+forall (f :: * -&gt; *) a b. Applicative f =&gt; f a -&gt; f b -&gt; f a
+</span><span class="hs-operator hs-var">&lt;*</span></span><span> </span><span class="annot"><span class="annottext">Parser ()
+forall e s (m :: * -&gt; *). MonadParsec e s m =&gt; m ()
+</span><span class="hs-identifier hs-var">eof</span></span><span>
+</span><span id="line-116"></span></pre></body></html>

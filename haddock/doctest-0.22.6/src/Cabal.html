@@ -1,0 +1,223 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE LambdaCase #-}</span><span>
+</span><span id="line-2"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Cabal</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Cabal.html#externalCommand"><span class="hs-identifier">externalCommand</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-3"></span><span>
+</span><span id="line-4"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Imports.html"><span class="hs-identifier">Imports</span></a></span><span>
+</span><span id="line-5"></span><span>
+</span><span id="line-6"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.IO</span></span><span>
+</span><span id="line-7"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.Environment</span></span><span>
+</span><span id="line-8"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.Exit</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">exitWith</span></span><span class="hs-special">)</span><span>
+</span><span id="line-9"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.Directory</span></span><span>
+</span><span id="line-10"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.FilePath</span></span><span>
+</span><span id="line-11"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.Process</span></span><span>
+</span><span id="line-12"></span><span>
+</span><span id="line-13"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><a href="Info.html"><span class="hs-identifier">Info</span></a></span><span>
+</span><span id="line-14"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Cabal.Paths.html"><span class="hs-identifier">Cabal.Paths</span></a></span><span>
+</span><span id="line-15"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Cabal.Options.html"><span class="hs-identifier">Cabal.Options</span></a></span><span>
+</span><span id="line-16"></span><span>
+</span><span id="line-17"></span><span class="annot"><a href="Cabal.html#externalCommand"><span class="hs-identifier hs-type">externalCommand</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-18"></span><span id="externalCommand"><span class="annot"><span class="annottext">externalCommand :: [String] -&gt; IO ()
+</span><a href="Cabal.html#externalCommand"><span class="hs-identifier hs-var hs-var">externalCommand</span></a></span></span><span> </span><span id="local-6989586621679237193"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237193"><span class="hs-identifier hs-var">args</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-19"></span><span>  </span><span class="annot"><span class="annottext">String -&gt; IO (Maybe String)
+</span><span class="hs-identifier hs-var">lookupEnv</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;CABAL&quot;</span></span><span> </span><span class="annot"><span class="annottext">IO (Maybe String) -&gt; (Maybe String -&gt; IO ()) -&gt; IO ()
+forall a b. IO a -&gt; (a -&gt; IO b) -&gt; IO b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span> </span><span class="hs-glyph">case</span><span>
+</span><span id="line-20"></span><span>    </span><span class="annot"><span class="annottext">Maybe String
+</span><span class="hs-identifier hs-var">Nothing</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; IO ()
+</span><a href="Cabal.html#run"><span class="hs-identifier hs-var">run</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;cabal&quot;</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237193"><span class="hs-identifier hs-var">args</span></a></span><span>
+</span><span id="line-21"></span><span>    </span><span class="annot"><span class="hs-identifier hs-type">Just</span></span><span> </span><span id="local-6989586621679237196"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237196"><span class="hs-identifier hs-var">cabal</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; IO ()
+</span><a href="Cabal.html#run"><span class="hs-identifier hs-var">run</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237196"><span class="hs-identifier hs-var">cabal</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">Int -&gt; [String] -&gt; [String]
+forall a. Int -&gt; [a] -&gt; [a]
+</span><span class="hs-identifier hs-var">drop</span></span><span> </span><span class="annot"><span class="annottext">Int
+</span><span class="hs-number">1</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237193"><span class="hs-identifier hs-var">args</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-22"></span><span>
+</span><span id="line-23"></span><span class="annot"><a href="Cabal.html#run"><span class="hs-identifier hs-type">run</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-24"></span><span id="run"><span class="annot"><span class="annottext">run :: String -&gt; [String] -&gt; IO ()
+</span><a href="Cabal.html#run"><span class="hs-identifier hs-var hs-var">run</span></a></span></span><span> </span><span id="local-6989586621679237198"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237198"><span class="hs-identifier hs-var">cabal</span></a></span></span><span> </span><span id="local-6989586621679237199"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237199"><span class="hs-identifier hs-var">args</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-25"></span><span>  </span><span class="annot"><span class="annottext">[String] -&gt; IO ()
+</span><a href="Cabal.Options.html#rejectUnsupportedOptions"><span class="hs-identifier hs-var">rejectUnsupportedOptions</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237199"><span class="hs-identifier hs-var">args</span></a></span><span>
+</span><span id="line-26"></span><span>
+</span><span id="line-27"></span><span>  </span><span class="annot"><a href="Cabal.Paths.html#Paths"><span class="hs-identifier hs-type">Paths</span></a></span><span class="hs-special">{</span><span id="local-6989586621679237202"><span id="local-6989586621679237203"><span id="local-6989586621679237204"><span class="annot"><span class="annottext">String
+ghc :: String
+ghcPkg :: String
+cache :: String
+cache :: Paths -&gt; String
+ghcPkg :: Paths -&gt; String
+ghc :: Paths -&gt; String
+</span><a href="#local-6989586621679237202"><span class="hs-glyph hs-var hs-var hs-var hs-var hs-var hs-var">..</span></a></span></span></span></span><span class="hs-special">}</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; IO Paths
+</span><a href="Cabal.Paths.html#paths"><span class="hs-identifier hs-var">paths</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237198"><span class="hs-identifier hs-var">cabal</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">[String] -&gt; [String]
+</span><a href="Cabal.Options.html#discardReplOptions"><span class="hs-identifier hs-var">discardReplOptions</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237199"><span class="hs-identifier hs-var">args</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span>  </span><span class="hs-keyword">let</span><span>
+</span><span id="line-30"></span><span>    </span><span id="local-6989586621679237212"><span class="annot"><span class="annottext">doctest :: String
+</span><a href="#local-6989586621679237212"><span class="hs-identifier hs-var hs-var">doctest</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237204"><span class="hs-identifier hs-var">cache</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+</span><span class="hs-operator hs-var">&lt;/&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;doctest&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;-&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="Info.html#version"><span class="hs-identifier hs-var">Info.version</span></a></span><span>
+</span><span id="line-31"></span><span>    </span><span id="local-6989586621679237216"><span class="annot"><span class="annottext">script :: String
+</span><a href="#local-6989586621679237216"><span class="hs-identifier hs-var hs-var">script</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237204"><span class="hs-identifier hs-var">cache</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+</span><span class="hs-operator hs-var">&lt;/&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;init-ghci-&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="Info.html#version"><span class="hs-identifier hs-var">Info.version</span></a></span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span>  </span><span class="annot"><span class="annottext">String -&gt; IO Bool
+</span><span class="hs-identifier hs-var">doesFileExist</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237212"><span class="hs-identifier hs-var">doctest</span></a></span><span> </span><span class="annot"><span class="annottext">IO Bool -&gt; (Bool -&gt; IO ()) -&gt; IO ()
+forall a b. IO a -&gt; (a -&gt; IO b) -&gt; IO b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span> </span><span class="hs-glyph">case</span><span>
+</span><span id="line-34"></span><span>    </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO ()
+forall (m :: * -&gt; *). Monad m =&gt; m ()
+</span><a href="Imports.html#pass"><span class="hs-identifier hs-var">pass</span></a></span><span>
+</span><span id="line-35"></span><span>    </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; IO ()
+</span><span class="hs-identifier hs-var">callProcess</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237198"><span class="hs-identifier hs-var">cabal</span></a></span><span> </span><span class="hs-special">[</span><span>
+</span><span id="line-36"></span><span>        </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;install&quot;</span></span><span> </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;doctest-&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="Info.html#version"><span class="hs-identifier hs-var">Info.version</span></a></span><span>
+</span><span id="line-37"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--flag&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;-cabal-doctest&quot;</span></span><span>
+</span><span id="line-38"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--ignore-project&quot;</span></span><span>
+</span><span id="line-39"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--installdir&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237204"><span class="hs-identifier hs-var">cache</span></a></span><span>
+</span><span id="line-40"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--program-suffix&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;-&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="Info.html#version"><span class="hs-identifier hs-var">Info.version</span></a></span><span>
+</span><span id="line-41"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--install-method=copy&quot;</span></span><span>
+</span><span id="line-42"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--with-compiler&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237202"><span class="hs-identifier hs-var">ghc</span></a></span><span>
+</span><span id="line-43"></span><span>      </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--with-hc-pkg&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237203"><span class="hs-identifier hs-var">ghcPkg</span></a></span><span>
+</span><span id="line-44"></span><span>      </span><span class="hs-special">]</span><span>
+</span><span id="line-45"></span><span>
+</span><span id="line-46"></span><span>  </span><span class="annot"><span class="annottext">String -&gt; IO Bool
+</span><span class="hs-identifier hs-var">doesFileExist</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237216"><span class="hs-identifier hs-var">script</span></a></span><span> </span><span class="annot"><span class="annottext">IO Bool -&gt; (Bool -&gt; IO ()) -&gt; IO ()
+forall a b. IO a -&gt; (a -&gt; IO b) -&gt; IO b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-glyph">\</span><span> </span><span class="hs-glyph">case</span><span>
+</span><span id="line-47"></span><span>    </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">True</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">IO ()
+forall (m :: * -&gt; *). Monad m =&gt; m ()
+</span><a href="Imports.html#pass"><span class="hs-identifier hs-var">pass</span></a></span><span>
+</span><span id="line-48"></span><span>    </span><span class="annot"><span class="annottext">Bool
+</span><span class="hs-identifier hs-var">False</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; IO ()
+</span><a href="Cabal.html#writeFileAtomically"><span class="hs-identifier hs-var">writeFileAtomically</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237216"><span class="hs-identifier hs-var">script</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;:seti -w -Wdefault&quot;</span></span><span>
+</span><span id="line-49"></span><span>
+</span><span id="line-50"></span><span>  </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; IO ()
+</span><span class="hs-identifier hs-var">callProcess</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237212"><span class="hs-identifier hs-var">doctest</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--version&quot;</span></span><span class="hs-special">]</span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span>  </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; IO ()
+</span><span class="hs-identifier hs-var">callProcess</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237198"><span class="hs-identifier hs-var">cabal</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;build&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--only-dependencies&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[String] -&gt; [String]
+</span><a href="Cabal.Options.html#discardReplOptions"><span class="hs-identifier hs-var">discardReplOptions</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237199"><span class="hs-identifier hs-var">args</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-53"></span><span>
+</span><span id="line-54"></span><span>  </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; IO ExitCode
+</span><span class="hs-identifier hs-var">rawSystem</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237198"><span class="hs-identifier hs-var">cabal</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;repl&quot;</span></span><span>
+</span><span id="line-55"></span><span>    </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--build-depends=QuickCheck&quot;</span></span><span>
+</span><span id="line-56"></span><span>    </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--build-depends=template-haskell&quot;</span></span><span>
+</span><span id="line-57"></span><span>    </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--repl-options=-ghci-script=&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. Semigroup a =&gt; a -&gt; a -&gt; a
+</span><span class="hs-operator hs-var">&lt;&gt;</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237216"><span class="hs-identifier hs-var">script</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-58"></span><span>    </span><span class="annot"><span class="annottext">String -&gt; [String] -&gt; [String]
+forall a. a -&gt; [a] -&gt; [a]
+</span><span class="hs-glyph hs-var">:</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679237199"><span class="hs-identifier hs-var">args</span></a></span><span> </span><span class="annot"><span class="annottext">[String] -&gt; [String] -&gt; [String]
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="hs-special">[</span><span>
+</span><span id="line-59"></span><span>      </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--with-compiler&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237212"><span class="hs-identifier hs-var">doctest</span></a></span><span>
+</span><span id="line-60"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;--with-hc-pkg&quot;</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237203"><span class="hs-identifier hs-var">ghcPkg</span></a></span><span>
+</span><span id="line-61"></span><span>    </span><span class="hs-special">]</span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">IO ExitCode -&gt; (ExitCode -&gt; IO ()) -&gt; IO ()
+forall a b. IO a -&gt; (a -&gt; IO b) -&gt; IO b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">ExitCode -&gt; IO ()
+forall a. ExitCode -&gt; IO a
+</span><span class="hs-identifier hs-var">exitWith</span></span><span>
+</span><span id="line-62"></span><span>
+</span><span id="line-63"></span><span class="annot"><a href="Cabal.html#writeFileAtomically"><span class="hs-identifier hs-type">writeFileAtomically</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-64"></span><span id="writeFileAtomically"><span class="annot"><span class="annottext">writeFileAtomically :: String -&gt; String -&gt; IO ()
+</span><a href="Cabal.html#writeFileAtomically"><span class="hs-identifier hs-var hs-var">writeFileAtomically</span></a></span></span><span> </span><span id="local-6989586621679237223"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237223"><span class="hs-identifier hs-var">name</span></a></span></span><span> </span><span id="local-6989586621679237224"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237224"><span class="hs-identifier hs-var">contents</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-65"></span><span>  </span><span class="hs-special">(</span><span id="local-6989586621679237225"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237225"><span class="hs-identifier hs-var">tmp</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679237226"><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679237226"><span class="hs-identifier hs-var">h</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; IO (String, Handle)
+</span><span class="hs-identifier hs-var">openTempFile</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; String
+</span><span class="hs-identifier hs-var">takeDirectory</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237223"><span class="hs-identifier hs-var">name</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; String
+</span><span class="hs-identifier hs-var">takeFileName</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237223"><span class="hs-identifier hs-var">name</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-66"></span><span>  </span><span class="annot"><span class="annottext">Handle -&gt; String -&gt; IO ()
+</span><span class="hs-identifier hs-var">hPutStr</span></span><span> </span><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679237226"><span class="hs-identifier hs-var">h</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237224"><span class="hs-identifier hs-var">contents</span></a></span><span>
+</span><span id="line-67"></span><span>  </span><span class="annot"><span class="annottext">Handle -&gt; IO ()
+</span><span class="hs-identifier hs-var">hClose</span></span><span> </span><span class="annot"><span class="annottext">Handle
+</span><a href="#local-6989586621679237226"><span class="hs-identifier hs-var">h</span></a></span><span>
+</span><span id="line-68"></span><span>  </span><span class="annot"><span class="annottext">String -&gt; String -&gt; IO ()
+</span><span class="hs-identifier hs-var">renameFile</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237225"><span class="hs-identifier hs-var">tmp</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679237223"><span class="hs-identifier hs-var">name</span></a></span><span>
+</span><span id="line-69"></span></pre></body></html>

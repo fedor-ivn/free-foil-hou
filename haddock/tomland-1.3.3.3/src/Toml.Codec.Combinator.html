@@ -1,0 +1,156 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="annot"><span class="hs-comment">{- |
+Module                  : Toml.Codec.Combinator
+Copyright               : (c) 2018-2022 Kowainik
+SPDX-License-Identifier : MPL-2.0
+Maintainer              : Kowainik &lt;xrom.xkov@gmail.com&gt;
+Stability               : Stable
+Portability             : Portable
+
+Contains TOML-specific combinators for converting between TOML and user data
+types.
+-}</span></span><span>
+</span><span id="line-12"></span><span>
+</span><span id="line-13"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Toml.Codec.Combinator</span><span>
+</span><span id="line-14"></span><span>    </span><span class="hs-special">(</span><span> </span><span class="annot"><span class="hs-comment">-- * Basic codecs for primitive values</span></span><span>
+</span><span id="line-15"></span><span>      </span><span class="annot"><span class="hs-comment">-- $primitive</span></span><span>
+</span><span id="line-16"></span><span>      </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Primitive.html"><span class="hs-identifier">Toml.Codec.Combinator.Primitive</span></a></span><span>
+</span><span id="line-17"></span><span>      </span><span class="annot"><span class="hs-comment">-- ** Time types</span></span><span>
+</span><span id="line-18"></span><span>      </span><span class="annot"><span class="hs-comment">-- $time</span></span><span>
+</span><span id="line-19"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Time.html"><span class="hs-identifier">Toml.Codec.Combinator.Time</span></a></span><span>
+</span><span id="line-20"></span><span>
+</span><span id="line-21"></span><span>      </span><span class="annot"><span class="hs-comment">-- * Combinators for tables</span></span><span>
+</span><span id="line-22"></span><span>      </span><span class="annot"><span class="hs-comment">-- $table</span></span><span>
+</span><span id="line-23"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Table.html"><span class="hs-identifier">Toml.Codec.Combinator.Table</span></a></span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span>      </span><span class="annot"><span class="hs-comment">-- * Codecs for containers of primitives</span></span><span>
+</span><span id="line-26"></span><span>      </span><span class="annot"><span class="hs-comment">-- ** Lists</span></span><span>
+</span><span id="line-27"></span><span>      </span><span class="annot"><span class="hs-comment">-- $list</span></span><span>
+</span><span id="line-28"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.List.html"><span class="hs-identifier">Toml.Codec.Combinator.List</span></a></span><span>
+</span><span id="line-29"></span><span>      </span><span class="annot"><span class="hs-comment">-- ** Sets</span></span><span>
+</span><span id="line-30"></span><span>      </span><span class="annot"><span class="hs-comment">-- $set</span></span><span>
+</span><span id="line-31"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Set.html"><span class="hs-identifier">Toml.Codec.Combinator.Set</span></a></span><span>
+</span><span id="line-32"></span><span>      </span><span class="annot"><span class="hs-comment">-- ** Maps</span></span><span>
+</span><span id="line-33"></span><span>      </span><span class="annot"><span class="hs-comment">-- $map</span></span><span>
+</span><span id="line-34"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Map.html"><span class="hs-identifier">Toml.Codec.Combinator.Map</span></a></span><span>
+</span><span id="line-35"></span><span>      </span><span class="annot"><span class="hs-comment">-- ** Tuples</span></span><span>
+</span><span id="line-36"></span><span>      </span><span class="annot"><span class="hs-comment">-- $tuple</span></span><span>
+</span><span id="line-37"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Tuple.html"><span class="hs-identifier">Toml.Codec.Combinator.Tuple</span></a></span><span>
+</span><span id="line-38"></span><span>
+</span><span id="line-39"></span><span>      </span><span class="annot"><span class="hs-comment">-- * Codecs for 'Monoid's</span></span><span>
+</span><span id="line-40"></span><span>      </span><span class="annot"><span class="hs-comment">-- $monoid</span></span><span>
+</span><span id="line-41"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html"><span class="hs-identifier">Toml.Codec.Combinator.Monoid</span></a></span><span>
+</span><span id="line-42"></span><span>
+</span><span id="line-43"></span><span>      </span><span class="annot"><span class="hs-comment">-- * Additional codecs for custom types</span></span><span>
+</span><span id="line-44"></span><span>      </span><span class="annot"><span class="hs-comment">-- $custom</span></span><span>
+</span><span id="line-45"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Custom.html"><span class="hs-identifier">Toml.Codec.Combinator.Custom</span></a></span><span>
+</span><span id="line-46"></span><span>
+</span><span id="line-47"></span><span>      </span><span class="annot"><span class="hs-comment">-- * General construction of codecs</span></span><span>
+</span><span id="line-48"></span><span>      </span><span class="annot"><span class="hs-comment">-- $common</span></span><span>
+</span><span id="line-49"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="hs-keyword">module</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Common.html"><span class="hs-identifier">Toml.Codec.Combinator.Common</span></a></span><span>
+</span><span id="line-50"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Prelude</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">all</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">any</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">last</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">map</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">product</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">read</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">sum</span></span><span class="hs-special">)</span><span>
+</span><span id="line-53"></span><span>
+</span><span id="line-54"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Common.html"><span class="hs-identifier">Toml.Codec.Combinator.Common</span></a></span><span>
+</span><span id="line-55"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Custom.html"><span class="hs-identifier">Toml.Codec.Combinator.Custom</span></a></span><span>
+</span><span id="line-56"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.List.html"><span class="hs-identifier">Toml.Codec.Combinator.List</span></a></span><span>
+</span><span id="line-57"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Map.html"><span class="hs-identifier">Toml.Codec.Combinator.Map</span></a></span><span>
+</span><span id="line-58"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Monoid.html"><span class="hs-identifier">Toml.Codec.Combinator.Monoid</span></a></span><span>
+</span><span id="line-59"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Primitive.html"><span class="hs-identifier">Toml.Codec.Combinator.Primitive</span></a></span><span>
+</span><span id="line-60"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Set.html"><span class="hs-identifier">Toml.Codec.Combinator.Set</span></a></span><span>
+</span><span id="line-61"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Table.html"><span class="hs-identifier">Toml.Codec.Combinator.Table</span></a></span><span>
+</span><span id="line-62"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Time.html"><span class="hs-identifier">Toml.Codec.Combinator.Time</span></a></span><span>
+</span><span id="line-63"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Tuple.html"><span class="hs-identifier">Toml.Codec.Combinator.Tuple</span></a></span><span>
+</span><span id="line-64"></span><span>
+</span><span id="line-65"></span><span class="annot"><span class="hs-comment">{- $primitive
+TOML-specific combinators for converting between TOML and Haskell primitive
+types, e.g. 'int' \&lt;-\&gt; 'Int', 'byteString' \&lt;-\&gt; 'ByteString'.
+
+See the &quot;Toml.Codec.Combinator.Primitive&quot; module documentation for the overview
+table and more examples.
+-}</span></span><span>
+</span><span id="line-72"></span><span>
+</span><span id="line-73"></span><span class="annot"><span class="hs-comment">{- $time
+TOML-specific combinators for converting between TOML and Haskell date and time
+data types. TOML specification describes date and time primitives you
+can use in your configuration. @tomland@ provides mapping of those
+primitives to types from the @time@ library.
+
+See the &quot;Toml.Codec.Combinator.Time&quot; module documentation for the overview
+table and more examples.
+-}</span></span><span>
+</span><span id="line-82"></span><span>
+</span><span id="line-83"></span><span class="annot"><span class="hs-comment">{- $table
+Combinators for the @TOML@ tables.
+
+See the &quot;Toml.Codec.Combinator.Table&quot; module documentation for more examples.
+-}</span></span><span>
+</span><span id="line-88"></span><span>
+</span><span id="line-89"></span><span class="annot"><span class="hs-comment">{- $list
+TOML-specific combinators for converting between TOML and Haskell list-like data
+types.
+
+See the &quot;Toml.Codec.Combinator.List&quot; module documentation for the overview
+table and more examples.
+-}</span></span><span>
+</span><span id="line-96"></span><span>
+</span><span id="line-97"></span><span class="annot"><span class="hs-comment">{- $set
+TOML-specific combinators for converting between TOML and Haskell set-like data
+types.
+
+See the &quot;Toml.Codec.Combinator.Set&quot; module documentation for the overview
+table and more examples.
+-}</span></span><span>
+</span><span id="line-104"></span><span>
+</span><span id="line-105"></span><span class="annot"><span class="hs-comment">{- $map
+TOML-specific combinators for converting between TOML and Haskell map-like data
+types.
+
+See the &quot;Toml.Codec.Combinator.Map&quot; module documentation for the overview
+table and more examples.
+-}</span></span><span>
+</span><span id="line-112"></span><span>
+</span><span id="line-113"></span><span class="annot"><span class="hs-comment">{- $tuple
+TOML-specific combinators for converting between TOML and Haskell tuples.
+It's recommended to create your custom data types and implement codecs
+for them, but if you need to have tuples (e.g. for decoding different
+constructors of sum types), you can find codecs from this module
+helpful.
+
+See the &quot;Toml.Codec.Combinator.Tuple&quot; module documentation for the overview
+table and more examples.
+-}</span></span><span>
+</span><span id="line-123"></span><span>
+</span><span id="line-124"></span><span class="annot"><span class="hs-comment">{- $monoid
+TOML-specific combinators for converting between TOML and Haskell 'Monoid'
+wrapper data types. These codecs are especially handy when you are implementing
+the [Partial Options Monoid](https://medium.com/@jonathangfischoff/the-partial-options-monoid-pattern-31914a71fc67)
+pattern.
+
+See the &quot;Toml.Codec.Combinator.Monoid&quot; module documentation for the overview
+table and more examples.
+-}</span></span><span>
+</span><span id="line-133"></span><span>
+</span><span id="line-134"></span><span class="annot"><span class="hs-comment">{- $custom
+This module provides additional combinators that could help in the situation
+when some additional manipulations for the standard combinators is required.
+
+/For example,/ 'validate' allows to perform some custom validation on the codec
+before encoding. And 'enumBounded' is an automatical codec that uses 'Enum' and
+'Bounded' instances of the data type only and provides descriptive error
+messages at the same time.
+
+See the &quot;Toml.Codec.Combinator.Custom&quot; module documentation for the overview
+table and more examples.
+-}</span></span><span>
+</span><span id="line-146"></span><span>
+</span><span id="line-147"></span><span class="annot"><span class="hs-comment">{- $common
+This module implements common utilities for writing custom codecs
+without diving into internal implementation details. Most of the time
+you don't need to implement your own codecs and can reuse existing
+ones. But if you need something that library doesn't provide, you can
+find functions in this module useful.
+
+See the &quot;Toml.Codec.Combinator.Common&quot; module documentation for more examples.
+-}</span></span><span>
+</span><span id="line-156"></span></pre></body></html>

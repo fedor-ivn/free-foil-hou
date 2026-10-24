@@ -1,0 +1,226 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE CPP #-}</span><span>
+</span><span id="line-2"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">GhcUtil</span><span> </span><span class="hs-special">(</span><span class="annot"><a href="GhcUtil.html#withGhc"><span class="hs-identifier">withGhc</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-3"></span><span>
+</span><span id="line-4"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Imports.html"><span class="hs-identifier">Imports</span></a></span><span>
+</span><span id="line-5"></span><span>
+</span><span id="line-6"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">GHC.Paths</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">libdir</span></span><span class="hs-special">)</span><span>
+</span><span id="line-7"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">GHC</span></span><span class="hs-cpp">
+#if __GLASGOW_HASKELL__ &lt; 900
+</span><span class="hs-keyword">import</span><span>           </span><span class="hs-identifier">DynFlags</span><span> </span><span class="hs-special">(</span><span class="hs-identifier">gopt_set</span><span class="hs-special">)</span><span class="hs-cpp">
+#else
+</span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">GHC.Driver.Session</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">gopt_set</span></span><span class="hs-special">)</span><span class="hs-cpp">
+#endif
+</span><span class="hs-cpp">
+#if __GLASGOW_HASKELL__ &lt; 900
+</span><span class="hs-keyword">import</span><span>           </span><span class="hs-identifier">Panic</span><span> </span><span class="hs-special">(</span><span class="hs-identifier">throwGhcException</span><span class="hs-special">)</span><span class="hs-cpp">
+#else
+</span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">GHC.Utils.Panic</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">throwGhcException</span></span><span class="hs-special">)</span><span class="hs-cpp">
+#endif
+</span><span class="hs-cpp">
+#if __GLASGOW_HASKELL__ &lt; 900
+</span><span class="hs-keyword">import</span><span>           </span><span class="hs-identifier">MonadUtils</span><span> </span><span class="hs-special">(</span><span class="hs-identifier">liftIO</span><span class="hs-special">)</span><span class="hs-cpp">
+#else
+</span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">GHC.Utils.Monad</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">liftIO</span></span><span class="hs-special">)</span><span class="hs-cpp">
+#endif
+</span><span>
+</span><span id="line-26"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">System.Exit</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">exitFailure</span></span><span class="hs-special">)</span><span class="hs-cpp">
+
+#if __GLASGOW_HASKELL__ &lt; 801
+</span><span class="hs-keyword">import</span><span>           </span><span class="hs-identifier">StaticFlags</span><span> </span><span class="hs-special">(</span><span class="hs-identifier">discardStaticFlags</span><span class="hs-special">)</span><span class="hs-cpp">
+#endif
+</span><span>
+</span><span id="line-32"></span><span class="hs-comment">-- Catch GHC source errors, print them and exit.</span><span>
+</span><span id="line-33"></span><span id="local-6989586621679235678"><span class="annot"><a href="GhcUtil.html#handleSrcErrors"><span class="hs-identifier hs-type">handleSrcErrors</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ghc</span></span><span> </span><span class="annot"><a href="#local-6989586621679235678"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ghc</span></span><span> </span><span class="annot"><a href="#local-6989586621679235678"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-34"></span><span id="handleSrcErrors"><span class="annot"><span class="annottext">handleSrcErrors :: forall a. Ghc a -&gt; Ghc a
+</span><a href="GhcUtil.html#handleSrcErrors"><span class="hs-identifier hs-var hs-var">handleSrcErrors</span></a></span></span><span> </span><span id="local-6989586621679235766"><span class="annot"><span class="annottext">Ghc a
+</span><a href="#local-6989586621679235766"><span class="hs-identifier hs-var">action'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">((SourceError -&gt; Ghc a) -&gt; Ghc a -&gt; Ghc a)
+-&gt; Ghc a -&gt; (SourceError -&gt; Ghc a) -&gt; Ghc a
+forall a b c. (a -&gt; b -&gt; c) -&gt; b -&gt; a -&gt; c
+</span><span class="hs-identifier hs-var">flip</span></span><span> </span><span class="annot"><span class="annottext">(SourceError -&gt; Ghc a) -&gt; Ghc a -&gt; Ghc a
+forall (m :: * -&gt; *) a.
+MonadCatch m =&gt;
+(SourceError -&gt; m a) -&gt; m a -&gt; m a
+</span><span class="hs-identifier hs-var">handleSourceError</span></span><span> </span><span class="annot"><span class="annottext">Ghc a
+</span><a href="#local-6989586621679235766"><span class="hs-identifier hs-var">action'</span></a></span><span> </span><span class="annot"><span class="annottext">((SourceError -&gt; Ghc a) -&gt; Ghc a)
+-&gt; (SourceError -&gt; Ghc a) -&gt; Ghc a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-glyph">\</span><span id="local-6989586621679235769"><span class="annot"><span class="annottext">SourceError
+</span><a href="#local-6989586621679235769"><span class="hs-identifier hs-var">err</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-35"></span><span>  </span><span class="annot"><span class="annottext">SourceError -&gt; Ghc ()
+forall (m :: * -&gt; *).
+(HasLogger m, MonadIO m, HasDynFlags m) =&gt;
+SourceError -&gt; m ()
+</span><span class="hs-identifier hs-var">printException</span></span><span> </span><span class="annot"><span class="annottext">SourceError
+</span><a href="#local-6989586621679235769"><span class="hs-identifier hs-var">err</span></a></span><span>
+</span><span id="line-36"></span><span>  </span><span class="annot"><span class="annottext">IO a -&gt; Ghc a
+forall a. IO a -&gt; Ghc a
+forall (m :: * -&gt; *) a. MonadIO m =&gt; IO a -&gt; m a
+</span><span class="hs-identifier hs-var">liftIO</span></span><span> </span><span class="annot"><span class="annottext">IO a
+forall a. IO a
+</span><span class="hs-identifier hs-var">exitFailure</span></span><span>
+</span><span id="line-37"></span><span>
+</span><span id="line-38"></span><span class="annot"><span class="hs-comment">-- | Run a GHC action in Haddock mode</span></span><span>
+</span><span id="line-39"></span><span id="local-6989586621679235699"><span class="annot"><a href="GhcUtil.html#withGhc"><span class="hs-identifier hs-type">withGhc</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">(</span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Ghc</span></span><span> </span><span class="annot"><a href="#local-6989586621679235699"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="annot"><a href="#local-6989586621679235699"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-40"></span><span id="withGhc"><span class="annot"><span class="annottext">withGhc :: forall a. [String] -&gt; ([String] -&gt; Ghc a) -&gt; IO a
+</span><a href="GhcUtil.html#withGhc"><span class="hs-identifier hs-var hs-var">withGhc</span></a></span></span><span> </span><span id="local-6989586621679235775"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679235775"><span class="hs-identifier hs-var">flags</span></a></span></span><span> </span><span id="local-6989586621679235776"><span class="annot"><span class="annottext">[String] -&gt; Ghc a
+</span><a href="#local-6989586621679235776"><span class="hs-identifier hs-var">action</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-41"></span><span>  </span><span id="local-6989586621679235777"><span class="annot"><span class="annottext">[Located String]
+</span><a href="#local-6989586621679235777"><span class="hs-identifier hs-var">flags_</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[String] -&gt; IO [Located String]
+</span><a href="GhcUtil.html#handleStaticFlags"><span class="hs-identifier hs-var">handleStaticFlags</span></a></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679235775"><span class="hs-identifier hs-var">flags</span></a></span><span>
+</span><span id="line-42"></span><span>
+</span><span id="line-43"></span><span>  </span><span class="annot"><span class="annottext">Maybe String -&gt; Ghc a -&gt; IO a
+forall a. Maybe String -&gt; Ghc a -&gt; IO a
+</span><span class="hs-identifier hs-var">runGhc</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Maybe String
+forall a. a -&gt; Maybe a
+</span><span class="hs-identifier hs-var">Just</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-identifier hs-var">libdir</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">(Ghc a -&gt; IO a) -&gt; Ghc a -&gt; IO a
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="hs-keyword">do</span><span>
+</span><span id="line-44"></span><span>    </span><span class="annot"><span class="annottext">[Located String] -&gt; Ghc [String]
+forall (m :: * -&gt; *). GhcMonad m =&gt; [Located String] -&gt; m [String]
+</span><a href="GhcUtil.html#handleDynamicFlags"><span class="hs-identifier hs-var">handleDynamicFlags</span></a></span><span> </span><span class="annot"><span class="annottext">[Located String]
+</span><a href="#local-6989586621679235777"><span class="hs-identifier hs-var">flags_</span></a></span><span> </span><span class="annot"><span class="annottext">Ghc [String] -&gt; ([String] -&gt; Ghc a) -&gt; Ghc a
+forall a b. Ghc a -&gt; (a -&gt; Ghc b) -&gt; Ghc b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="annot"><span class="annottext">Ghc a -&gt; Ghc a
+forall a. Ghc a -&gt; Ghc a
+</span><a href="GhcUtil.html#handleSrcErrors"><span class="hs-identifier hs-var">handleSrcErrors</span></a></span><span> </span><span class="annot"><span class="annottext">(Ghc a -&gt; Ghc a) -&gt; ([String] -&gt; Ghc a) -&gt; [String] -&gt; Ghc a
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">[String] -&gt; Ghc a
+</span><a href="#local-6989586621679235776"><span class="hs-identifier hs-var">action</span></a></span><span>
+</span><span id="line-45"></span><span>
+</span><span id="line-46"></span><span class="annot"><a href="GhcUtil.html#handleStaticFlags"><span class="hs-identifier hs-type">handleStaticFlags</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">IO</span></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Located</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span class="hs-cpp">
+#if __GLASGOW_HASKELL__ &lt; 801
+</span><span class="hs-identifier">handleStaticFlags</span><span> </span><span class="hs-identifier">flags</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-identifier">return</span><span> </span><span class="hs-operator">$</span><span> </span><span class="hs-identifier">map</span><span> </span><span class="hs-identifier">noLoc</span><span> </span><span class="hs-operator">$</span><span> </span><span class="hs-identifier">discardStaticFlags</span><span> </span><span class="hs-identifier">flags</span><span class="hs-cpp">
+#else
+</span><span id="handleStaticFlags"><span class="annot"><span class="annottext">handleStaticFlags :: [String] -&gt; IO [Located String]
+</span><a href="GhcUtil.html#handleStaticFlags"><span class="hs-identifier hs-var hs-var">handleStaticFlags</span></a></span></span><span> </span><span id="local-6989586621679235782"><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679235782"><span class="hs-identifier hs-var">flags</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">[Located String] -&gt; IO [Located String]
+forall a. a -&gt; IO a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">([Located String] -&gt; IO [Located String])
+-&gt; [Located String] -&gt; IO [Located String]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">(String -&gt; Located String) -&gt; [String] -&gt; [Located String]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; Located String
+forall e. e -&gt; Located e
+</span><span class="hs-identifier hs-var">noLoc</span></span><span> </span><span class="annot"><span class="annottext">([String] -&gt; [Located String]) -&gt; [String] -&gt; [Located String]
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679235782"><span class="hs-identifier hs-var">flags</span></a></span><span class="hs-cpp">
+#endif
+</span><span>
+</span><span id="line-53"></span><span id="local-6989586621679235705"><span class="annot"><a href="GhcUtil.html#handleDynamicFlags"><span class="hs-identifier hs-type">handleDynamicFlags</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">GhcMonad</span></span><span> </span><span class="annot"><a href="#local-6989586621679235705"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">Located</span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679235705"><span class="hs-identifier hs-type">m</span></a></span><span> </span><span class="hs-special">[</span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span class="hs-special">]</span></span><span>
+</span><span id="line-54"></span><span id="handleDynamicFlags"><span class="annot"><span class="annottext">handleDynamicFlags :: forall (m :: * -&gt; *). GhcMonad m =&gt; [Located String] -&gt; m [String]
+</span><a href="GhcUtil.html#handleDynamicFlags"><span class="hs-identifier hs-var hs-var">handleDynamicFlags</span></a></span></span><span> </span><span id="local-6989586621679235808"><span class="annot"><span class="annottext">[Located String]
+</span><a href="#local-6989586621679235808"><span class="hs-identifier hs-var">flags</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">do</span><span class="hs-cpp">
+#if __GLASGOW_HASKELL__ &gt;= 901
+</span><span>  </span><span id="local-6989586621679235809"><span class="annot"><span class="annottext">Logger
+</span><a href="#local-6989586621679235809"><span class="hs-identifier hs-var">logger</span></a></span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">m Logger
+forall (m :: * -&gt; *). HasLogger m =&gt; m Logger
+</span><span class="hs-identifier hs-var">getLogger</span></span><span>
+</span><span id="line-57"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679235815"><span class="annot"><span class="annottext">parseDynamicFlags' :: DynFlags
+-&gt; [Located String]
+-&gt; m (DynFlags, [Located String], Messages DriverMessage)
+</span><a href="#local-6989586621679235815"><span class="hs-identifier hs-var hs-var">parseDynamicFlags'</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Logger
+-&gt; DynFlags
+-&gt; [Located String]
+-&gt; m (DynFlags, [Located String], Messages DriverMessage)
+forall (m :: * -&gt; *).
+MonadIO m =&gt;
+Logger
+-&gt; DynFlags
+-&gt; [Located String]
+-&gt; m (DynFlags, [Located String], Messages DriverMessage)
+</span><span class="hs-identifier hs-var">parseDynamicFlags</span></span><span> </span><span class="annot"><span class="annottext">Logger
+</span><a href="#local-6989586621679235809"><span class="hs-identifier hs-var">logger</span></a></span><span class="hs-cpp">
+#else
+</span><span>  </span><span class="hs-keyword">let</span><span> </span><span class="hs-identifier">parseDynamicFlags'</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-identifier">parseDynamicFlags</span><span class="hs-cpp">
+#endif
+</span><span>  </span><span class="hs-special">(</span><span id="local-6989586621679235817"><span class="annot"><span class="annottext">DynFlags
+</span><a href="#local-6989586621679235817"><span class="hs-identifier hs-var">dynflags</span></a></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679235818"><span class="annot"><span class="annottext">[Located String]
+</span><a href="#local-6989586621679235818"><span class="hs-identifier hs-var">locSrcs</span></a></span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="annottext">Messages DriverMessage
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">DynFlags -&gt; DynFlags
+</span><a href="GhcUtil.html#setHaddockMode"><span class="hs-identifier hs-var">setHaddockMode</span></a></span><span> </span><span class="annot"><span class="annottext">(DynFlags -&gt; DynFlags) -&gt; m DynFlags -&gt; m DynFlags
+forall a b. (a -&gt; b) -&gt; m a -&gt; m b
+forall (f :: * -&gt; *) a b. Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+</span><span class="hs-operator hs-var">`fmap`</span></span><span> </span><span class="annot"><span class="annottext">m DynFlags
+forall (m :: * -&gt; *). GhcMonad m =&gt; m DynFlags
+</span><span class="hs-identifier hs-var">getSessionDynFlags</span></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">m DynFlags
+-&gt; (DynFlags
+    -&gt; m (DynFlags, [Located String], Messages DriverMessage))
+-&gt; m (DynFlags, [Located String], Messages DriverMessage)
+forall a b. m a -&gt; (a -&gt; m b) -&gt; m b
+forall (m :: * -&gt; *) a b. Monad m =&gt; m a -&gt; (a -&gt; m b) -&gt; m b
+</span><span class="hs-operator hs-var">&gt;&gt;=</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">DynFlags
+-&gt; [Located String]
+-&gt; m (DynFlags, [Located String], Messages DriverMessage)
+</span><a href="#local-6989586621679235815"><span class="hs-operator hs-var">`parseDynamicFlags'`</span></a></span><span> </span><span class="annot"><span class="annottext">[Located String]
+</span><a href="#local-6989586621679235808"><span class="hs-identifier hs-var">flags</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-62"></span><span>  </span><span class="annot"><span class="annottext">()
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">DynFlags -&gt; m ()
+forall (m :: * -&gt; *).
+(HasCallStack, GhcMonad m) =&gt;
+DynFlags -&gt; m ()
+</span><span class="hs-identifier hs-var">setSessionDynFlags</span></span><span> </span><span class="annot"><span class="annottext">DynFlags
+</span><a href="#local-6989586621679235817"><span class="hs-identifier hs-var">dynflags</span></a></span><span>
+</span><span id="line-63"></span><span>
+</span><span id="line-64"></span><span>  </span><span class="hs-comment">-- We basically do the same thing as `ghc/Main.hs` to distinguish</span><span>
+</span><span id="line-65"></span><span>  </span><span class="hs-comment">-- &quot;unrecognised flags&quot; from source files.</span><span>
+</span><span id="line-66"></span><span>  </span><span class="hs-keyword">let</span><span> </span><span id="local-6989586621679235822"><span class="annot"><span class="annottext">srcs :: [String]
+</span><a href="#local-6989586621679235822"><span class="hs-identifier hs-var hs-var">srcs</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">(Located String -&gt; String) -&gt; [Located String] -&gt; [String]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="annot"><span class="annottext">Located String -&gt; String
+forall l e. GenLocated l e -&gt; e
+</span><span class="hs-identifier hs-var">unLoc</span></span><span> </span><span class="annot"><span class="annottext">[Located String]
+</span><a href="#local-6989586621679235818"><span class="hs-identifier hs-var">locSrcs</span></a></span><span>
+</span><span id="line-67"></span><span>      </span><span id="local-6989586621679235824"><span class="annot"><span class="annottext">unknown_opts :: [String]
+</span><a href="#local-6989586621679235824"><span class="hs-identifier hs-var hs-var">unknown_opts</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">[</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235825"><span class="hs-identifier hs-var">f</span></a></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="local-6989586621679235825"><span class="annot"><span class="annottext">f :: String
+</span><a href="#local-6989586621679235825"><span class="hs-identifier hs-var">f</span></a></span></span><span class="hs-glyph">@</span><span class="hs-special">(</span><span class="annot"><span class="annottext">Char
+</span><span class="hs-char">'-'</span></span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span class="annot"><span class="annottext">String
+</span><span class="hs-identifier">_</span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">&lt;-</span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679235822"><span class="hs-identifier hs-var">srcs</span></a></span><span> </span><span class="hs-special">]</span><span>
+</span><span id="line-68"></span><span>  </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679235824"><span class="hs-identifier hs-var">unknown_opts</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-69"></span><span>    </span><span id="local-6989586621679235826"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235826"><span class="hs-identifier hs-var">opt</span></a></span></span><span> </span><span class="annot"><span class="hs-glyph hs-type">:</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">GhcException -&gt; m [String]
+forall a. GhcException -&gt; a
+</span><span class="hs-identifier hs-var">throwGhcException</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; GhcException
+</span><span class="hs-identifier hs-var">UsageError</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;unrecognized option `&quot;</span></span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679235826"><span class="hs-identifier hs-var">opt</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; String -&gt; String
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;'&quot;</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span>
+</span><span id="line-70"></span><span>    </span><span class="annot"><span class="annottext">[String]
+</span><span class="hs-identifier">_</span></span><span>       </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">[String] -&gt; m [String]
+forall a. a -&gt; m a
+forall (m :: * -&gt; *) a. Monad m =&gt; a -&gt; m a
+</span><span class="hs-identifier hs-var">return</span></span><span> </span><span class="annot"><span class="annottext">[String]
+</span><a href="#local-6989586621679235822"><span class="hs-identifier hs-var">srcs</span></a></span><span>
+</span><span id="line-71"></span><span>
+</span><span id="line-72"></span><span class="annot"><a href="GhcUtil.html#setHaddockMode"><span class="hs-identifier hs-type">setHaddockMode</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">DynFlags</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">DynFlags</span></span><span>
+</span><span id="line-73"></span><span id="setHaddockMode"><span class="annot"><span class="annottext">setHaddockMode :: DynFlags -&gt; DynFlags
+</span><a href="GhcUtil.html#setHaddockMode"><span class="hs-identifier hs-var hs-var">setHaddockMode</span></a></span></span><span> </span><span id="local-6989586621679235828"><span class="annot"><span class="annottext">DynFlags
+</span><a href="#local-6989586621679235828"><span class="hs-identifier hs-var">dynflags</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">DynFlags -&gt; GeneralFlag -&gt; DynFlags
+</span><span class="hs-identifier hs-var">gopt_set</span></span><span> </span><span class="annot"><span class="annottext">DynFlags
+</span><a href="#local-6989586621679235828"><span class="hs-identifier hs-var">dynflags</span></a></span><span> </span><span class="annot"><span class="annottext">GeneralFlag
+</span><span class="hs-identifier hs-var">Opt_Haddock</span></span><span class="hs-special">)</span><span> </span><span class="hs-special">{</span><span class="hs-cpp">
+#if __GLASGOW_HASKELL__ &gt;= 906
+</span><span>      </span><span class="annot"><span class="hs-identifier hs-var">backend</span></span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">noBackend</span></span><span class="hs-cpp">
+#elif __GLASGOW_HASKELL__ &gt;= 901
+</span><span>      </span><span class="hs-identifier">backend</span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="hs-identifier">NoBackend</span><span class="hs-cpp">
+#else
+</span><span>      </span><span class="hs-identifier">hscTarget</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-identifier">HscNothing</span><span class="hs-cpp">
+#endif
+</span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-var">ghcMode</span></span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">CompManager</span></span><span>
+</span><span id="line-82"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier hs-var">ghcLink</span></span><span>   </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">NoLink</span></span><span>
+</span><span id="line-83"></span><span>    </span><span class="hs-special">}</span><span>
+</span><span id="line-84"></span></pre></body></html>

@@ -1,0 +1,207 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="hs-pragma">{-# LANGUAGE CPP #-}</span><span>
+</span><span id="line-2"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Location</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-3"></span><span>
+</span><span id="line-4"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><a href="Imports.html"><span class="hs-identifier">Imports</span></a></span><span>
+</span><span id="line-5"></span><span>
+</span><span id="line-6"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">Control.DeepSeq</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">deepseq</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">NFData</span></span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">rnf</span></span><span class="hs-special">)</span><span class="hs-special">)</span><span class="hs-cpp">
+
+#if __GLASGOW_HASKELL__ &lt; 900
+</span><span class="hs-keyword">import</span><span>           </span><span class="hs-identifier">SrcLoc</span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="hs-identifier">Located</span><span class="hs-special">)</span><span>
+</span><span id="line-10"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="hs-identifier">SrcLoc</span><span> </span><span class="hs-keyword">as</span><span> </span><span class="hs-identifier">GHC</span><span>
+</span><span id="line-11"></span><span class="hs-keyword">import</span><span>           </span><span class="hs-identifier">FastString</span><span> </span><span class="hs-special">(</span><span class="hs-identifier">unpackFS</span><span class="hs-special">)</span><span class="hs-cpp">
+#else
+</span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">GHC.Types.SrcLoc</span></span><span> </span><span class="hs-keyword">hiding</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Located</span></span><span class="hs-special">)</span><span>
+</span><span id="line-14"></span><span class="hs-keyword">import</span><span> </span><span class="hs-keyword">qualified</span><span> </span><span class="annot"><span class="hs-identifier">GHC.Types.SrcLoc</span></span><span> </span><span class="hs-keyword">as</span><span> </span><span class="annot"><span class="hs-identifier">GHC</span></span><span>
+</span><span id="line-15"></span><span class="hs-keyword">import</span><span>           </span><span class="annot"><span class="hs-identifier">GHC.Data.FastString</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">unpackFS</span></span><span class="hs-special">)</span><span class="hs-cpp">
+#endif
+</span><span>
+</span><span id="line-18"></span><span class="annot"><span class="hs-comment">-- | A thing with a location attached.</span></span><span>
+</span><span id="line-19"></span><span class="hs-keyword">data</span><span> </span><span id="Located"><span class="annot"><a href="Location.html#Located"><span class="hs-identifier hs-var">Located</span></a></span></span><span> </span><span id="local-6989586621679236517"><span class="annot"><a href="#local-6989586621679236517"><span class="hs-identifier hs-type">a</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="Located"><span class="annot"><a href="Location.html#Located"><span class="hs-identifier hs-var">Located</span></a></span></span><span> </span><span class="annot"><a href="Location.html#Location"><span class="hs-identifier hs-type">Location</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679236517"><span class="hs-identifier hs-type">a</span></a></span><span>
+</span><span id="line-20"></span><span>  </span><span class="hs-keyword">deriving</span><span> </span><span class="hs-special">(</span><span id="local-6989586621679236548"><span id="local-6989586621679236553"><span class="annot"><span class="annottext">Located a -&gt; Located a -&gt; Bool
+(Located a -&gt; Located a -&gt; Bool)
+-&gt; (Located a -&gt; Located a -&gt; Bool) -&gt; Eq (Located a)
+forall a. Eq a =&gt; Located a -&gt; Located a -&gt; Bool
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: forall a. Eq a =&gt; Located a -&gt; Located a -&gt; Bool
+== :: Located a -&gt; Located a -&gt; Bool
+$c/= :: forall a. Eq a =&gt; Located a -&gt; Located a -&gt; Bool
+/= :: Located a -&gt; Located a -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679236559"><span id="local-6989586621679236566"><span id="local-6989586621679236570"><span class="annot"><span class="annottext">Line -&gt; Located a -&gt; ShowS
+[Located a] -&gt; ShowS
+Located a -&gt; String
+(Line -&gt; Located a -&gt; ShowS)
+-&gt; (Located a -&gt; String)
+-&gt; ([Located a] -&gt; ShowS)
+-&gt; Show (Located a)
+forall a. Show a =&gt; Line -&gt; Located a -&gt; ShowS
+forall a. Show a =&gt; [Located a] -&gt; ShowS
+forall a. Show a =&gt; Located a -&gt; String
+forall a.
+(Line -&gt; a -&gt; ShowS) -&gt; (a -&gt; String) -&gt; ([a] -&gt; ShowS) -&gt; Show a
+$cshowsPrec :: forall a. Show a =&gt; Line -&gt; Located a -&gt; ShowS
+showsPrec :: Line -&gt; Located a -&gt; ShowS
+$cshow :: forall a. Show a =&gt; Located a -&gt; String
+show :: Located a -&gt; String
+$cshowList :: forall a. Show a =&gt; [Located a] -&gt; ShowS
+showList :: [Located a] -&gt; ShowS
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var hs-var hs-var">Show</span></span></span></span></span><span class="hs-special">,</span><span> </span><span id="local-6989586621679236574"><span id="local-6989586621679236576"><span class="annot"><span class="annottext">(forall a b. (a -&gt; b) -&gt; Located a -&gt; Located b)
+-&gt; (forall a b. a -&gt; Located b -&gt; Located a) -&gt; Functor Located
+forall a b. a -&gt; Located b -&gt; Located a
+forall a b. (a -&gt; b) -&gt; Located a -&gt; Located b
+forall (f :: * -&gt; *).
+(forall a b. (a -&gt; b) -&gt; f a -&gt; f b)
+-&gt; (forall a b. a -&gt; f b -&gt; f a) -&gt; Functor f
+$cfmap :: forall a b. (a -&gt; b) -&gt; Located a -&gt; Located b
+fmap :: forall a b. (a -&gt; b) -&gt; Located a -&gt; Located b
+$c&lt;$ :: forall a b. a -&gt; Located b -&gt; Located a
+&lt;$ :: forall a b. a -&gt; Located b -&gt; Located a
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Functor</span></span></span></span><span class="hs-special">)</span><span>
+</span><span id="line-21"></span><span>
+</span><span id="line-22"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679236509"><span class="annot"><span class="hs-identifier hs-type">NFData</span></span><span> </span><span class="annot"><a href="#local-6989586621679236509"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">=&gt;</span><span> </span><span class="annot"><span class="hs-identifier hs-type">NFData</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Location.html#Located"><span class="hs-identifier hs-type">Located</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679236509"><span class="hs-identifier hs-type">a</span></a></span><span class="hs-special">)</span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-23"></span><span>  </span><span id="local-6989586621679236586"><span class="annot"><span class="annottext">rnf :: Located a -&gt; ()
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">rnf</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Location.html#Located"><span class="hs-identifier hs-type">Located</span></a></span><span> </span><span id="local-6989586621679236587"><span class="annot"><span class="annottext">Location
+</span><a href="#local-6989586621679236587"><span class="hs-identifier hs-var">loc</span></a></span></span><span> </span><span id="local-6989586621679236588"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679236588"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Location
+</span><a href="#local-6989586621679236587"><span class="hs-identifier hs-var">loc</span></a></span><span> </span><span class="annot"><span class="annottext">Location -&gt; () -&gt; ()
+forall a b. NFData a =&gt; a -&gt; b -&gt; b
+</span><span class="hs-operator hs-var">`deepseq`</span></span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679236588"><span class="hs-identifier hs-var">a</span></a></span><span> </span><span class="annot"><span class="annottext">a -&gt; () -&gt; ()
+forall a b. NFData a =&gt; a -&gt; b -&gt; b
+</span><span class="hs-operator hs-var">`deepseq`</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-24"></span><span>
+</span><span id="line-25"></span><span class="annot"><span class="hs-comment">-- | Convert a GHC located thing to a located thing.</span></span><span>
+</span><span id="line-26"></span><span id="local-6989586621679236512"><span class="annot"><a href="Location.html#toLocated"><span class="hs-identifier hs-type">toLocated</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">GHC.Located</span></span><span> </span><span class="annot"><a href="#local-6989586621679236512"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Location.html#Located"><span class="hs-identifier hs-type">Located</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679236512"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-27"></span><span id="toLocated"><span class="annot"><span class="annottext">toLocated :: forall a. Located a -&gt; Located a
+</span><a href="Location.html#toLocated"><span class="hs-identifier hs-var hs-var">toLocated</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier hs-type">L</span></span><span> </span><span id="local-6989586621679236591"><span class="annot"><span class="annottext">SrcSpan
+</span><a href="#local-6989586621679236591"><span class="hs-identifier hs-var">loc</span></a></span></span><span> </span><span id="local-6989586621679236592"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679236592"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Location -&gt; a -&gt; Located a
+forall a. Location -&gt; a -&gt; Located a
+</span><a href="Location.html#Located"><span class="hs-identifier hs-var">Located</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">SrcSpan -&gt; Location
+</span><a href="Location.html#toLocation"><span class="hs-identifier hs-var">toLocation</span></a></span><span> </span><span class="annot"><span class="annottext">SrcSpan
+</span><a href="#local-6989586621679236591"><span class="hs-identifier hs-var">loc</span></a></span><span class="hs-special">)</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679236592"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span class="annot"><span class="hs-comment">-- | Discard location information.</span></span><span>
+</span><span id="line-30"></span><span id="local-6989586621679236518"><span class="annot"><a href="Location.html#unLoc"><span class="hs-identifier hs-type">unLoc</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Location.html#Located"><span class="hs-identifier hs-type">Located</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679236518"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="#local-6989586621679236518"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-31"></span><span id="unLoc"><span class="annot"><span class="annottext">unLoc :: forall a. Located a -&gt; a
+</span><a href="Location.html#unLoc"><span class="hs-identifier hs-var hs-var">unLoc</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Location.html#Located"><span class="hs-identifier hs-type">Located</span></a></span><span> </span><span class="annot"><span class="annottext">Location
+</span><span class="hs-identifier">_</span></span><span> </span><span id="local-6989586621679236595"><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679236595"><span class="hs-identifier hs-var">a</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">a
+</span><a href="#local-6989586621679236595"><span class="hs-identifier hs-var">a</span></a></span><span>
+</span><span id="line-32"></span><span>
+</span><span id="line-33"></span><span class="annot"><span class="hs-comment">-- | Add dummy location information.</span></span><span>
+</span><span id="line-34"></span><span id="local-6989586621679236520"><span class="annot"><a href="Location.html#noLocation"><span class="hs-identifier hs-type">noLocation</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="#local-6989586621679236520"><span class="hs-identifier hs-type">a</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Location.html#Located"><span class="hs-identifier hs-type">Located</span></a></span><span> </span><span class="annot"><a href="#local-6989586621679236520"><span class="hs-identifier hs-type">a</span></a></span></span><span>
+</span><span id="line-35"></span><span id="noLocation"><span class="annot"><span class="annottext">noLocation :: forall a. a -&gt; Located a
+</span><a href="Location.html#noLocation"><span class="hs-identifier hs-var hs-var">noLocation</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">Location -&gt; a -&gt; Located a
+forall a. Location -&gt; a -&gt; Located a
+</span><a href="Location.html#Located"><span class="hs-identifier hs-var">Located</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Location
+</span><a href="Location.html#UnhelpfulLocation"><span class="hs-identifier hs-var">UnhelpfulLocation</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;&lt;no location info&gt;&quot;</span></span><span class="hs-special">)</span><span>
+</span><span id="line-36"></span><span>
+</span><span id="line-37"></span><span class="annot"><span class="hs-comment">-- | A line number.</span></span><span>
+</span><span id="line-38"></span><span class="hs-keyword">type</span><span> </span><span id="Line"><span class="annot"><a href="Location.html#Line"><span class="hs-identifier hs-var">Line</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="hs-identifier hs-type">Int</span></span><span>
+</span><span id="line-39"></span><span>
+</span><span id="line-40"></span><span class="annot"><span class="hs-comment">-- | A combination of file name and line number.</span></span><span>
+</span><span id="line-41"></span><span class="hs-keyword">data</span><span> </span><span id="Location"><span class="annot"><a href="Location.html#Location"><span class="hs-identifier hs-var">Location</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span id="UnhelpfulLocation"><span class="annot"><a href="Location.html#UnhelpfulLocation"><span class="hs-identifier hs-var">UnhelpfulLocation</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">String</span></span><span> </span><span class="hs-glyph">|</span><span> </span><span id="Location"><span class="annot"><a href="Location.html#Location"><span class="hs-identifier hs-var">Location</span></a></span></span><span> </span><span class="annot"><span class="hs-identifier hs-type">FilePath</span></span><span> </span><span class="annot"><a href="Location.html#Line"><span class="hs-identifier hs-type">Line</span></a></span><span>
+</span><span id="line-42"></span><span>  </span><span class="hs-keyword">deriving</span><span> </span><span id="local-6989586621679236601"><span id="local-6989586621679236609"><span class="annot"><span class="annottext">Location -&gt; Location -&gt; Bool
+(Location -&gt; Location -&gt; Bool)
+-&gt; (Location -&gt; Location -&gt; Bool) -&gt; Eq Location
+forall a. (a -&gt; a -&gt; Bool) -&gt; (a -&gt; a -&gt; Bool) -&gt; Eq a
+$c== :: Location -&gt; Location -&gt; Bool
+== :: Location -&gt; Location -&gt; Bool
+$c/= :: Location -&gt; Location -&gt; Bool
+/= :: Location -&gt; Location -&gt; Bool
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var hs-var hs-var">Eq</span></span></span></span><span>
+</span><span id="line-43"></span><span>
+</span><span id="line-44"></span><span class="hs-keyword">instance</span><span> </span><span id="local-6989586621679236613"><span id="local-6989586621679236617"><span class="annot"><span class="hs-identifier hs-type">Show</span></span><span> </span><span class="annot"><a href="Location.html#Location"><span class="hs-identifier hs-type">Location</span></a></span></span></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-45"></span><span>  </span><span id="local-6989586621679236621"><span class="annot"><span class="annottext">show :: Location -&gt; String
+</span><a href="#local-6989586621679236621"><span class="hs-identifier hs-var hs-var hs-var hs-var">show</span></a></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Location.html#UnhelpfulLocation"><span class="hs-identifier hs-type">UnhelpfulLocation</span></a></span><span> </span><span id="local-6989586621679236623"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236623"><span class="hs-identifier hs-var">s</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236623"><span class="hs-identifier hs-var">s</span></a></span><span>
+</span><span id="line-46"></span><span>  </span><span class="annot"><span class="hs-identifier hs-var">show</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Location.html#Location"><span class="hs-identifier hs-type">Location</span></a></span><span> </span><span id="local-6989586621679236624"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236624"><span class="hs-identifier hs-var">file</span></a></span></span><span> </span><span id="local-6989586621679236625"><span class="annot"><span class="annottext">Line
+</span><a href="#local-6989586621679236625"><span class="hs-identifier hs-var">line</span></a></span></span><span class="hs-special">)</span><span>  </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236624"><span class="hs-identifier hs-var">file</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-string">&quot;:&quot;</span></span><span> </span><span class="annot"><span class="annottext">String -&gt; ShowS
+forall a. [a] -&gt; [a] -&gt; [a]
+</span><span class="hs-operator hs-var">++</span></span><span> </span><span class="annot"><span class="annottext">Line -&gt; String
+forall a. Show a =&gt; a -&gt; String
+</span><span class="hs-identifier hs-var">show</span></span><span> </span><span class="annot"><span class="annottext">Line
+</span><a href="#local-6989586621679236625"><span class="hs-identifier hs-var">line</span></a></span><span>
+</span><span id="line-47"></span><span>
+</span><span id="line-48"></span><span class="hs-keyword">instance</span><span> </span><span class="annot"><span class="hs-identifier hs-type">NFData</span></span><span> </span><span class="annot"><a href="Location.html#Location"><span class="hs-identifier hs-type">Location</span></a></span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-49"></span><span>  </span><span id="local-6989586621679236634"><span class="annot"><span class="annottext">rnf :: Location -&gt; ()
+</span><span class="hs-identifier hs-var hs-var hs-var hs-var">rnf</span></span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Location.html#UnhelpfulLocation"><span class="hs-identifier hs-type">UnhelpfulLocation</span></a></span><span> </span><span id="local-6989586621679236635"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236635"><span class="hs-identifier hs-var">str</span></a></span></span><span class="hs-special">)</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236635"><span class="hs-identifier hs-var">str</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; () -&gt; ()
+forall a b. NFData a =&gt; a -&gt; b -&gt; b
+</span><span class="hs-operator hs-var">`deepseq`</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-50"></span><span>  </span><span class="annot"><span class="hs-identifier hs-var">rnf</span></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Location.html#Location"><span class="hs-identifier hs-type">Location</span></a></span><span> </span><span id="local-6989586621679236636"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236636"><span class="hs-identifier hs-var">file</span></a></span></span><span> </span><span id="local-6989586621679236637"><span class="annot"><span class="annottext">Line
+</span><a href="#local-6989586621679236637"><span class="hs-identifier hs-var">line</span></a></span></span><span class="hs-special">)</span><span>    </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236636"><span class="hs-identifier hs-var">file</span></a></span><span> </span><span class="annot"><span class="annottext">String -&gt; () -&gt; ()
+forall a b. NFData a =&gt; a -&gt; b -&gt; b
+</span><span class="hs-operator hs-var">`deepseq`</span></span><span> </span><span class="annot"><span class="annottext">Line
+</span><a href="#local-6989586621679236637"><span class="hs-identifier hs-var">line</span></a></span><span> </span><span class="annot"><span class="annottext">Line -&gt; () -&gt; ()
+forall a b. NFData a =&gt; a -&gt; b -&gt; b
+</span><span class="hs-operator hs-var">`deepseq`</span></span><span> </span><span class="hs-special">(</span><span class="hs-special">)</span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span class="hs-comment">-- |</span><span>
+</span><span id="line-53"></span><span class="hs-comment">-- Create a list from a location, by repeatedly increasing the line number by</span><span>
+</span><span id="line-54"></span><span class="hs-comment">-- one.</span><span>
+</span><span id="line-55"></span><span class="annot"><a href="Location.html#enumerate"><span class="hs-identifier hs-type">enumerate</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Location.html#Location"><span class="hs-identifier hs-type">Location</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-special">[</span><span class="annot"><a href="Location.html#Location"><span class="hs-identifier hs-type">Location</span></a></span><span class="hs-special">]</span><span>
+</span><span id="line-56"></span><span id="enumerate"><span class="annot"><span class="annottext">enumerate :: Location -&gt; [Location]
+</span><a href="Location.html#enumerate"><span class="hs-identifier hs-var hs-var">enumerate</span></a></span></span><span> </span><span id="local-6989586621679236639"><span class="annot"><span class="annottext">Location
+</span><a href="#local-6989586621679236639"><span class="hs-identifier hs-var">loc</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">Location
+</span><a href="#local-6989586621679236639"><span class="hs-identifier hs-var">loc</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-57"></span><span>  </span><span class="annot"><a href="Location.html#UnhelpfulLocation"><span class="hs-identifier hs-type">UnhelpfulLocation</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><span class="hs-identifier">_</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">Location -&gt; [Location]
+forall a. a -&gt; [a]
+</span><span class="hs-identifier hs-var">repeat</span></span><span> </span><span class="annot"><span class="annottext">Location
+</span><a href="#local-6989586621679236639"><span class="hs-identifier hs-var">loc</span></a></span><span>
+</span><span id="line-58"></span><span>  </span><span class="annot"><a href="Location.html#Location"><span class="hs-identifier hs-type">Location</span></a></span><span> </span><span id="local-6989586621679236641"><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236641"><span class="hs-identifier hs-var">file</span></a></span></span><span> </span><span id="local-6989586621679236642"><span class="annot"><span class="annottext">Line
+</span><a href="#local-6989586621679236642"><span class="hs-identifier hs-var">line</span></a></span></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">(Line -&gt; Location) -&gt; [Line] -&gt; [Location]
+forall a b. (a -&gt; b) -&gt; [a] -&gt; [b]
+</span><span class="hs-identifier hs-var">map</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">String -&gt; Line -&gt; Location
+</span><a href="Location.html#Location"><span class="hs-identifier hs-var">Location</span></a></span><span> </span><span class="annot"><span class="annottext">String
+</span><a href="#local-6989586621679236641"><span class="hs-identifier hs-var">file</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">[</span><span class="annot"><span class="annottext">Line
+</span><a href="#local-6989586621679236642"><span class="hs-identifier hs-var">line</span></a></span><span> </span><span class="hs-glyph">..</span><span class="hs-special">]</span><span>
+</span><span id="line-59"></span><span>
+</span><span id="line-60"></span><span class="annot"><span class="hs-comment">-- | Convert a GHC source span to a location.</span></span><span>
+</span><span id="line-61"></span><span class="annot"><a href="Location.html#toLocation"><span class="hs-identifier hs-type">toLocation</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><span class="hs-identifier hs-type">SrcSpan</span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Location.html#Location"><span class="hs-identifier hs-type">Location</span></a></span><span class="hs-cpp">
+#if __GLASGOW_HASKELL__ &lt; 900
+</span><span class="hs-identifier">toLocation</span><span> </span><span class="hs-identifier">loc</span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="hs-identifier">loc</span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-64"></span><span>  </span><span class="hs-identifier">UnhelpfulSpan</span><span> </span><span class="hs-identifier">str</span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-identifier">UnhelpfulLocation</span><span> </span><span class="hs-special">(</span><span class="hs-identifier">unpackFS</span><span> </span><span class="hs-identifier">str</span><span class="hs-special">)</span><span>
+</span><span id="line-65"></span><span>  </span><span class="hs-identifier">RealSrcSpan</span><span> </span><span class="hs-identifier">sp</span><span>    </span><span class="hs-glyph">-&gt;</span><span> </span><span class="hs-identifier">Location</span><span> </span><span class="hs-special">(</span><span class="hs-identifier">unpackFS</span><span> </span><span class="hs-operator">.</span><span> </span><span class="hs-identifier">srcSpanFile</span><span> </span><span class="hs-operator">$</span><span> </span><span class="hs-identifier">sp</span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="hs-identifier">srcSpanStartLine</span><span> </span><span class="hs-identifier">sp</span><span class="hs-special">)</span><span class="hs-cpp">
+#else
+</span><span id="toLocation"><span class="annot"><span class="annottext">toLocation :: SrcSpan -&gt; Location
+</span><a href="Location.html#toLocation"><span class="hs-identifier hs-var hs-var">toLocation</span></a></span></span><span> </span><span id="local-6989586621679236643"><span class="annot"><span class="annottext">SrcSpan
+</span><a href="#local-6989586621679236643"><span class="hs-identifier hs-var">loc</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="hs-keyword">case</span><span> </span><span class="annot"><span class="annottext">SrcSpan
+</span><a href="#local-6989586621679236643"><span class="hs-identifier hs-var">loc</span></a></span><span> </span><span class="hs-keyword">of</span><span>
+</span><span id="line-68"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">UnhelpfulSpan</span></span><span> </span><span id="local-6989586621679236645"><span class="annot"><span class="annottext">UnhelpfulSpanReason
+</span><a href="#local-6989586621679236645"><span class="hs-identifier hs-var">str</span></a></span></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; Location
+</span><a href="Location.html#UnhelpfulLocation"><span class="hs-identifier hs-var">UnhelpfulLocation</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">FastString -&gt; String
+</span><span class="hs-identifier hs-var">unpackFS</span></span><span> </span><span class="annot"><span class="annottext">(FastString -&gt; String) -&gt; FastString -&gt; String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">UnhelpfulSpanReason -&gt; FastString
+</span><span class="hs-identifier hs-var">unhelpfulSpanFS</span></span><span> </span><span class="annot"><span class="annottext">UnhelpfulSpanReason
+</span><a href="#local-6989586621679236645"><span class="hs-identifier hs-var">str</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-69"></span><span>  </span><span class="annot"><span class="hs-identifier hs-type">RealSrcSpan</span></span><span> </span><span id="local-6989586621679236648"><span class="annot"><span class="annottext">RealSrcSpan
+</span><a href="#local-6989586621679236648"><span class="hs-identifier hs-var">sp</span></a></span></span><span> </span><span class="annot"><span class="annottext">Maybe BufSpan
+</span><span class="hs-identifier">_</span></span><span>  </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><span class="annottext">String -&gt; Line -&gt; Location
+</span><a href="Location.html#Location"><span class="hs-identifier hs-var">Location</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">FastString -&gt; String
+</span><span class="hs-identifier hs-var">unpackFS</span></span><span> </span><span class="annot"><span class="annottext">(FastString -&gt; String)
+-&gt; (RealSrcSpan -&gt; FastString) -&gt; RealSrcSpan -&gt; String
+forall b c a. (b -&gt; c) -&gt; (a -&gt; b) -&gt; a -&gt; c
+</span><span class="hs-operator hs-var">.</span></span><span> </span><span class="annot"><span class="annottext">RealSrcSpan -&gt; FastString
+</span><span class="hs-identifier hs-var">srcSpanFile</span></span><span> </span><span class="annot"><span class="annottext">(RealSrcSpan -&gt; String) -&gt; RealSrcSpan -&gt; String
+forall a b. (a -&gt; b) -&gt; a -&gt; b
+</span><span class="hs-operator hs-var">$</span></span><span> </span><span class="annot"><span class="annottext">RealSrcSpan
+</span><a href="#local-6989586621679236648"><span class="hs-identifier hs-var">sp</span></a></span><span class="hs-special">)</span><span> </span><span class="hs-special">(</span><span class="annot"><span class="annottext">RealSrcSpan -&gt; Line
+</span><span class="hs-identifier hs-var">srcSpanStartLine</span></span><span> </span><span class="annot"><span class="annottext">RealSrcSpan
+</span><a href="#local-6989586621679236648"><span class="hs-identifier hs-var">sp</span></a></span><span class="hs-special">)</span><span class="hs-cpp">
+#endif
+</span></pre></body></html>

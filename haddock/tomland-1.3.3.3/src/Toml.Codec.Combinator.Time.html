@@ -1,0 +1,91 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><head><link rel="stylesheet" type="text/css" href="style.css" /><script type="text/javascript" src="highlight.js"></script></head><body><pre><span class="annot"><span class="hs-comment">{- |
+Module                  : Toml.Codec.Combinator.Time
+Copyright               : (c) 2018-2022 Kowainik
+SPDX-License-Identifier : MPL-2.0
+Maintainer              : Kowainik &lt;xrom.xkov@gmail.com&gt;
+Stability               : Stable
+Portability             : Portable
+
+TOML-specific combinators for converting between TOML and Haskell date and time
+data types. TOML specification describes date and time primitives you
+can use in your configuration. @tomland@ provides mapping of those
+primitives to types from the @time@ library.
+
++-----------------+----------------------------+-------------------+
+|  Haskell Type   |           @TOML@           |    'TomlCodec'    |
++=================+============================+===================+
+| __'ZonedTime'__ | @a = 2020-05-16T04:32:00Z@ | @'zonedTime' &quot;a&quot;@ |
++-----------------+----------------------------+-------------------+
+| __'LocalTime'__ | @a = 2020-05-16T04:32:00@  | @'localTime' &quot;a&quot;@ |
++-----------------+----------------------------+-------------------+
+| __'Day'__       | @a = 2020-05-16@           | @'day' &quot;a&quot;@       |
++-----------------+----------------------------+-------------------+
+| __'TimeOfDay'__ | @a = 04:32:00@             | @'timeOfDay' &quot;a&quot;@ |
++-----------------+----------------------------+-------------------+
+
+@since 1.3.0.0
+-}</span></span><span>
+</span><span id="line-28"></span><span>
+</span><span id="line-29"></span><span class="hs-keyword">module</span><span> </span><span class="hs-identifier">Toml.Codec.Combinator.Time</span><span>
+</span><span id="line-30"></span><span>    </span><span class="hs-special">(</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Time.html#zonedTime"><span class="hs-identifier">zonedTime</span></a></span><span>
+</span><span id="line-31"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Time.html#localTime"><span class="hs-identifier">localTime</span></a></span><span>
+</span><span id="line-32"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Time.html#day"><span class="hs-identifier">day</span></a></span><span>
+</span><span id="line-33"></span><span>    </span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Time.html#timeOfDay"><span class="hs-identifier">timeOfDay</span></a></span><span>
+</span><span id="line-34"></span><span>    </span><span class="hs-special">)</span><span> </span><span class="hs-keyword">where</span><span>
+</span><span id="line-35"></span><span>
+</span><span id="line-36"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><span class="hs-identifier">Data.Time</span></span><span> </span><span class="hs-special">(</span><span class="annot"><span class="hs-identifier">Day</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">LocalTime</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">TimeOfDay</span></span><span class="hs-special">,</span><span> </span><span class="annot"><span class="hs-identifier">ZonedTime</span></span><span class="hs-special">)</span><span>
+</span><span id="line-37"></span><span>
+</span><span id="line-38"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.Conversion.html"><span class="hs-identifier">Toml.Codec.BiMap.Conversion</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.BiMap.Conversion.html#_Day"><span class="hs-identifier">_Day</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.Conversion.html#_LocalTime"><span class="hs-identifier">_LocalTime</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.Conversion.html#_TimeOfDay"><span class="hs-identifier">_TimeOfDay</span></a></span><span class="hs-special">,</span><span> </span><span class="annot"><a href="Toml.Codec.BiMap.Conversion.html#_ZonedTime"><span class="hs-identifier">_ZonedTime</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-39"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Common.html"><span class="hs-identifier">Toml.Codec.Combinator.Common</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Combinator.Common.html#match"><span class="hs-identifier">match</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-40"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html"><span class="hs-identifier">Toml.Codec.Types</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier">TomlCodec</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-41"></span><span class="hs-keyword">import</span><span> </span><span class="annot"><a href="Toml.Type.Key.html"><span class="hs-identifier">Toml.Type.Key</span></a></span><span> </span><span class="hs-special">(</span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier">Key</span></a></span><span class="hs-special">)</span><span>
+</span><span id="line-42"></span><span>
+</span><span id="line-43"></span><span>
+</span><span id="line-44"></span><span class="annot"><span class="hs-comment">{- | Codec for zoned time values.
+
+@since 0.5.0
+-}</span></span><span>
+</span><span id="line-48"></span><span class="annot"><a href="Toml.Codec.Combinator.Time.html#zonedTime"><span class="hs-identifier hs-type">zonedTime</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">ZonedTime</span></span><span>
+</span><span id="line-49"></span><span id="zonedTime"><span class="annot"><span class="annottext">zonedTime :: Key -&gt; TomlCodec ZonedTime
+</span><a href="Toml.Codec.Combinator.Time.html#zonedTime"><span class="hs-identifier hs-var hs-var">zonedTime</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlBiMap ZonedTime AnyValue -&gt; Key -&gt; TomlCodec ZonedTime
+forall a. TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Common.html#match"><span class="hs-identifier hs-var">match</span></a></span><span> </span><span class="annot"><span class="annottext">TomlBiMap ZonedTime AnyValue
+</span><a href="Toml.Codec.BiMap.Conversion.html#_ZonedTime"><span class="hs-identifier hs-var">_ZonedTime</span></a></span><span>
+</span><span id="line-50"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Time.html#zonedTime"><span class="hs-pragma hs-type">zonedTime</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-51"></span><span>
+</span><span id="line-52"></span><span class="annot"><span class="hs-comment">{- | Codec for local time values.
+
+@since 0.5.0
+-}</span></span><span>
+</span><span id="line-56"></span><span class="annot"><a href="Toml.Codec.Combinator.Time.html#localTime"><span class="hs-identifier hs-type">localTime</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">LocalTime</span></span><span>
+</span><span id="line-57"></span><span id="localTime"><span class="annot"><span class="annottext">localTime :: Key -&gt; TomlCodec LocalTime
+</span><a href="Toml.Codec.Combinator.Time.html#localTime"><span class="hs-identifier hs-var hs-var">localTime</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlBiMap LocalTime AnyValue -&gt; Key -&gt; TomlCodec LocalTime
+forall a. TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Common.html#match"><span class="hs-identifier hs-var">match</span></a></span><span> </span><span class="annot"><span class="annottext">TomlBiMap LocalTime AnyValue
+</span><a href="Toml.Codec.BiMap.Conversion.html#_LocalTime"><span class="hs-identifier hs-var">_LocalTime</span></a></span><span>
+</span><span id="line-58"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Time.html#localTime"><span class="hs-pragma hs-type">localTime</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-59"></span><span>
+</span><span id="line-60"></span><span class="annot"><span class="hs-comment">{- | Codec for day values.
+
+@since 0.5.0
+-}</span></span><span>
+</span><span id="line-64"></span><span class="annot"><a href="Toml.Codec.Combinator.Time.html#day"><span class="hs-identifier hs-type">day</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">Day</span></span><span>
+</span><span id="line-65"></span><span id="day"><span class="annot"><span class="annottext">day :: Key -&gt; TomlCodec Day
+</span><a href="Toml.Codec.Combinator.Time.html#day"><span class="hs-identifier hs-var hs-var">day</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlBiMap Day AnyValue -&gt; Key -&gt; TomlCodec Day
+forall a. TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Common.html#match"><span class="hs-identifier hs-var">match</span></a></span><span> </span><span class="annot"><span class="annottext">TomlBiMap Day AnyValue
+</span><a href="Toml.Codec.BiMap.Conversion.html#_Day"><span class="hs-identifier hs-var">_Day</span></a></span><span>
+</span><span id="line-66"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Time.html#day"><span class="hs-pragma hs-type">day</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-67"></span><span>
+</span><span id="line-68"></span><span class="annot"><span class="hs-comment">{- | Codec for time of day values.
+
+@since 0.5.0
+-}</span></span><span>
+</span><span id="line-72"></span><span class="annot"><a href="Toml.Codec.Combinator.Time.html#timeOfDay"><span class="hs-identifier hs-type">timeOfDay</span></a></span><span> </span><span class="hs-glyph">::</span><span> </span><span class="annot"><a href="Toml.Type.Key.html#Key"><span class="hs-identifier hs-type">Key</span></a></span><span> </span><span class="hs-glyph">-&gt;</span><span> </span><span class="annot"><a href="Toml.Codec.Types.html#TomlCodec"><span class="hs-identifier hs-type">TomlCodec</span></a></span><span> </span><span class="annot"><span class="hs-identifier hs-type">TimeOfDay</span></span><span>
+</span><span id="line-73"></span><span id="timeOfDay"><span class="annot"><span class="annottext">timeOfDay :: Key -&gt; TomlCodec TimeOfDay
+</span><a href="Toml.Codec.Combinator.Time.html#timeOfDay"><span class="hs-identifier hs-var hs-var">timeOfDay</span></a></span></span><span> </span><span class="hs-glyph">=</span><span> </span><span class="annot"><span class="annottext">TomlBiMap TimeOfDay AnyValue -&gt; Key -&gt; TomlCodec TimeOfDay
+forall a. TomlBiMap a AnyValue -&gt; Key -&gt; TomlCodec a
+</span><a href="Toml.Codec.Combinator.Common.html#match"><span class="hs-identifier hs-var">match</span></a></span><span> </span><span class="annot"><span class="annottext">TomlBiMap TimeOfDay AnyValue
+</span><a href="Toml.Codec.BiMap.Conversion.html#_TimeOfDay"><span class="hs-identifier hs-var">_TimeOfDay</span></a></span><span>
+</span><span id="line-74"></span><span class="hs-pragma">{-# INLINE</span><span> </span><span class="annot"><a href="Toml.Codec.Combinator.Time.html#timeOfDay"><span class="hs-pragma hs-type">timeOfDay</span></a></span><span> </span><span class="hs-pragma">#-}</span><span>
+</span><span id="line-75"></span></pre></body></html>
