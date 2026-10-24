@@ -60,6 +60,9 @@ jobs:
           stack-build-arguments-build: --dry-run
           stack-build-arguments-test: --ghc-options -O2 ${{ steps.check-syntax-files.outputs.SYNTAX_FILES_EXIST == 'true' && ' ' || '--reconfigure --force-dirty --ghc-options -fforce-recomp' }}
 
+      - name: Run README matching example
+        run: stack exec -- runghc -package=free-foil-hou examples/Matching.hs
+
       - name: Save Syntax files
         uses: actions/cache/save@v4
         if: steps.restore-syntax-files.outputs.cache-hit != 'true'
