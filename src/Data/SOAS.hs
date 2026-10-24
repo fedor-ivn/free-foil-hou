@@ -115,7 +115,10 @@ instance
     | ty == ty' = coerce (Foil.unifyPatterns lhs rhs)
     | otherwise = Foil.NotUnifiable
 
+-- | Extend variable type contexts under object-language binders.
+-- The annotation must describe every variable introduced by the binder.
 class TypedBinder binder t where
+  -- | Add the bound variables and their types, preserving the outer context.
   addBinderTypes
     :: binder n l
     -> t
@@ -316,7 +319,15 @@ combineMetaSubsts = foldr (mapMaybe . combine) [MetaSubsts []]
 --   1. M[z₁, z₂] ↦ z₁
 --   2. M[z₁, z₂] ↦ z₂
 --
--- Hence, this function produces a list of possible substitutions.
+-- The result is a list of solutions to the matching problem. Each solution
+-- is a simultaneous metavariable substitution ('MetaSubsts'). An empty list
+-- means that no solutions exist. @MetaSubsts []@ represents a solution with
+-- no assignments. Metavariables in discarded arguments may remain unassigned.
+--
+-- Matching compares syntax up to alpha-equivalence, without beta or eta
+-- conversion. For ordinary second-order matching, RHS contains no
+-- metavariables. Nodes in the target extension @ext@ are treated as rigid;
+-- substitution bodies may contain them.
 --
 -- Inputs must be well-scoped, with complete variable contexts and correct
 -- operator annotations. Matching checks the types of the compared terms and
@@ -341,8 +352,10 @@ match
      )
   => Foil.Scope n
   -- ^ The current scope.
-  -> Map metavar ([t], t) -- big theta
-  -> Foil.NameMap n t -- big gamma
+  -> Map metavar ([t], t)
+  -- ^ Metavariable declarations: argument types and result type.
+  -> Foil.NameMap n t
+  -- ^ Types of all variables in the current scope.
   -> TypedSOAS binder metavar sig n t
   -- ^ The left-hand side (with metavariables that we solve for).
   -> AST (AnnBinder t binder) (AnnSig t (Sum sig ext)) n

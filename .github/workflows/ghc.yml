@@ -25,7 +25,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # GHC 9.8.2's linker cannot read the SDK stubs on macos-26.
+        os: [ubuntu-latest, windows-latest, macos-15]
       fail-fast: false
     steps:
       - name: 📥 Checkout repository
